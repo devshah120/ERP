@@ -9,10 +9,11 @@ export const REFRESH_TOKEN_COOKIE = "erp_refresh_token";
 export const SESSION_ONLY_COOKIE = "erp_session_only";
 
 function baseCookieOptions() {
-  const { NODE_ENV } = getEnv();
+  const { NODE_ENV, COOKIE_SECURE } = getEnv();
   return {
     httpOnly: true,
-    secure: NODE_ENV === "production",
+    // HTTPS-only in production unless explicitly served over plain HTTP.
+    secure: COOKIE_SECURE ? COOKIE_SECURE === "true" : NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
   };

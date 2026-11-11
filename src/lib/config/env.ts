@@ -22,6 +22,14 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+
+  /**
+   * Whether auth cookies are HTTPS-only. Defaults to on in production. Set to
+   * "false" only when the app is served over plain HTTP (e.g. http://IP:port
+   * with no domain/certificate) — otherwise browsers drop the cookies and
+   * sign-in never sticks.
+   */
+  COOKIE_SECURE: z.enum(["true", "false"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

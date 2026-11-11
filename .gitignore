@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local database server, data files and logs (the app uses MongoDB Atlas)
+/.mongo-bin/
+/.mongo-data/
+/.scratch/
+*.log

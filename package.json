@@ -1,0 +1,41 @@
+{
+  "name": "garment-erp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "seed:demo": "node scripts/seed-demo.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "decimal.js": "^10.6.0",
+    "exceljs": "^4.4.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.9.4",
+    "next": "16.3.4",
+    "nodemailer": "^9.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.4.1",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "mongodb-memory-server": "^11.2.0",
+    "typescript": "^5",
+    "vitest": "^5.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

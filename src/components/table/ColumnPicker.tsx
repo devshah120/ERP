@@ -7,31 +7,51 @@ import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 export interface ColumnOption {
   key: string;
   label: string;
+  /** Can't be hidden (shown as "Required"). Defaults to the first column. */
+  required?: boolean;
 }
 
+const PANEL_WIDTH = 288; // px, matches .colPanel width
+
 /**
- * "Columns" dropdown shared by every listing screen. Each column is a toggle:
- * ticked = shown. At least one column always stays visible so the table can
- * never collapse to nothing.
+ * "Columns" picker shared by every listing screen: a checklist with Select all,
+ * Reset and Save. Changes are a draft until Save, so Close (or Esc, or clicking
+ * away) leaves the table as it was. The first column — the record's number or
+ * name — is required so a row can always be identified and opened.
  */
 export default function ColumnPicker({
   options,
   hidden,
-  onToggle,
-  onReset,
+  onApply,
   buttonRef,
 }: {
   options: ColumnOption[];
   hidden: string[];
-  onToggle: (key: string) => void;
-  onReset: () => void;
+  /** Saves the new set of hidden column keys. */
+  onApply: (hidden: string[]) => void;
   /** Lets the Ctrl + Shift + K shortcut open this picker from the page above. */
   buttonRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>([]);
+  const [alignRight, setAlignRight] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
-  useEscapeHandler(() => setOpen(false), open);
+  const isRequired = (o: ColumnOption, i: number) => o.required ?? i === 0;
+  const optional = options.filter((o, i) => !isRequired(o, i));
+
+  function openPanel() {
+    setDraft(hidden.filter((k) => options.some((o, i) => o.key === k && !isRequired(o, i))));
+    // Open towards whichever side has room, so the panel never runs off-screen.
+    const rect = (buttonRef?.current ?? triggerRef.current)?.getBoundingClientRect();
+    if (rect) setAlignRight(rect.left + PANEL_WIDTH > window.innerWidth - 12);
+    setOpen(true);
+  }
+
+  const close = () => setOpen(false);
+  useEscapeHandler(close, open);
 
   useEffect(() => {
     if (!open) return;
@@ -42,17 +62,38 @@ export default function ColumnPicker({
     return () => document.removeEventListener("mousedown", onClickAway);
   }, [open]);
 
+  const shownOptional = optional.filter((o) => !draft.includes(o.key)).length;
+  const allShown = shownOptional === optional.length;
+  const noneShown = shownOptional === 0;
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = !allShown && !noneShown;
+  }, [allShown, noneShown, open]);
+
+  function toggle(key: string) {
+    setDraft((d) => (d.includes(key) ? d.filter((k) => k !== key) : [...d, key]));
+  }
+
+  function save() {
+    onApply(draft);
+    setOpen(false);
+  }
+
   const visibleCount = options.length - hidden.length;
 
   return (
     <div className="columnPicker" ref={ref}>
       <button
-        ref={buttonRef}
+        ref={(el) => {
+          triggerRef.current = el;
+          if (buttonRef) buttonRef.current = el;
+        }}
         type="button"
         className="button buttonSecondary"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? close() : openPanel())}
         title="Choose columns (Ctrl + Shift + K)"
         aria-expanded={open}
+        aria-haspopup="dialog"
       >
         <IconLayers />
         Columns
@@ -65,34 +106,48 @@ export default function ColumnPicker({
       </button>
 
       {open && (
-        <div className="columnPickerPanel" role="dialog" aria-label="Choose visible columns">
-          <div className="filterBarHead" style={{ marginBottom: "0.625rem" }}>
-            <span>Visible columns</span>
-            <span className="activeFilterNote">
-              {visibleCount} of {options.length} shown · applies to export too
-            </span>
+        <div className={`colPanel ${alignRight ? "colPanelRight" : ""}`} role="dialog" aria-label="Choose visible columns">
+          <div className="colPanelHead">
+            <strong>Columns</strong>
+            <button type="button" className="colLink" onClick={() => setDraft([])} disabled={draft.length === 0}>
+              Reset
+            </button>
           </div>
-          <div className="columnPickerGrid">
-            {options.map((col) => {
-              const isHidden = hidden.includes(col.key);
-              // Guard against hiding the final column.
-              const isLastVisible = !isHidden && visibleCount === 1;
+
+          <label className="colRow colSelectAll">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allShown}
+              onChange={() => setDraft(allShown ? optional.map((o) => o.key) : [])}
+              disabled={optional.length === 0}
+            />
+            <span className="colLabel">Select all</span>
+            <span className="colMeta">
+              {options.length - draft.length}/{options.length}
+            </span>
+          </label>
+
+          <div className="colList">
+            {options.map((o, i) => {
+              const req = isRequired(o, i);
               return (
-                <button
-                  key={col.key}
-                  type="button"
-                  className={`columnChip ${isHidden ? "columnChipOff" : ""}`}
-                  onClick={() => !isLastVisible && onToggle(col.key)}
-                  disabled={isLastVisible}
-                  aria-pressed={!isHidden}
-                  title={isLastVisible ? "At least one column must stay visible" : col.label}
-                >
-                  {col.label}
-                </button>
+                <label key={o.key} className={`colRow ${req ? "colRowLocked" : ""}`} title={req ? "Always shown" : undefined}>
+                  <input type="checkbox" checked={req || !draft.includes(o.key)} disabled={req} onChange={() => toggle(o.key)} />
+                  <span className="colLabel">{o.label}</span>
+                  {req && <span className="colReq">Required</span>}
+                </label>
               );
             })}
-            <button type="button" className="columnChip columnChipReset" onClick={onReset}>
-              Reset to default
+          </div>
+
+          <div className="colPanelFoot">
+            <span className="colHint">Applies to export too</span>
+            <button type="button" className="button buttonSecondary buttonSm" onClick={close}>
+              Close
+            </button>
+            <button type="button" className="button buttonPrimary buttonSm" onClick={save}>
+              Save
             </button>
           </div>
         </div>

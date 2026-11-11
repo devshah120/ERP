@@ -7,17 +7,12 @@ import { useAuth } from "@/app/(app)/AuthProvider";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { usePopover } from "@/components/ui/usePopover";
 import { useToast } from "@/components/ui/Toast";
-import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import {
   IconCalculator,
   IconCalendar,
   IconChevronDown,
-  IconKeyboard,
   IconSettings,
   IconCheck,
-  IconLifebuoy,
-  IconSearch,
-  IconClipboard,
 } from "@/components/icons";
 
 /* ------------------------------------------------------------------ */
@@ -313,54 +308,3 @@ export function CalculatorButton() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Help                                                                */
-/* ------------------------------------------------------------------ */
-
-export function HelpMenu() {
-  const { openHelp, openPalette } = useShortcuts();
-  const { open, toggle, close, ref } = usePopover<HTMLDivElement>();
-
-  return (
-    <div className="menuWrap" ref={ref}>
-      <button type="button" className="hdrIconBtn" onClick={toggle} aria-expanded={open} aria-haspopup="menu" aria-label="Help (F1)" title="Help (F1)">
-        <IconLifebuoy />
-      </button>
-      {open && (
-        <div className="menu" role="menu" style={{ minWidth: "17rem" }}>
-          <div className="menuLabel">Help</div>
-          <button
-            type="button"
-            className="menuItem"
-            role="menuitem"
-            onClick={() => {
-              close();
-              openPalette();
-            }}
-          >
-            <IconSearch />
-            Search &amp; jump to
-            <kbd>Ctrl K</kbd>
-          </button>
-          <button
-            type="button"
-            className="menuItem"
-            role="menuitem"
-            onClick={() => {
-              close();
-              openHelp();
-            }}
-          >
-            <IconKeyboard />
-            Keyboard shortcuts
-            <kbd>F1</kbd>
-          </button>
-          <Link href="/reports" className="menuItem" role="menuitem" onClick={close}>
-            <IconClipboard />
-            Report catalogue
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}

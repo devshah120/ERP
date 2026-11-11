@@ -229,7 +229,7 @@ export default function DashboardPage() {
                 <div key={s.label} className="dHeroStat">
                   <span className="dHeroStatLabel">{s.label}</span>
                   <strong className="dHeroStatValue" title={`₹${formatMoney(s.value)}`} style={s.tone ? { color: s.tone } : undefined}>
-                    ₹{formatCompact(s.value)}
+                    {Number(s.value) < 0 ? `-₹${formatCompact(String(Math.abs(Number(s.value))))}` : `₹${formatCompact(s.value)}`}
                   </strong>
                   {s.previous !== undefined ? (
                     <Delta current={s.value} previous={s.previous} goodWhen={s.goodWhen} />

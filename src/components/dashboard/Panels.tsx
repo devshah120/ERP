@@ -350,56 +350,20 @@ export function ItemPerformancePanel({ items, range }: { items: ItemPerformance[
       {rows.length === 0 ? (
         <EmptyState compact title="Nothing sold in this period" />
       ) : (
-        <>
-          <div className="hbars" role="img" aria-label={`${which === "best" ? "Best" : "Least"} selling items by ${metric === "quantity" ? "quantity" : "amount"}`}>
-            {rows.map((r) => {
-              const v = metric === "quantity" ? r.quantity : Number(r.amount);
-              return (
-                <Link key={r.itemId} href={`/items/${r.itemId}`} className="hbar" title={`${r.name}: ${metric === "quantity" ? formatQuantity(v) : `₹${formatMoney(v)}`}`}>
-                  <span className="hbarLabel">{r.name}</span>
-                  <span className="hbarTrack">
-                    <span className="hbarFill" style={{ width: `${Math.max(2, (v / max) * 100)}%` }} />
-                  </span>
-                  <span className="hbarValue">{metric === "quantity" ? formatQuantity(v) : `₹${formatCompact(v)}`}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="dTableWrap" style={{ marginTop: "1rem" }}>
-            <table className="dTable">
-              <thead>
-                <tr>
-                  <th style={{ width: "3rem" }}>#</th>
-                  <th>Item name</th>
-                  <th className="numCell">No. of bills</th>
-                  <th className="numCell">Qty</th>
-                  <th className="numCell">Amount</th>
-                  <th className="numCell" title="Taxable value minus quantity × the item's current cost price">
-                    Est. margin
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.itemId}>
-                    <td className="cellMuted">{i + 1}</td>
-                    <td>
-                      <Link href={`/items/${r.itemId}`} className="cellLink">
-                        {r.name}
-                      </Link>
-                    </td>
-                    <td className="numCell">{r.bills}</td>
-                    <td className="numCell">{formatQuantity(r.quantity)}</td>
-                    <td className="numCell">₹{formatMoney(r.amount)}</td>
-                    <td className="numCell" style={r.margin && Number(r.margin) < 0 ? { color: "var(--danger)" } : undefined}>
-                      {r.margin === null ? <span className="cellMuted" title="No cost price on the item">—</span> : `₹${formatMoney(r.margin)}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <div className="hbars" role="img" aria-label={`${which === "best" ? "Best" : "Least"} selling items by ${metric === "quantity" ? "quantity" : "amount"}`}>
+          {rows.map((r) => {
+            const v = metric === "quantity" ? r.quantity : Number(r.amount);
+            return (
+              <Link key={r.itemId} href={`/items/${r.itemId}`} className="hbar" title={`${r.name}: ${metric === "quantity" ? formatQuantity(v) : `₹${formatMoney(v)}`}`}>
+                <span className="hbarLabel">{r.name}</span>
+                <span className="hbarTrack">
+                  <span className="hbarFill" style={{ width: `${Math.max(2, (v / max) * 100)}%` }} />
+                </span>
+                <span className="hbarValue">{metric === "quantity" ? formatQuantity(v) : `₹${formatCompact(v)}`}</span>
+              </Link>
+            );
+          })}
+        </div>
       )}
     </Panel>
   );

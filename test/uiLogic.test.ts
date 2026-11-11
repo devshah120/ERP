@@ -20,7 +20,7 @@ describe("navigation registry", () => {
 
   it("resolves the most specific entry for a path", () => {
     expect(findNavMatch("/reports/sales-register")?.child?.label).toBe("Sales Register");
-    expect(findNavMatch("/reports")?.child?.label).toBe("All Reports");
+    expect(findNavMatch("/reports/stock-summary")?.child?.label).toBe("Stock Summary");
     expect(findNavMatch("/sales-orders/abc123")?.child?.label).toBe("Sales Orders");
     expect(findNavMatch("/dashboard")?.group.label).toBe("Dashboard");
     expect(findNavMatch("/not-a-module")).toBeNull();
@@ -43,10 +43,12 @@ describe("navigation registry", () => {
   });
 
   it("never resolves a planned module as a page or breadcrumb", () => {
+    // Apps & Integrations has no screen yet, so it is flagged `soon` and hidden.
     expect(findNavMatch("/apps")).toBeNull();
-    expect(findNavMatch("/production/recipes")).toBeNull();
-    expect(breadcrumbsFor("/crm/coupons")).toEqual([]);
-    // ...while the real admin screens do resolve.
+    expect(breadcrumbsFor("/apps")).toEqual([]);
+    // ...while built screens, including ones that used to be planned, do resolve.
+    expect(findNavMatch("/recipes")?.child?.label).toBe("Recipes");
+    expect(findNavMatch("/coupons")?.child?.label).toBe("Coupons");
     expect(findNavMatch("/logs")?.group.label).toBe("Activity Log");
     expect(findNavMatch("/user-roles")?.child?.label).toBe("User Roles");
   });

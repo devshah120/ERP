@@ -48,5 +48,8 @@ export function useColumnVisibility(moduleKey: string) {
 
   const isVisible = useCallback((key: string) => !hidden.includes(key), [hidden]);
 
-  return { hidden, isVisible, toggle, reset };
+  /** Replace the whole hidden set at once (the column picker's Save). */
+  const apply = persist;
+
+  return { hidden, isVisible, toggle, reset, apply };
 }

@@ -4,17 +4,16 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "./AuthProvider";
-import { NAV_SECTIONS, NAV_GROUPS, breadcrumbsFor, creatableModules, soonCount, type NavGroup, type NavChild } from "./navigation";
+import { NAV_SECTIONS, NAV_GROUPS, breadcrumbsFor, creatableModules, type NavGroup, type NavChild } from "./navigation";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import { usePopover } from "@/components/ui/usePopover";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
-import { FinancialYearMenu, HelpMenu } from "@/components/shell/HeaderWidgets";
+import { FinancialYearMenu } from "@/components/shell/HeaderWidgets";
 import { IconSearch, IconChevronRight, IconBrandMark, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
 
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
-const PLANNED_KEY = "erp.sidebar.showPlanned";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -41,7 +40,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [showPlanned, setShowPlanned] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuQuery, setMenuQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
@@ -56,7 +54,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
-      if (localStorage.getItem(PLANNED_KEY) === "0") setShowPlanned(false);
     } catch {
       /* storage unavailable — keep defaults */
     }
@@ -84,17 +81,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setFlyout(null);
   }, []);
 
-  function togglePlanned() {
-    setShowPlanned((s) => {
-      try {
-        localStorage.setItem(PLANNED_KEY, s ? "0" : "1");
-      } catch {
-        /* ignore */
-      }
-      return !s;
-    });
-  }
-
   function toggleGroup(key: string) {
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -120,7 +106,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (flyoutTimer.current) clearTimeout(flyoutTimer.current);
   }
 
-  // What the sidebar shows after the planned-module toggle and the menu filter.
+  // What the sidebar shows after the menu filter. Modules flagged as not built
+  // yet (`enabled: false` / `soon` in navigation.ts) are simply left out.
   const q = menuQuery.trim().toLowerCase();
   const visibleSections = useMemo(() => {
     return NAV_SECTIONS.map((section) => ({
@@ -128,11 +115,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       groups: section.groups
         .map((g) => {
           if (g.href) {
-            if (g.soon && !showPlanned) return null;
+            if (g.soon) return null;
             if (q && !hit(g.label, q) && !hit(g.keywords, q)) return null;
             return { group: g, children: [] as NavChild[] };
           }
-          let kids = (g.children ?? []).filter((c) => showPlanned || c.enabled);
+          let kids = (g.children ?? []).filter((c) => c.enabled);
           if (q) {
             const groupHit = hit(g.label, q) || hit(g.keywords, q);
             if (!groupHit) kids = kids.filter((c) => hit(c.label, q) || hit(c.keywords, q));
@@ -141,7 +128,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         })
         .filter((x): x is { group: NavGroup; children: NavChild[] } => x !== null),
     })).filter((s) => s.groups.length > 0);
-  }, [q, showPlanned]);
+  }, [q]);
 
   if (loading || !me) {
     return (
@@ -154,7 +141,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const crumbs = breadcrumbsFor(pathname);
   const flyoutGroup = flyout ? NAV_GROUPS.find((g) => g.key === flyout.key) : undefined;
-  const flyoutChildren = flyoutGroup?.children?.filter((c) => showPlanned || c.enabled) ?? [];
+  const flyoutChildren = flyoutGroup?.children?.filter((c) => c.enabled) ?? [];
   const filtering = q.length > 0;
 
   return (
@@ -197,7 +184,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <IconStore />
           </Link>
           <NotificationsMenu />
-          <HelpMenu />
           <UserMenu variant="topbar" />
         </div>
       </header>
@@ -242,17 +228,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 const Icon = group.icon;
 
                 if (group.href) {
-                  if (group.soon) {
-                    return (
-                      <span key={group.key} className="sbItem sbItemSoon" title="Planned — not available yet" aria-disabled="true">
-                        <span className="sbItemIcon">
-                          <Icon />
-                        </span>
-                        <span className="sbItemLabel">{group.label}</span>
-                        <span className="soonTag sbItemTag">Soon</span>
-                      </span>
-                    );
-                  }
                   const active = isActive(pathname, group.href);
                   return (
                     <Link
@@ -275,13 +250,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
                 const isOpen = filtering || openGroups.has(group.key);
                 const activeHref = activeChildHref(pathname, group);
-                const allPlanned = kids.every((c) => !c.enabled);
 
                 return (
                   <div key={group.key}>
                     <button
                       type="button"
-                      className={`sbItem ${activeHref ? "sbItemParentActive" : ""} ${collapsed && activeHref ? "sbItemActive" : ""} ${allPlanned ? "sbItemDim" : ""}`}
+                      className={`sbItem ${activeHref ? "sbItemParentActive" : ""} ${collapsed && activeHref ? "sbItemActive" : ""}`}
                       onClick={() => (collapsed ? null : toggleGroup(group.key))}
                       aria-expanded={collapsed ? undefined : isOpen}
                       onMouseEnter={(e) => showFlyout(group.key, e.currentTarget, "menu")}
@@ -292,7 +266,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <Icon />
                       </span>
                       <span className="sbItemLabel">{group.label}</span>
-                      {allPlanned && <span className="soonTag sbItemTag">Soon</span>}
                       <span className={`sbItemChevron ${isOpen ? "open" : ""}`}>
                         <IconChevronRight />
                       </span>
@@ -301,24 +274,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <div className={`sbChildren ${isOpen ? "open" : ""}`}>
                       <div className="sbChildrenInner">
                         <div className="sbChildList">
-                          {kids.map((child) =>
-                            child.enabled ? (
-                              <Link
-                                key={child.href}
-                                href={child.href}
-                                className={`sbChild ${activeHref === child.href ? "sbChildActive" : ""}`}
-                                aria-current={activeHref === child.href ? "page" : undefined}
-                                tabIndex={isOpen ? undefined : -1}
-                              >
-                                <span className="sbChildText">{child.label}</span>
-                              </Link>
-                            ) : (
-                              <span key={child.href} className="sbChild sbChildDisabled" title={`${child.label} — planned, not available yet`} aria-disabled="true">
-                                <span className="sbChildText">{child.label}</span>
-                                {!allPlanned && <span className="soonTag">Soon</span>}
-                              </span>
-                            )
-                          )}
+                          {kids.map((child) => (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              className={`sbChild ${activeHref === child.href ? "sbChildActive" : ""}`}
+                              aria-current={activeHref === child.href ? "page" : undefined}
+                              tabIndex={isOpen ? undefined : -1}
+                            >
+                              <span className="sbChildText">{child.label}</span>
+                            </Link>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -329,15 +295,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="sbFoot">
-          <label className="sbToggle" title="Show or hide modules that are planned but not built yet">
-            <input type="checkbox" checked={showPlanned} onChange={togglePlanned} />
-            <span className="sbToggleTrack" aria-hidden>
-              <span />
-            </span>
-            <span className="sbItemLabel">Show planned modules</span>
-          </label>
-        </div>
       </aside>
 
       {/* Collapsed-rail tooltip / submenu, fixed so the scrolling nav can't clip it. */}
@@ -355,19 +312,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         >
           <div className="sbFlyoutTitle">
             {flyoutGroup.label}
-            {soonCount(flyoutGroup) > 0 && showPlanned && <span className="sbFlyoutNote"> · {soonCount(flyoutGroup)} planned</span>}
           </div>
           {flyoutChildren.map((child) => {
             const activeHref = activeChildHref(pathname, flyoutGroup);
-            return child.enabled ? (
+            return (
               <Link key={child.href} href={child.href} className={`sbChild ${activeHref === child.href ? "sbChildActive" : ""}`}>
                 {child.label}
               </Link>
-            ) : (
-              <span key={child.href} className="sbChild sbChildDisabled">
-                {child.label}
-                <span className="soonTag">Soon</span>
-              </span>
             );
           })}
         </div>

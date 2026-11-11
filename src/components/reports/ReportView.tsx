@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
-import { IconRefresh, IconArrowLeft, IconPrint } from "@/components/icons";
+import { IconRefresh, IconPrint } from "@/components/icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Pagination from "@/components/ui/Pagination";
 import StatusBadge, { humanizeStatus } from "@/components/ui/StatusBadge";
@@ -16,6 +16,7 @@ import { useColumnVisibility } from "@/lib/table/useColumnVisibility";
 import ColumnPicker from "@/components/table/ColumnPicker";
 import ExportButton, { type ExportButtonHandle } from "@/components/table/ExportButton";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
+import { useAuth } from "@/app/(app)/AuthProvider";
 
 interface ReportColumn {
   key: string;
@@ -40,6 +41,8 @@ interface ReportResult {
   page: number;
   pageSize: number;
 }
+
+const PRINT_ROW_LIMIT = 1000;
 
 const EMPTY_FILTERS = { fromDate: "", toDate: "", partyName: "", itemName: "", status: "", accountId: "" };
 
@@ -73,13 +76,18 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
   const [catalogue, setCatalogue] = useState<ReportColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Print: the whole result set (not just the page on screen) is fetched into
+  // this, rendered, printed, then dropped again.
+  const [printData, setPrintData] = useState<ReportResult | null>(null);
+  const [preparingPrint, setPreparingPrint] = useState(false);
+  const { me } = useAuth();
 
   const exportRef = useRef<ExportButtonHandle>(null);
   const columnsRef = useRef<HTMLButtonElement>(null);
 
   // Column choices are remembered per report and sent to the server, so the
   // response — and therefore any export — contains only what was selected.
-  const { hidden, toggle, reset } = useColumnVisibility(`report.${reportKey}`);
+  const { hidden, apply: applyColumns } = useColumnVisibility(`report.${reportKey}`);
 
   const selectedColumns = useMemo(() => {
     if (catalogue.length === 0) return "";
@@ -87,15 +95,22 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
     return visible.join(",");
   }, [catalogue, hidden]);
 
+  const buildParams = useCallback(
+    (pg: number, size: number) => {
+      const params = new URLSearchParams({ page: String(pg), pageSize: String(size) });
+      for (const [k, v] of Object.entries(applied)) if (v) params.set(k, v);
+      if (stockFilter) params.set("stockFilter", stockFilter);
+      if (selectedColumns) params.set("columns", selectedColumns);
+      return params;
+    },
+    [applied, stockFilter, selectedColumns]
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-      for (const [k, v] of Object.entries(applied)) if (v) params.set(k, v);
-      if (stockFilter) params.set("stockFilter", stockFilter);
-      if (selectedColumns) params.set("columns", selectedColumns);
-
+      const params = buildParams(page, pageSize);
       const data = await apiFetch<ReportResult>(`/api/reports/${reportKey}?${params.toString()}`);
       setResult(data);
       // Seed the catalogue once so the picker knows every possible column.
@@ -105,14 +120,43 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
     } finally {
       setLoading(false);
     }
-  }, [reportKey, page, pageSize, applied, selectedColumns, stockFilter]);
+  }, [reportKey, page, pageSize, buildParams]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
+  /** Prints every matching row (up to the API's 1,000-row page), not just the page on screen. */
+  async function printReport() {
+    if (!result || result.total <= result.rows.length) {
+      window.print();
+      return;
+    }
+    setPreparingPrint(true);
+    try {
+      const params = buildParams(1, Math.min(result.total, PRINT_ROW_LIMIT));
+      setPrintData(await apiFetch<ReportResult>(`/api/reports/${reportKey}?${params.toString()}`));
+    } catch {
+      window.print(); // fall back to what's on screen
+    } finally {
+      setPreparingPrint(false);
+    }
+  }
+
+  // Once the full set has rendered, open the print dialog, then go back to the paged view.
+  useEffect(() => {
+    if (!printData) return;
+    const t = setTimeout(() => {
+      window.print();
+      setPrintData(null);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [printData]);
+
   useShortcutScope({
+    // Ctrl + P prints the whole report too, not just the page on screen.
+    onPrint: printReport,
     onRefresh: load,
     onExport: () => exportRef.current?.open(),
     onToggleColumns: () => columnsRef.current?.click(),
@@ -177,6 +221,18 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
 
   const enabled = result?.filters ?? [];
   const columns = result?.columns ?? [];
+  // What the table shows: the full set while printing, otherwise the current page.
+  const shown = printData ?? result;
+  const isFullSet = Boolean(shown && shown.rows.length >= shown.total);
+  const appliedSummary = [
+    applied.fromDate || applied.toDate ? `${applied.fromDate || "…"} to ${applied.toDate || "…"}` : "",
+    applied.partyName && `Party: ${applied.partyName}`,
+    applied.itemName && `Item: ${applied.itemName}`,
+    applied.status && `Status: ${humanizeStatus(applied.status)}`,
+    stockFilter && DRILL_LABELS[stockFilter] ? `Only ${DRILL_LABELS[stockFilter]}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const activeFilterCount = Object.values(applied).filter(Boolean).length;
   const hasTotals = Object.keys(result?.totals ?? {}).length > 0;
   const isNum = (c: ReportColumn) => c.type === "money" || c.type === "number";
@@ -187,20 +243,22 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
   if (error && /permission/i.test(error)) return <AccessDenied detail={error} />;
 
   return (
-    <>
+    <div className={columns.length > 7 ? "printLandscape" : undefined}>
+      <div className="printOnly printReportHead">
+        <strong>{me?.business?.name ?? "NEXORA"}</strong>
+        <span>
+          {appliedSummary || "All records"} · {shown ? `${shown.rows.length.toLocaleString("en-IN")} of ${shown.total.toLocaleString("en-IN")} rows` : ""} · Printed{" "}
+          {new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
       <PageHeader
-        eyebrow={
-          <Link href="/reports" className="textLink" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-            <IconArrowLeft /> All reports
-          </Link>
-        }
         title={result?.title ?? "Report"}
         count={result?.total ?? null}
         description={result?.description}
         actions={
           <>
-            <button type="button" className="button buttonSecondary" onClick={() => window.print()} title="Print this page">
-              <IconPrint /> Print
+            <button type="button" className="button buttonSecondary" onClick={printReport} disabled={preparingPrint} title="Print the whole report">
+              {preparingPrint ? <span className="spinner" /> : <IconPrint />} Print
             </button>
             <ExportButton
               ref={exportRef}
@@ -336,8 +394,7 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
             buttonRef={columnsRef}
             options={catalogue.map((c) => ({ key: c.key, label: c.label }))}
             hidden={hidden}
-            onToggle={toggle}
-            onReset={reset}
+            onApply={applyColumns}
           />
         )}
         <span className="activeFilterNote">
@@ -370,7 +427,7 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
           </thead>
           <tbody>
             {loading && !result && <SkeletonRows columns={Math.max(4, columns.length || 6)} />}
-            {!loading && result?.rows.length === 0 && (
+            {!loading && shown?.rows.length === 0 && (
               <tr>
                 <td colSpan={Math.max(1, columns.length)}>
                   {activeFilterCount > 0 ? (
@@ -390,7 +447,7 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
                 </td>
               </tr>
             )}
-            {result?.rows.map((row, i) => (
+            {shown?.rows.map((row, i) => (
               <tr key={i}>
                 {columns.map((col) => (
                   <td key={col.key} className={isNum(col) ? "numCell" : undefined}>
@@ -400,15 +457,17 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
               </tr>
             ))}
           </tbody>
-          {result && result.rows.length > 0 && hasTotals && (
+          {shown && shown.rows.length > 0 && hasTotals && (
             <tfoot>
               <tr className="voucherTotalRow">
                 {columns.map((col, index) => {
-                  const t = result.totals[col.key];
+                  const t = shown.totals[col.key];
                   return (
                     <td key={col.key} className={isNum(col) ? "numCell" : undefined}>
                       {index === 0
-                        ? "Page total"
+                        ? isFullSet
+                          ? "Total"
+                          : "Page total"
                         : t === undefined || t === ""
                           ? ""
                           : col.type === "money"
@@ -428,6 +487,6 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
           <Pagination page={page} pageSize={pageSize} total={result.total} onPage={setPage} onPageSize={setPageSize} />
         )}
       </div>
-    </>
+    </div>
   );
 }

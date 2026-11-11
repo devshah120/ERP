@@ -216,7 +216,6 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Reports",
         icon: IconClipboard,
         children: [
-          { href: "/reports", label: "All Reports", enabled: true, keywords: "catalogue" },
           { href: "/reports/sales-register", label: "Sales Register", enabled: true },
           { href: "/reports/sales-detail", label: "Sales Detail", enabled: true },
           { href: "/reports/purchase-register", label: "Purchase Register", enabled: true },
@@ -294,7 +293,8 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/settings/notifications", label: "Notifications", enabled: true, keywords: "alerts email low stock" },
         ],
       },
-      { key: "apps", label: "Apps & Integrations", icon: IconPlug, href: "/apps", keywords: "integration connect api" },
+      // Not built yet: hidden from the menu, search and breadcrumbs until it is.
+      { key: "apps", label: "Apps & Integrations", icon: IconPlug, href: "/apps", soon: true, keywords: "integration connect api" },
       { key: "logs", label: "Activity Log", icon: IconList, href: "/logs", keywords: "audit logs history who changed" },
     ],
   },
@@ -309,7 +309,7 @@ function matches(pathname: string, href: string): boolean {
 
 /**
  * The nav entry a path belongs to — the longest matching href wins, so
- * /reports/sales-register resolves to "Sales Register", not "All Reports".
+ * /reports/sales-register resolves to "Sales Register", not a shorter prefix.
  */
 export function findNavMatch(pathname: string): { group: NavGroup; child?: NavChild } | null {
   let best: { group: NavGroup; child?: NavChild; len: number } | null = null;
@@ -363,7 +363,3 @@ export function creatableModules(): { label: string; href: string; group: string
   );
 }
 
-/** How many planned (not yet built) screens a group lists. */
-export function soonCount(group: NavGroup): number {
-  return (group.children ?? []).filter((c) => !c.enabled).length;
-}

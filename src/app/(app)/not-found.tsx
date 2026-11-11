@@ -18,7 +18,7 @@ export default function AppNotFound() {
           <Link href="/dashboard" className="button buttonPrimary">
             Go to dashboard
           </Link>
-          <Link href="/reports" className="button buttonSecondary">
+          <Link href="/reports/sales-register" className="button buttonSecondary">
             Browse reports
           </Link>
         </div>

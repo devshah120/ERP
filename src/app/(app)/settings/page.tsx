@@ -163,27 +163,6 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      <div className="sectionHeading">
-        <span>Coming next</span>
-        <small>Planned — not available yet</small>
-      </div>
-      <div className="reportGrid">
-        {[
-          { t: "Financial years", d: "Open the next year and close the previous one." },
-          { t: "Users & roles", d: "Invite colleagues and choose exactly what each role can do." },
-          { t: "Document numbering", d: "Set prefixes and number formats per document type." },
-        ].map((x) => (
-          <div key={x.t} className="reportCard" style={{ opacity: 0.75, cursor: "default" }} aria-disabled="true">
-            <div>
-              <div className="reportCardTitle">
-                {x.t} <span className="soonTag">Soon</span>
-              </div>
-              <div className="reportCardDesc">{x.d}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       <p className="fieldHint" style={{ marginTop: "1.5rem" }}>
         Branches and warehouses are managed under{" "}
         <Link href="/branches" className="textLink">

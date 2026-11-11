@@ -87,7 +87,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
   const columnsRef = useRef<HTMLButtonElement>(null);
 
   const importable = Boolean(getImportDefinition(config.key));
-  const { hidden, isVisible, toggle, reset } = useColumnVisibility(`master.${config.key}`);
+  const { hidden, isVisible, apply: applyColumns } = useColumnVisibility(`master.${config.key}`);
   const visibleColumns = useMemo(
     () => config.columns.filter((c) => isVisible(c.key)),
     [config.columns, isVisible]
@@ -393,8 +393,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
             buttonRef={columnsRef}
             options={config.columns.map((c) => ({ key: c.key, label: c.label }))}
             hidden={hidden}
-            onToggle={toggle}
-            onReset={reset}
+            onApply={applyColumns}
           />
           <button
             type="button"

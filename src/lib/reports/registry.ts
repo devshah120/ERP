@@ -94,8 +94,8 @@ async function invoiceRegister(
 
   return {
     total,
+    // The invoice count is already the badge beside the report title.
     summary: [
-      { label: "Invoices", value: String(total) },
       { label: "Taxable value", value: money(a.taxable) },
       { label: "CGST", value: money(a.cgst) },
       { label: "SGST/UTGST", value: money(a.sgst) },

@@ -36,7 +36,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   // --- forms and documents ------------------------------------------
   { id: "save", keys: "Ctrl + S", description: "Save the current form (works while typing in a field)", scope: "Form" },
   { id: "addLine", keys: "Ctrl + Enter", description: "Add another line item to a document", scope: "Document" },
-  { id: "print", keys: "Ctrl + P", description: "Print the open document", scope: "Document" },
+  { id: "print", keys: "Ctrl + P", description: "Print the open document, or the whole report (every row, not just the page on screen)", scope: "Document" },
 
   // --- navigation ---------------------------------------------------
   { id: "back", keys: "Alt + ←", description: "Go back", scope: "Navigation" },
@@ -70,7 +70,7 @@ export const SHORTCUTS: ShortcutDef[] = [
 /** Alt-key quick-create targets, keyed by the lowercase letter pressed. */
 export const QUICK_NAV: Record<string, { href: string; label: string }> = {
   d: { href: "/dashboard", label: "Dashboard" },
-  l: { href: "/reports", label: "Reports" },
+  l: { href: "/reports/sales-register", label: "Reports" },
   q: { href: "/sales-quotations/new", label: "New Sales Quotation" },
   o: { href: "/sales-orders/new", label: "New Sales Order" },
   s: { href: "/sales-invoices/new", label: "New Sales Invoice" },

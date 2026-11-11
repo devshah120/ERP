@@ -147,7 +147,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
   const exportRef = useRef<ExportButtonHandle>(null);
   const columnsRef = useRef<HTMLButtonElement>(null);
 
-  const { hidden, isVisible, toggle, reset } = useColumnVisibility(`doc.${config.key}`);
+  const { hidden, isVisible, apply: applyColumns } = useColumnVisibility(`doc.${config.key}`);
   const visibleColumns = useMemo(
     () => config.columns.filter((c) => isVisible(c.key)),
     [config.columns, isVisible]
@@ -479,8 +479,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
             buttonRef={columnsRef}
             options={config.columns.map((c) => ({ key: c.key, label: c.label }))}
             hidden={hidden}
-            onToggle={toggle}
-            onReset={reset}
+            onApply={applyColumns}
           />
           <button
             type="button"

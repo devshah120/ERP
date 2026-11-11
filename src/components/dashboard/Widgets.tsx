@@ -130,20 +130,15 @@ export function Delta({ current, previous, goodWhen = "up" }: { current: string;
   const cur = Number(current);
   const prev = Number(previous);
   if (!Number.isFinite(cur) || !Number.isFinite(prev)) return null;
-  if (prev === 0) {
-    if (cur === 0) return <span className="delta deltaFlat" title="No change vs previous period">— 0.00%</span>;
-    return (
-      <span className="delta deltaUp" title="Nothing in the previous period to compare with">
-        New
-      </span>
-    );
-  }
-  const pct = ((cur - prev) / Math.abs(prev)) * 100;
+  if (prev === 0 && cur === 0) return <span className="delta deltaFlat" title="No change vs previous period">— 0.00%</span>;
+  // From nothing to something reads as a full 100% move (the true ratio is undefined).
+  const fromZero = prev === 0;
+  const pct = fromZero ? (cur > 0 ? 100 : -100) : ((cur - prev) / Math.abs(prev)) * 100;
   const up = pct > 0;
   const good = pct === 0 ? null : up === (goodWhen === "up");
   const cls = good === null ? "deltaFlat" : good ? "deltaUp" : "deltaDown";
   return (
-    <span className={`delta ${cls}`} title={`Previous period: ${previous}`}>
+    <span className={`delta ${cls}`} title={fromZero ? "Nothing in the previous period to compare with" : `Previous period: ${previous}`}>
       <IconTrendUp style={up ? undefined : { transform: "scaleY(-1)" }} aria-hidden />
       {Math.abs(pct).toFixed(2)}%
       <span className="srOnly">{up ? "up" : "down"} vs previous period</span>

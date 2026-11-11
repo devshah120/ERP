@@ -83,7 +83,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
   const exportRef = useRef<ExportButtonHandle>(null);
   const columnsRef = useRef<HTMLButtonElement>(null);
 
-  const { hidden, isVisible, toggle, reset } = useColumnVisibility(`pay.${config.key}`);
+  const { hidden, isVisible, apply: applyColumns } = useColumnVisibility(`pay.${config.key}`);
   const visibleColumns = useMemo(
     () => config.columns.filter((c) => isVisible(c.key)),
     [config.columns, isVisible]
@@ -204,8 +204,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
           buttonRef={columnsRef}
           options={config.columns.map((c) => ({ key: c.key, label: c.label }))}
           hidden={hidden}
-          onToggle={toggle}
-          onReset={reset}
+          onApply={applyColumns}
         />
         <button
           type="button"

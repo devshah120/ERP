@@ -674,18 +674,6 @@ textarea.input {
   border-color: var(--accent-soft-strong);
 }
 
-.soonTag {
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.375rem;
-  border-radius: var(--radius-xs);
-  background: var(--surface-muted);
-  color: var(--text-tertiary);
-  border: 1px solid var(--border);
-}
-
 kbd {
   display: inline-flex;
   align-items: center;
@@ -1387,16 +1375,6 @@ kbd {
 .sbChildActive:hover {
   background: var(--accent-soft);
   color: var(--accent-text);
-}
-
-.sbChildDisabled {
-  color: var(--text-tertiary);
-  cursor: default;
-}
-
-.sbChildDisabled:hover {
-  background: none;
-  color: var(--text-tertiary);
 }
 
 .sbFooter {
@@ -2874,78 +2852,6 @@ a.cellLink:hover {
   max-height: 60vh;
   overflow: auto;
   animation: popIn 120ms var(--ease);
-}
-
-.columnPickerGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  gap: 0.375rem;
-}
-
-.columnChip {
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 500;
-  min-height: 2rem;
-  padding: 0.375rem 0.625rem 0.375rem 1.875rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-soft-strong);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  cursor: pointer;
-  text-align: left;
-  position: relative;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
-}
-
-.columnChip::before {
-  content: "";
-  position: absolute;
-  left: 0.625rem;
-  top: 50%;
-  width: 0.8rem;
-  height: 0.8rem;
-  margin-top: -0.4rem;
-  border-radius: 3px;
-  background: var(--accent)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
-    center / 0.6rem no-repeat;
-}
-
-.columnChip:hover:not(:disabled) {
-  border-color: var(--accent-soft-strong);
-}
-
-.columnChip:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.columnChipOff {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--border);
-}
-
-.columnChipOff::before {
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-}
-
-.columnChipOff:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-}
-
-.columnChipReset {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  border-color: var(--border);
-  padding-left: 0.625rem;
-}
-
-.columnChipReset::before {
-  display: none;
 }
 
 .exportOption {
@@ -6195,12 +6101,6 @@ a.cellLink:hover {
   left: calc(-0.875rem - 1px);
 }
 
-.sbFoot {
-  border-top: 1px solid var(--border-subtle);
-  padding: 0.625rem 0.75rem;
-  flex-shrink: 0;
-}
-
 .sbFootLink {
   display: flex;
   align-items: center;
@@ -7593,26 +7493,6 @@ a.ovTile:hover {
   margin-bottom: 1px;
 }
 
-.sidebar .sbItem .soonTag {
-  margin-left: auto;
-}
-
-.sbItemSoon,
-.sbItemSoon:hover {
-  cursor: default;
-  color: var(--text-tertiary) !important;
-  background: none !important;
-}
-
-.sbItemSoon .sbItemIcon,
-.sidebar .sbItemDim .sbItemIcon {
-  color: var(--text-tertiary);
-}
-
-.sidebar .sbItemDim {
-  color: #64748b;
-}
-
 .sidebar .sbChild {
   padding-left: 0.75rem;
 }
@@ -7628,71 +7508,6 @@ a.ovTile:hover {
   text-align: center;
 }
 
-.sbToggle {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  height: 2.25rem;
-  padding: 0 0.625rem;
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.sbToggle:hover {
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-.sbToggle input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.sbToggleTrack {
-  width: 1.875rem;
-  height: 1.125rem;
-  border-radius: 999px;
-  background: var(--border-strong);
-  position: relative;
-  flex-shrink: 0;
-  transition: background var(--dur) var(--ease);
-}
-
-.sbToggleTrack span {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 0.875rem;
-  height: 0.875rem;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transition: transform var(--dur) var(--ease);
-}
-
-.sbToggle input:checked + .sbToggleTrack {
-  background: var(--accent);
-}
-
-.sbToggle input:checked + .sbToggleTrack span {
-  transform: translateX(0.75rem);
-}
-
-.sbToggle input:focus-visible + .sbToggleTrack {
-  box-shadow: var(--focus-ring);
-}
-
-.sbFlyoutNote {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-
 .appShell[data-collapsed="true"] .sbFind,
 .appShell[data-collapsed="true"] .sidebar .sbSectionLabel {
   display: none;
@@ -7702,11 +7517,6 @@ a.ovTile:hover {
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border-subtle);
-}
-
-.appShell[data-collapsed="true"] .sbToggle {
-  justify-content: center;
-  padding: 0;
 }
 
 .crumbSep {
@@ -7821,21 +7631,6 @@ a.ovTile:hover {
   }
 }
 
-.sidebar .sbItem .sbItemTag {
-  flex: none;
-  margin-left: auto;
-}
-
-.appShell[data-collapsed="true"] .sbItemTag {
-  display: none;
-}
-
-@media (max-width: 900px) {
-  .appShell[data-collapsed="true"] .sbItemTag {
-    display: inline-flex;
-  }
-}
-
 .sbChildText {
   min-width: 0;
   overflow: hidden;
@@ -7847,23 +7642,8 @@ a.ovTile:hover {
   min-width: 0;
 }
 
-.sidebar .soonTag {
-  font-size: 0.5625rem;
-  padding: 0.0625rem 0.3125rem;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
 .sidebar .sbItemLabel {
   min-width: 0;
-}
-
-/* Planned entries read as unavailable at a glance. */
-.sidebar .sbChild.sbChildDisabled,
-.sidebar .sbChild.sbChildDisabled:hover {
-  color: var(--text-tertiary);
-  background: none;
-  cursor: default;
 }
 
 /* ==================================================================
@@ -8181,7 +7961,9 @@ a.ovTile:hover {
 
 .dHero {
   position: relative;
-  overflow: hidden;
+  /* Not overflow:hidden, so the date-range menu can drop below the band.
+     The glow layers round their own corners instead. */
+  z-index: 5;
   isolation: isolate;
   margin-bottom: 1.25rem;
   padding: 1.5rem 1.75rem 1.5rem;
@@ -8195,6 +7977,7 @@ a.ovTile:hover {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   background:
     radial-gradient(48rem 22rem at 105% -30%, rgba(29, 155, 224, 0.5), transparent 60%),
     radial-gradient(34rem 20rem at -10% 140%, rgba(10, 123, 191, 0.4), transparent 60%);
@@ -8205,6 +7988,7 @@ a.ovTile:hover {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   background-size: 36px 36px;
@@ -8428,6 +8212,16 @@ a.ovTile:hover {
 .dash .ovValue {
   font-size: 1.3125rem;
   color: #0c2a42;
+  /* Never cut an amount short: the % badge moves to the next line instead. */
+  flex-shrink: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.dash .ovTop {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.25rem;
 }
 
 .dash .ovTile-green { --ov-accent: #16a34a; }
@@ -9934,4 +9728,365 @@ html.posFocus .mainArea {
 
 .authCardWelcome .formGrid {
   gap: 1rem;
+}
+
+/* ==================================================================
+   Column picker: checklist panel with Select all, Reset, Close / Save
+   ================================================================== */
+
+.colPanel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  z-index: 60;
+  width: 18rem;
+  max-width: calc(100vw - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px -16px rgba(8, 38, 61, 0.35), 0 2px 6px rgba(16, 24, 40, 0.06);
+  animation: popIn 120ms var(--ease);
+  overflow: hidden;
+}
+
+.colPanelRight {
+  left: auto;
+  right: 0;
+}
+
+.colPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem 0.625rem;
+}
+
+.colPanelHead strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0c2a42;
+}
+
+.colLink {
+  border: 0;
+  background: none;
+  padding: 0.125rem 0.25rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-text);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.colLink:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.colLink:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.colRow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.25rem;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.colRow:hover {
+  background: var(--surface-hover);
+}
+
+.colRow input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.colLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colSelectAll {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.125rem;
+  margin-bottom: 0.25rem;
+}
+
+.colMeta {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.colList {
+  max-height: min(18rem, 50vh);
+  overflow-y: auto;
+  padding-bottom: 0.25rem;
+}
+
+.colRowLocked {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.colRowLocked:hover {
+  background: none;
+}
+
+.colRowLocked input {
+  cursor: default;
+}
+
+.colReq {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.0625rem 0.5rem;
+}
+
+.colPanelFoot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+}
+
+.colHint {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+/* ==================================================================
+   Printing (any screen's Print button or Ctrl + P)
+   Only the content prints: no NEXORA header, sidebar, breadcrumbs,
+   filters, column picker or buttons. Tables shrink and wrap instead of
+   being cut off; wide reports switch to landscape.
+   ================================================================== */
+
+.printOnly {
+  display: none;
+}
+
+@page landscape {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .printOnly {
+    display: block !important;
+  }
+
+  .appHeader,
+  .crumbBar,
+  .sidebar,
+  .sbBackdrop,
+  .commandPalette,
+  .columnPicker,
+  .colPanel,
+  .toolbar,
+  .filterBar,
+  .tableFooter,
+  .pageActions,
+  .pageEyebrow,
+  .rowActions,
+  .bulkBar,
+  .drillBanner,
+  .toastStack,
+  .modalBackdrop,
+  .loadingBar,
+  .dHeroControls,
+  .dRefresh,
+  .posxBar,
+  .posxKeys,
+  .posxTools,
+  .posxCatalog,
+  [data-nextjs-toast],
+  nextjs-portal {
+    display: none !important;
+  }
+
+  /* The fixed header's reserved space and the sidebar margin. */
+  .mainColumn {
+    margin-left: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  .mainArea {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .printLandscape {
+    page: landscape;
+  }
+
+  .printReportHead {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    border-bottom: 1.5px solid #0c2a42;
+    font-size: 10px;
+    color: #475569;
+  }
+
+  .printReportHead strong {
+    font-size: 13px;
+    color: #0c2a42;
+  }
+
+  .pageHeader {
+    margin-bottom: 8px !important;
+  }
+
+  .pageTitle {
+    font-size: 16px !important;
+  }
+
+  .pageHeader p,
+  .pageDescription {
+    font-size: 10px !important;
+  }
+
+  .kpiGrid {
+    gap: 6px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .kpiCard {
+    padding: 6px 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    break-inside: avoid;
+  }
+
+  .kpiCard .kpiValue {
+    font-size: 12px !important;
+  }
+
+  /* Tables: everything visible, compact, wrapping. */
+  .tableWrap {
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  .table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto;
+    font-size: 8.5px !important;
+    border-collapse: collapse;
+  }
+
+  .table th,
+  .table td {
+    padding: 3px 4px !important;
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    border-bottom: 1px solid #e2e8f0 !important;
+    height: auto !important;
+  }
+
+  /* Links and codes print at table size, in plain ink. */
+  .table a,
+  .table .cellLink,
+  .table .cellMono {
+    font-size: inherit !important;
+    font-family: inherit !important;
+    color: #0f172a !important;
+    text-decoration: none !important;
+  }
+
+  .kpiCard .kpiLabel {
+    font-size: 9px !important;
+  }
+
+  /* Amounts and quantities never split across lines. */
+  .table .numCell {
+    white-space: nowrap !important;
+    overflow-wrap: normal;
+  }
+
+  .table thead {
+    display: table-header-group;
+  }
+
+  .table thead th {
+    position: static !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-size: 8px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .table tfoot td {
+    font-weight: 700;
+    border-top: 1.5px solid #0f172a !important;
+  }
+
+  .table tr {
+    break-inside: avoid;
+  }
+
+  /* Status chips print as plain text. */
+  .table .badge,
+  .table [class*="statusBadge"] {
+    padding: 0 !important;
+    background: none !important;
+    border: 0 !important;
+    font-size: inherit !important;
+    font-weight: 600 !important;
+    gap: 0 !important;
+    white-space: nowrap;
+  }
+
+  .table .badge::before,
+  .table .badgeDot,
+  .table [class*="statusBadge"]::before {
+    display: none !important;
+  }
+
+  /* Selection checkboxes and per-row action icons are screen-only. */
+  .table .checkCell,
+  .table th:has(> input[type="checkbox"]),
+  .table td:has(> input[type="checkbox"]),
+  .table .actionCell {
+    display: none !important;
+  }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { useToast } from "@/components/ui/Toast";
 import CustomerForm, {
   customerFormToPayload,
   emptyCustomerForm,
@@ -62,6 +63,7 @@ function toFormState(dto: CustomerDTO): Partial<CustomerFormState> {
 export default function EditCustomerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const toast = useToast();
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export default function EditCustomerPage() {
       body: JSON.stringify(customerFormToPayload(form)),
     });
     setCustomer(updated);
+    toast.success("Customer updated", updated.name);
     router.refresh();
   }
 

@@ -92,7 +92,9 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
     () => config.columns.filter((c) => isVisible(c.key)),
     [config.columns, isVisible]
   );
-  const filterableColumns = config.columns.some((c) => c.filterParam);
+  // The status filter sits under the Status column when the list has one.
+  const statusColumn = config.columns.find((c) => c.key === "status");
+  const filterableColumns = config.columns.some((c) => c.filterParam) || Boolean(statusColumn);
 
   const canCreate = hasPermission(`${config.key}.create`);
   const canEdit = hasPermission(`${config.key}.edit`);
@@ -294,7 +296,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
     ];
   }
 
-  const columnFilterCount = Object.values(filters).filter(Boolean).length;
+  const columnFilterCount = Object.values(filters).filter(Boolean).length + (statusColumn && status ? 1 : 0);
   const hasFilters = Boolean(query || status || columnFilterCount > 0);
 
   const exportParams = () => {
@@ -355,19 +357,21 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
           width="18rem"
         />
 
-        <select
-          className="select"
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
+        {!statusColumn && (
+          <select
+            className="select"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by status"
+          >
+            <option value="">Status: All</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        )}
 
         {filterableColumns && (
           <button
@@ -477,7 +481,21 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
                 <th className="checkCell" />
                 {visibleColumns.map((col) => (
                   <th key={col.key}>
-                    {col.filterParam ? (
+                    {col === statusColumn ? (
+                      <select
+                        className="filterRowSelect"
+                        value={status}
+                        onChange={(e) => {
+                          setStatus(e.target.value);
+                          setPage(1);
+                        }}
+                        aria-label="Filter by status"
+                      >
+                        <option value="">All</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                      </select>
+                    ) : col.filterParam ? (
                       <input
                         placeholder={`Filter ${col.label.toLowerCase()}`}
                         aria-label={`Filter by ${col.label}`}

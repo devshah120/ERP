@@ -73,6 +73,7 @@ const customers: ResourceDefinition = {
     city: "billingAddress.city",
     phone: "phone",
     email: "email",
+    gstin: "gstin",
   },
   sortableFields: ["customerCode", "name", "companyName", "phone", "email", "createdAt"],
   defaultSort: "createdAt",

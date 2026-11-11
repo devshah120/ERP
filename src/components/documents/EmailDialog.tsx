@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 
@@ -25,6 +26,7 @@ export default function EmailDialog({
   onClose: () => void;
 }) {
   const [to, setTo] = useState(defaultTo ?? "");
+  const toast = useToast();
   const [subject, setSubject] = useState(`${label} ${documentNumber}`);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export default function EmailDialog({
         body: JSON.stringify(body),
       });
       setSent(to.trim() || defaultTo || "the recipient");
+      toast.success("Email sent", to.trim() || defaultTo || undefined);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send the email");
     } finally {

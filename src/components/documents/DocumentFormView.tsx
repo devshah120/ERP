@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo, type FormEvent } from "react";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
@@ -95,6 +96,7 @@ const emptyQuick = { itemId: "", variantSku: "", quantity: "1", rate: "" };
 
 export default function DocumentFormView({ config, recordId }: { config: DocumentUi; recordId?: string }) {
   const router = useRouter();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const { me } = useAuth();
   const isEdit = Boolean(recordId);
@@ -504,15 +506,18 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
         await apiFetch(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
         setDirty(false);
         setSuccess("Saved");
+        toast.success(`${config.singular} updated`);
         await loadRecord();
       } else {
-        const doc = await apiFetch<{ id: string }>(config.apiPath, { method: "POST", body: JSON.stringify(payload) });
+        const doc = await apiFetch<{ id: string; documentNumber?: string }>(config.apiPath, { method: "POST", body: JSON.stringify(payload) });
         setDirty(false);
+        toast.success(`${config.singular} created`, doc.documentNumber);
         if (sendOnSave) {
           // A failure here must not look like the save failed — the document
           // exists either way, so the error is reported on its own page.
           try {
-            await submitAfterSave(doc.id);
+            const moved = await submitAfterSave(doc.id);
+            if (moved) toast.success(`${config.singular} ${humanizeStatus(moved).toLowerCase()}`, doc.documentNumber);
           } catch (err) {
             router.push(`${config.basePath}/${doc.id}`);
             throw err;
@@ -555,6 +560,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
         body: JSON.stringify({ toStatus: rule.to, reason }),
       });
       setSuccess(`Moved to ${rule.to}`);
+      toast.success(`${config.singular} ${humanizeStatus(rule.to).toLowerCase()}`);
       await loadRecord();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Transition failed");
@@ -585,6 +591,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
         method: "POST",
         body: JSON.stringify({ toType: target.key, extra }),
       });
+      toast.success(`${targetUi?.singular ?? target.label} created`, `From this ${config.singular.toLowerCase()}`);
       router.push(`${targetUi?.basePath ?? "/"}/${doc.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Conversion failed");

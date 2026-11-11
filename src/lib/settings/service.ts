@@ -8,6 +8,7 @@ import {
   type PosSettings,
   type SalesSettings,
   type PurchaseSettings,
+  type PrintFormatSettings,
 } from "./definitions";
 
 /** Reads one settings section, filling defaults for anything never saved. */
@@ -103,4 +104,9 @@ export async function documentDefaults(businessId: Types.ObjectId, docType: stri
     if (settings.defaultPaymentTerms) out.paymentTerms = settings.defaultPaymentTerms;
   }
   return out;
+}
+
+/** Chosen print layout per document type (defaults filled in). */
+export function getPrintFormats(businessId: Types.ObjectId) {
+  return getSettings<PrintFormatSettings>(businessId, "print-formats");
 }

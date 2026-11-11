@@ -13,7 +13,7 @@ const args = process.argv.slice(2);
 const BASE = args.includes("--base") ? args[args.indexOf("--base") + 1] : "http://localhost:3000";
 const DOMAIN = process.env.SEED_DOMAIN ?? "rangoli-textiles";
 const EMAIL = process.env.SEED_EMAIL ?? "asha@rangoli.test";
-const PASSWORD = process.env.SEED_PASSWORD ?? "Str0ng!Passw0rd";
+const PASSWORD = process.env.SEED_PASSWORD ?? "Demo@1234";
 
 let cookie = "";
 

@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useAuth } from "../AuthProvider";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { GST_STATES, findStateByCode } from "@/lib/gst/states";
 import PageHeader from "@/components/ui/PageHeader";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { IconBuilding, IconClock, IconArrowRight, IconEdit } from "@/components/icons";
+import { IconBuilding, IconClock, IconEdit } from "@/components/icons";
 
 function Row({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
   return (
@@ -109,12 +108,6 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      <p className="fieldHint" style={{ marginTop: "1.5rem" }}>
-        Branches and warehouses are managed under{" "}
-        <Link href="/branches" className="textLink">
-          Masters <IconArrowRight style={{ verticalAlign: "-2px" }} />
-        </Link>
-      </p>
 
       {editing && <EditBusinessDialog onClose={() => setEditing(false)} />}
     </>

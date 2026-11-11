@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { IconWarning, IconRefresh } from "@/components/icons";
 
@@ -18,6 +19,7 @@ interface SetupState {
  */
 export default function AccountingSetup({ onReady }: { onReady?: () => void }) {
   const [state, setState] = useState<SetupState | null>(null);
+  const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export default function AccountingSetup({ onReady }: { onReady?: () => void }) {
       const body = await res.json().catch(() => ({}));
       if (!body?.success) throw new Error(body?.message ?? `Request failed (${res.status})`);
       setMessage(body.message ?? "Done");
+      toast.success(body.message ?? "Done");
       await load();
       onReady?.();
     } catch (err) {

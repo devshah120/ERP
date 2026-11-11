@@ -455,7 +455,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
             setPage(1);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">Status: All</option>
           {statusOptions.map((s) => (
             <option key={s} value={s}>
               {humanizeStatus(s)}

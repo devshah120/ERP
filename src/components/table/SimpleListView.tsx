@@ -160,7 +160,7 @@ export default function SimpleListView({ config }: { config: SimpleListConfig })
         <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder={config.searchPlaceholder ?? "Search…"} width="18rem" />
         {config.statusOptions && (
           <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
-            <option value="">All statuses</option>
+            <option value="">Status: All</option>
             {config.statusOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}

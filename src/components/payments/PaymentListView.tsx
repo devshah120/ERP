@@ -1,6 +1,7 @@
 "use client";
 
 import SearchBox from "@/components/ui/SearchBox";
+import { useToast } from "@/components/ui/Toast";
 import Pagination from "@/components/ui/Pagination";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,6 +55,7 @@ function format(value: unknown, type?: string): string {
 
 export default function PaymentListView({ config }: { config: PaymentUi }) {
   const router = useRouter();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const { hasPermission } = useAuth();
 
@@ -136,6 +138,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
       const qs = reason ? `?reason=${encodeURIComponent(reason)}` : "";
       await apiFetch(`${config.apiPath}/${cancelTarget.id}${qs}`, { method: "DELETE" });
       setCancelTarget(null);
+      toast.success(`${config.singular} cancelled`, String(cancelTarget.documentNumber));
       setNotice(
         `${config.singular} ${String(cancelTarget.documentNumber)} cancelled — the money has been returned to the invoices it settled.`
       );

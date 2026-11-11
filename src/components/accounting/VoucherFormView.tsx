@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
@@ -75,6 +76,7 @@ function safe(value: string): Decimal {
  */
 export default function VoucherFormView({ recordId }: { recordId?: string }) {
   const router = useRouter();
+  const toast = useToast();
   const isView = Boolean(recordId);
 
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -165,7 +167,7 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const doc = await apiFetch<{ id: string }>("/api/vouchers", {
+      const doc = await apiFetch<{ id: string; voucherNumber?: string }>("/api/vouchers", {
         method: "POST",
         body: JSON.stringify({
           voucherDate,
@@ -180,6 +182,7 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
           })),
         }),
       });
+      toast.success("Voucher posted", doc.voucherNumber);
       router.push(`/account-vouchers/${doc.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not post this voucher");
@@ -199,6 +202,7 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
       const qs = reason ? `?reason=${encodeURIComponent(reason)}` : "";
       await apiFetch(`/api/vouchers/${recordId}${qs}`, { method: "DELETE" });
       setCancelOpen(false);
+      toast.success("Voucher cancelled");
       await loadRecord();
     } catch (err) {
       setCancelError(err instanceof ApiError ? err.message : "Cancel failed");

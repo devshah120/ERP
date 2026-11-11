@@ -17,7 +17,6 @@ import {
   DateRangePill,
   Delta,
   fmtDay,
-  Gauge,
   OverviewTile,
   Panel,
   RangeTag,
@@ -153,7 +152,6 @@ export default function DashboardPage() {
 
   const range = ov ? { fromDate: ov.period.fromDate, toDate: ov.period.toDate } : undefined;
   const trend = dash?.charts.find((c) => c.key === "sales-vs-purchase");
-  const collection = kpi("collection");
   const synced = dash ? new Date(dash.generatedAt) : null;
 
   // Greeting follows the sync time so server and client render the same text.
@@ -249,7 +247,7 @@ export default function DashboardPage() {
 
       <div className="dashGrid">
         {/* ---------------------------------------------------- overview */}
-        <Panel className="span9" title="Overview" actions={<RangeTag range={range} />}>
+        <Panel className="span12" title="Overview" actions={<RangeTag range={range} />}>
           {tiles.length === 0 ? (
             <div className="ovGrid" aria-busy="true">
               {Array.from({ length: 20 }, (_, i) => (
@@ -274,26 +272,6 @@ export default function DashboardPage() {
             </p>
           )}
         </Panel>
-
-        {/* --------------------------------------------------- right rail */}
-        <div className="span3 dRail">
-          <Panel title="Collection Health">
-            <Gauge
-              percent={collection ? Number(collection.value) : null}
-              label="collected"
-              caption={
-                ov ? (
-                  <>
-                    ₹{formatCompact(ov.metrics.received.current)} received against ₹{formatCompact(ov.metrics.sales.current)} invoiced
-                  </>
-                ) : undefined
-              }
-            />
-            <Link href="/analysis/accounting" className="dLink" style={{ display: "block", textAlign: "center", marginTop: "0.5rem" }}>
-              Cash &amp; settlement analysis
-            </Link>
-          </Panel>
-        </div>
 
         {/* ------------------------------------------------------ trend */}
         <Panel className="span7" title="Sales & Purchase Trend" actions={<RangeTag range={range} />}>

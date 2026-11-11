@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Decimal from "decimal.js";
@@ -76,6 +77,7 @@ export default function PaymentFormView({
   recordId?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const isView = Boolean(recordId);
   /** ?partyId= pre-selects the party, e.g. from the dashboard's aging table. */
   const presetPartyId = useSearchParams().get("partyId");
@@ -212,10 +214,11 @@ export default function PaymentFormView({
           .filter(([, v]) => safeDecimal(v).gt(0))
           .map(([invoiceId, v]) => ({ invoiceId, amount: safeDecimal(v).toFixed(2) })),
       };
-      const created = await apiFetch<{ id: string }>(config.apiPath, {
+      const created = await apiFetch<{ id: string; documentNumber?: string }>(config.apiPath, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      toast.success(`${config.singular} saved`, created.documentNumber);
       router.push(`${config.basePath}/${created.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Could not save this ${config.singular.toLowerCase()}`);

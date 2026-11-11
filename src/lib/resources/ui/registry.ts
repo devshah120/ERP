@@ -42,7 +42,7 @@ const customers: ResourceUi = {
     { key: "billingAddress.city", label: "City", filterParam: "city" },
     { key: "phone", label: "Phone", filterParam: "phone", sortField: "phone" },
     { key: "email", label: "Email", filterParam: "email", sortField: "email" },
-    { key: "gstin", label: "GSTIN" },
+    { key: "gstin", label: "GSTIN", filterParam: "gstin" },
     { key: "creditDays", label: "Credit Days", type: "number" },
     { key: "status", label: "Status", type: "badge" },
   ],

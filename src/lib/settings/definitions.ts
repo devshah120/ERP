@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FieldConfig } from "@/lib/resources/ui/types";
+import { PRINT_DOC_TYPES } from "@/lib/printFormats/catalog";
 
 /**
  * Workspace settings, one section per settings screen.
@@ -55,6 +56,17 @@ export const notificationSettingsSchema = z.object({
   alertInvoiceStatus: z.coerce.boolean().default(true),
   alertTrends: z.coerce.boolean().default(true),
 });
+
+/**
+ * Chosen layout per document type. A stored value that is no longer offered
+ * (layout retired, or never valid) falls back to that type's default rather
+ * than failing the whole section.
+ */
+export const printFormatSettingsSchema = z.object(
+  Object.fromEntries(
+    PRINT_DOC_TYPES.map((d) => [d.key, z.enum(d.layouts as [string, ...string[]]).default(d.defaultLayout).catch(d.defaultLayout)])
+  )
+);
 
 /** Dashboard insight keys each notification switch controls. */
 export const NOTIFICATION_INSIGHTS: Record<keyof z.infer<typeof notificationSettingsSchema>, string[]> = {
@@ -164,6 +176,15 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
       { name: "receiptFooter", label: "Receipt footer", type: "textarea", fullWidth: true },
     ],
   },
+  "print-formats": {
+    key: "print-formats",
+    title: "Print Formats",
+    description: "Pick the layout used when printing each document type.",
+    usedBy: "The POS receipt, POS bill reprints and the Print screen of every sales and purchase document.",
+    schema: printFormatSettingsSchema,
+    // Edited on its own screen (settings/print-formats), not the generic form.
+    fields: [],
+  },
   notifications: {
     key: "notifications",
     title: "Notifications",
@@ -184,3 +205,4 @@ export type SalesSettings = z.infer<typeof salesSettingsSchema>;
 export type PurchaseSettings = z.infer<typeof purchaseSettingsSchema>;
 export type PosSettings = z.infer<typeof posSettingsSchema>;
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
+export type PrintFormatSettings = Record<string, string>;

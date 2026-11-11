@@ -3,16 +3,19 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api/client";
+import { useToast } from "@/components/ui/Toast";
 import CustomerForm, { customerFormToPayload, type CustomerFormState } from "../CustomerForm";
 
 export default function NewCustomerPage() {
   const router = useRouter();
+  const toast = useToast();
 
   async function handleSubmit(form: CustomerFormState) {
-    const customer = await apiFetch<{ id: string }>("/api/customers", {
+    const customer = await apiFetch<{ id: string; name?: string }>("/api/customers", {
       method: "POST",
       body: JSON.stringify(customerFormToPayload(form)),
     });
+    toast.success("Customer created", customer.name ?? form.name);
     router.push(`/customers/${customer.id}`);
   }
 

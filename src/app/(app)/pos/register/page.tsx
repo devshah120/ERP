@@ -13,7 +13,9 @@ import { SkeletonBlock } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { useWarehouses } from "@/components/forms/useWarehouses";
 import { loadItemOptions, variantLabel, type ItemOption } from "@/components/inventory/ItemLinesInput";
-import { ReceiptBody, ReceiptPrintPortal, printReceipt, type ReceiptDoc } from "@/components/pos/Receipt";
+import { PrintPortal, ScaledSheet, printPortal as printReceipt } from "@/components/print/PrintArea";
+import { fromPosOrder } from "@/components/print/model";
+import { PAPER_SIZES, resolveLayout } from "@/lib/printFormats/catalog";
 import {
   IconAlertCircle,
   IconArrowLeft,
@@ -188,7 +190,8 @@ export default function PosRegisterPage() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [saleError, setSaleError] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<ReceiptDoc | null>(null);
+  const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
+  const [printFormats, setPrintFormats] = useState<Record<string, string> | null>(null);
   const [printPending, setPrintPending] = useState(false);
 
   // split / tender dialog
@@ -229,6 +232,10 @@ export default function PosRegisterPage() {
         setOpenWarehouse((w) => w || s.defaultWarehouseId);
       })
       .catch(() => setSettings(null));
+    // The receipt prints in Settings · Print Formats' POS Bill layout; the default if unreadable.
+    apiFetch<Record<string, string>>("/api/settings/print-formats")
+      .then(setPrintFormats)
+      .catch(() => setPrintFormats(null));
     loadItemOptions()
       .then((list) => setItems(list as PosItem[]))
       .catch(() => setItems([]))
@@ -443,7 +450,7 @@ export default function PosRegisterPage() {
     setSubmitting(true);
     setSaleError(null);
     try {
-      const order = await apiFetch<ReceiptDoc & { id: string; orderNumber: string }>("/api/pos/orders", {
+      const order = await apiFetch<Record<string, unknown> & { id: string; orderNumber: string }>("/api/pos/orders", {
         method: "POST",
         body: JSON.stringify({
           registerId: register.id,
@@ -491,6 +498,18 @@ export default function PosRegisterPage() {
     if (pays.length === 0 || splitBalance.gt(0)) return;
     completeSale(pays);
   }
+
+  // The finished sale in the chosen POS Bill print format.
+  const receiptLayout = resolveLayout("pos-orders", printFormats?.["pos-orders"]);
+  const receiptThermal = PAPER_SIZES[receiptLayout.size].thermal;
+  const business = me?.business;
+  const receiptModel = useMemo(
+    () =>
+      receipt
+        ? fromPosOrder(receipt, { ...business, name: business?.name ?? "" }, { header: settings?.receiptHeader, footer: settings?.receiptFooter })
+        : null,
+    [receipt, business, settings?.receiptHeader, settings?.receiptFooter]
+  );
 
   // Print once the receipt portal has rendered.
   useEffect(() => {
@@ -1169,7 +1188,7 @@ export default function PosRegisterPage() {
           title="Sale completed"
           subtitle={String(receipt.orderNumber)}
           onClose={() => (setReceipt(null), searchRef.current?.focus())}
-          width="26rem"
+          width={receiptThermal ? "26rem" : "38rem"}
           footer={
             <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
               <button type="button" className="button buttonSecondary" onClick={printReceipt}>
@@ -1181,10 +1200,14 @@ export default function PosRegisterPage() {
             </div>
           }
         >
-          <ReceiptBody doc={receipt} businessName={me?.business?.name ?? ""} header={settings?.receiptHeader} footer={settings?.receiptFooter} />
+          {receiptModel && (
+            <div className="pfmPreviewStage" style={{ maxHeight: "60vh" }}>
+              <ScaledSheet layoutId={receiptLayout.id} model={receiptModel} width={receiptThermal ? 320 : 520} />
+            </div>
+          )}
         </Modal>
       )}
-      {receipt && <ReceiptPrintPortal doc={receipt} businessName={me?.business?.name ?? ""} header={settings?.receiptHeader} footer={settings?.receiptFooter} />}
+      {receiptModel && <PrintPortal layoutId={receiptLayout.id} model={receiptModel} />}
 
       {closing && (
         <Modal

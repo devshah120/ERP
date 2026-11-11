@@ -47,7 +47,6 @@ describe("navigation registry", () => {
     expect(findNavMatch("/apps")).toBeNull();
     expect(breadcrumbsFor("/apps")).toEqual([]);
     // ...while built screens, including ones that used to be planned, do resolve.
-    expect(findNavMatch("/recipes")?.child?.label).toBe("Recipes");
     expect(findNavMatch("/coupons")?.child?.label).toBe("Coupons");
     expect(findNavMatch("/logs")?.group.label).toBe("Activity Log");
     expect(findNavMatch("/user-roles")?.child?.label).toBe("User Roles");

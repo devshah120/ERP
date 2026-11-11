@@ -2282,7 +2282,8 @@ kbd {
   top: 2.375rem;
 }
 
-.table .filterRow input {
+.table .filterRow input,
+.table .filterRow select {
   width: 100%;
   font: inherit;
   font-size: 0.78rem;
@@ -2295,6 +2296,18 @@ kbd {
   outline: none;
 }
 
+.table .filterRow input {
+  min-width: 4.5rem;
+}
+
+.table .filterRow select {
+  min-width: 0;
+  width: 5rem;
+  padding-right: 0.25rem;
+  cursor: pointer;
+}
+
+.table .filterRow select:focus,
 .table .filterRow input:focus {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
@@ -3040,11 +3053,12 @@ a.cellLink:hover {
 
 .toastStack {
   position: fixed;
-  bottom: 1.25rem;
+  /* top right, just under the app header; newest on top */
+  top: calc(var(--topbar-h) + 0.75rem);
   right: 1.25rem;
   z-index: 200;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 0.5rem;
   pointer-events: none;
   max-width: calc(100vw - 2.5rem);
@@ -3063,7 +3077,18 @@ a.cellLink:hover {
   box-shadow: var(--shadow-lg);
   padding: 0.75rem 0.75rem 0.75rem 0.875rem;
   font-size: 0.8125rem;
-  animation: toastIn 200ms var(--ease);
+  animation: toastDrop 200ms var(--ease);
+}
+
+@keyframes toastDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes toastIn {
@@ -4953,7 +4978,7 @@ a.cellLink:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  min-width: 7rem;
+  min-width: 4.5rem;
 }
 
 .stockLevelTrack {
@@ -6907,7 +6932,8 @@ a.ovTile:hover {
 
 .agingCell {
   display: inline-block;
-  min-width: 5.5rem;
+  min-width: 0;
+  width: 5rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   text-align: right;
@@ -7694,77 +7720,6 @@ a.ovTile:hover {
   }
   .posSide {
     position: static;
-  }
-}
-
-/* Till receipt (80 mm roll) */
-.receipt {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #000;
-  max-width: 72mm;
-  margin: 0 auto;
-}
-
-.receiptCenter {
-  text-align: center;
-}
-
-.receiptBiz {
-  font-size: 14px;
-}
-
-.receiptSmall {
-  font-size: 11px;
-  color: #333;
-}
-
-.receiptRule {
-  border-top: 1px dashed #999;
-  margin: 6px 0;
-}
-
-.receiptTable {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.receiptTable td {
-  padding: 2px 0;
-  vertical-align: top;
-}
-
-.receiptNum {
-  text-align: right;
-  white-space: nowrap;
-  padding-left: 8px !important;
-}
-
-.receiptGrand td {
-  font-weight: 700;
-  font-size: 14px;
-  padding-top: 4px;
-}
-
-.receiptPrintRoot {
-  display: none;
-}
-
-@media print {
-  body.printingReceipt * {
-    visibility: hidden !important;
-  }
-  body.printingReceipt .receiptPrintRoot {
-    display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 80mm;
-  }
-  body.printingReceipt .receiptPrintRoot,
-  body.printingReceipt .receiptPrintRoot * {
-    visibility: visible !important;
   }
 }
 

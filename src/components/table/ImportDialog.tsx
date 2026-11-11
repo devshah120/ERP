@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 
 interface RowError {
@@ -46,6 +47,7 @@ export default function ImportDialog({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const toast = useToast();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export default function ImportDialog({
     try {
       const body = await send("commit", { skipDuplicates: String(skipDuplicates) });
       setDone(body.message ?? "Imported");
+      toast.success("Import complete", body.message);
       setPreview(null);
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";

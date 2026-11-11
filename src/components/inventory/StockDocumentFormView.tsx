@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
@@ -81,6 +82,7 @@ export default function StockDocumentFormView({
   recordId?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const isAdjustment = kind === "stock-adjustments";
   const isView = Boolean(recordId);
   const basePath = `/${kind}`;
@@ -260,10 +262,11 @@ export default function StockDocumentFormView({
             notes: notes || undefined,
             lines: payloadLines,
           };
-      const doc = await apiFetch<{ id: string }>(`/api/stock/${kind}`, {
+      const doc = await apiFetch<{ id: string; documentNumber?: string }>(`/api/stock/${kind}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
+      toast.success(`${label} saved`, doc.documentNumber);
       router.push(`${basePath}/${doc.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Could not save this ${label.toLowerCase()}`);
@@ -280,6 +283,7 @@ export default function StockDocumentFormView({
       const qs = cancelReason ? `?reason=${encodeURIComponent(cancelReason)}` : "";
       await apiFetch(`/api/stock/${kind}/${recordId}${qs}`, { method: "DELETE" });
       setCancelOpen(false);
+      toast.success(`${label} cancelled`);
       await loadRecord();
     } catch (err) {
       setCancelError(err instanceof ApiError ? err.message : "Cancel failed");

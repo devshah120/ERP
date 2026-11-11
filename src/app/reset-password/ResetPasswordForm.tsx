@@ -37,7 +37,7 @@ export default function ResetPasswordForm() {
 
   if (!user) {
     return (
-      <AuthLayout>
+      <AuthLayout headline={["Locked out?", "Let's get you", "back in."]} lead="We'll email you a 6-digit code. Enter it with a new password and you're signed back in — every other device is signed out for safety." tagline="Takes less than a minute.">
         <span className="authIconBadge warn">
           <IconAlertCircle />
         </span>
@@ -88,6 +88,9 @@ export default function ResetPasswordForm() {
 
   return (
     <AuthLayout
+      headline={["Locked out?", "Let's get you", "back in."]}
+      lead="We'll email you a 6-digit code. Enter it with a new password and you're signed back in — every other device is signed out for safety."
+      tagline="Takes less than a minute."
       topRight={
         <Link href="/login" className="button buttonGhost buttonSm">
           <IconArrowLeft /> Back to sign in

@@ -95,8 +95,9 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       wide
-      eyebrow="Get started with"
-      lead="Quotations, stock, POS and GST in one connected system — built for garment manufacturers and traders."
+      headline={["Your store,", "ready in", "a minute."]}
+      lead="Create your workspace and start billing, tracking stock and filing GST from day one."
+      tagline="No card needed. Just your email."
     >
       <h1 className="title">Create your store</h1>
       <p className="subtitle">Set up your store account in under a minute.</p>

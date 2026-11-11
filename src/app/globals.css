@@ -701,81 +701,6 @@ kbd {
    Auth
    ================================================================== */
 
-.authShell {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  min-height: 100vh;
-  background: var(--surface);
-}
-
-.authAside {
-  position: relative;
-  overflow: hidden;
-  background: #08263d;
-  color: #fff;
-  padding: 2.5rem 3rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  isolation: isolate;
-}
-
-.authAside::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(60rem 30rem at 110% -10%, rgba(29, 155, 224, 0.45), transparent 60%),
-    radial-gradient(40rem 30rem at -20% 120%, rgba(10, 123, 191, 0.35), transparent 60%);
-  z-index: -2;
-}
-
-.authAside::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse at 50% 40%, #000 30%, transparent 75%);
-  z-index: -1;
-}
-
-.authMain {
-  display: flex;
-  flex-direction: column;
-  padding: 2rem 2.5rem;
-  min-width: 0;
-}
-
-.authMainTop {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  min-height: 2rem;
-}
-
-.authContent {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 0;
-}
-
-.authCard {
-  width: 100%;
-  max-width: 24rem;
-}
-
-.authCard.wide {
-  max-width: 34rem;
-}
-
 .authIconBadge {
   width: 2.75rem;
   height: 2.75rem;
@@ -1014,16 +939,6 @@ kbd {
   font-size: 0.75rem;
   color: var(--text-tertiary);
   line-height: 1.5;
-}
-
-@media (max-width: 960px) {
-  .authShell {
-    grid-template-columns: 1fr;
-  }
-
-  .authAside {
-    display: none;
-  }
 }
 
 @media (max-width: 560px) {
@@ -9280,272 +9195,6 @@ html.posFocus .mainArea {
   }
 }
 
-/* ==================================================================
-   Sign-in "welcome" look: illustrated blue panel with a big gold
-   greeting, and a roomy form with the logo on top.
-   ================================================================== */
-
-.awAside {
-  background: linear-gradient(160deg, #0b3a5e 0%, #0d4f80 45%, #0a3557 100%);
-  justify-content: center;
-  gap: 2.5rem;
-  padding: 2.5rem 3.5rem;
-}
-
-.awAside::before {
-  background:
-    radial-gradient(36rem 26rem at 110% -10%, rgba(29, 155, 224, 0.35), transparent 60%),
-    radial-gradient(30rem 22rem at -15% 110%, rgba(6, 30, 52, 0.7), transparent 60%);
-}
-
-.awAside::after {
-  mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 70%);
-}
-
-/* decorations */
-
-.awTags {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 22rem;
-  transform: translateX(-30%);
-  z-index: -1;
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.25));
-}
-
-.awTag {
-  animation: awSway 6s ease-in-out infinite;
-}
-
-@keyframes awSway {
-  0%,
-  100% { transform: rotate(-2.5deg); }
-  50% { transform: rotate(2.5deg); }
-}
-
-.awSpark {
-  position: absolute;
-  top: 18%;
-  right: 22%;
-  width: 3.5rem;
-  z-index: -1;
-  opacity: 0.85;
-  animation: awTwinkle 3.2s ease-in-out infinite;
-}
-
-@keyframes awTwinkle {
-  0%,
-  100% { opacity: 0.35; transform: scale(0.9); }
-  50% { opacity: 0.95; transform: scale(1); }
-}
-
-.awGlow {
-  position: absolute;
-  right: -6rem;
-  bottom: -7rem;
-  width: 34rem;
-  height: 34rem;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(246, 205, 120, 0.55) 0%, rgba(214, 160, 70, 0.22) 30%, transparent 62%);
-  z-index: -1;
-  pointer-events: none;
-}
-
-.awMandala {
-  position: absolute;
-  right: -5rem;
-  bottom: -6rem;
-  width: 32rem;
-  z-index: -1;
-  animation: awSpin 120s linear infinite;
-}
-
-@keyframes awSpin {
-  to { transform: rotate(360deg); }
-}
-
-.awCore {
-  position: absolute;
-  right: calc(-5rem + 16rem - 2.25rem);
-  bottom: calc(-6rem + 16rem - 2.25rem);
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.75rem;
-  color: #6b4a12;
-  background: radial-gradient(circle at 35% 30%, #fff1c9, #e8bf6a 60%, #b8862f);
-  box-shadow: 0 0 0 8px rgba(246, 205, 120, 0.18), 0 0 48px 12px rgba(246, 205, 120, 0.45);
-  z-index: -1;
-}
-
-/* greeting */
-
-.awPitch {
-  max-width: 38rem;
-}
-
-.awEyebrow {
-  font-size: 2rem;
-  font-weight: 300;
-  letter-spacing: 0.18em;
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.1;
-}
-
-.awDisplay {
-  margin: 0.25rem 0 1.25rem;
-  font-size: clamp(3.5rem, 6.2vw, 5.25rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  background: linear-gradient(180deg, #f8e3ae 0%, #e2b864 55%, #c99a45 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.25));
-}
-
-.awLead {
-  font-size: 1.0625rem;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-  max-width: 27rem;
-}
-
-.awStats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem 2rem;
-  margin-top: 2.25rem;
-}
-
-.awStats > div {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.awStats strong {
-  font-size: 2.125rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: #fff;
-}
-
-.awStats small {
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .awTag,
-  .awSpark,
-  .awMandala {
-    animation: none;
-  }
-}
-
-/* ---- the form side ---- */
-
-.authMainWelcome .authContent {
-  padding: 1rem 0;
-}
-
-.authCardWelcome {
-  max-width: 25rem;
-}
-
-.authLogo {
-  display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: 0.625rem;
-  margin-bottom: 2rem;
-  font-size: 1.625rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: #0c2a42;
-}
-
-/* status icon (key, clock, warning) sits on its own line under the logo */
-.authCardWelcome .authIconBadge {
-  display: flex;
-  margin-top: -0.75rem;
-}
-
-.authCardWelcome .title {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #0c2a42;
-  letter-spacing: -0.025em;
-}
-
-.authCardWelcome .subtitle {
-  font-size: 0.9375rem;
-  margin-bottom: 1.75rem;
-}
-
-.authCardWelcome .form {
-  gap: 1.125rem;
-}
-
-.authCardWelcome .field label {
-  font-weight: 500;
-}
-
-.authCardWelcome .input,
-.authCardWelcome .select {
-  height: 3rem;
-  padding: 0 1rem;
-  border-radius: 10px;
-  background: #f3f7fc;
-  border-color: #dde6f0;
-  font-size: 0.9375rem;
-}
-
-.authCardWelcome .select:hover,
-.authCardWelcome .input:hover {
-  border-color: #c6d4e3;
-}
-
-.authCardWelcome .select:focus,
-.authCardWelcome .input:focus {
-  background: #fff;
-}
-
-.authCardWelcome .passwordWrap .input {
-  padding-right: 3rem;
-}
-
-.authCardWelcome .authRowBetween {
-  margin-top: -0.25rem;
-}
-
-.authCardWelcome .authRowBetween a {
-  font-weight: 500;
-}
-
-.authCardWelcome .buttonLg {
-  height: 3.125rem;
-  border-radius: 11px;
-  font-size: 1rem;
-  font-weight: 600;
-  gap: 0.5rem;
-  box-shadow: 0 12px 24px -12px rgba(10, 111, 174, 0.75);
-}
-
-.authCardWelcome .buttonLg svg {
-  transition: transform var(--dur) var(--ease);
-}
-
-.authCardWelcome .buttonLg:hover:not(:disabled) svg {
-  transform: translateX(3px);
-}
-
 /* icon-only show/hide toggle (all password fields) */
 .passwordToggle {
   display: inline-flex;
@@ -9558,17 +9207,7 @@ html.posFocus .mainArea {
   font-size: 1.1rem;
 }
 
-@media (max-width: 960px) {
-  .authMainWelcome .authContent {
-    padding-top: 2rem;
-  }
-}
-
 /* ---- short sign-up form: numbered sections ---- */
-
-.authCardWelcome.wide {
-  max-width: 29rem;
-}
 
 .regSection {
   display: flex;
@@ -9602,7 +9241,7 @@ html.posFocus .mainArea {
   color: var(--danger-solid);
 }
 
-.authCardWelcome .formGrid {
+.auBody .formGrid {
   gap: 1rem;
 }
 
@@ -10408,5 +10047,298 @@ a.rowRemoveBtn.stAction:hover {
   .lblFooter {
     flex-wrap: wrap;
     padding: 0.625rem 1rem;
+  }
+}
+
+/* ==================================================================
+   Signed-out pages: soft pale-blue marbled background, white card, inset
+   brand-blue panel with a big headline, roomy form on the right
+   ================================================================== */
+
+.auPage {
+  position: relative;
+  flex: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  background: #e9f2fa;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.auPageTexture {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
+/* a dark wash over the page texture, so the card stands out */
+.auPage::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 70%);
+  pointer-events: none;
+}
+
+.auCard {
+  width: min(100%, 74rem);
+  min-height: min(42rem, calc(100vh - 5rem));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  padding: 12px;
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 30px 70px -28px rgba(10, 63, 115, 0.35), 0 2px 6px rgba(10, 63, 115, 0.06);
+}
+
+.auCardWide {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+}
+
+/* ---- inset visual panel ---- */
+
+.auVisual {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 34rem;
+  padding: 2.75rem 3rem;
+  border-radius: 20px;
+  color: #fff;
+}
+
+.auVisualTexture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+}
+
+/* darken the lower half so the headline always reads */
+.auVisual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to top, rgba(6, 42, 82, 0.78) 0%, rgba(6, 42, 82, 0.25) 55%, rgba(6, 42, 82, 0) 100%);
+}
+
+.auLogo {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.auPitch h2 {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.25rem;
+  font-size: clamp(2.1rem, 3.5vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.auPitch p {
+  max-width: 30rem;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.auPitch .auTagline {
+  margin-top: 1.25rem;
+}
+
+/* ---- form side ---- */
+
+.auBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1.5rem 3rem;
+}
+
+.auTop {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.auTop .button {
+  color: #0a7bbf;
+}
+
+.auFormWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 1.5rem 0;
+}
+
+.auCardWide .auFormWrap {
+  max-width: 30rem;
+}
+
+.auMobileLogo {
+  display: none;
+  margin-bottom: 1.75rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #0a7bbf;
+}
+
+.auBody .title {
+  margin-bottom: 0.625rem;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.auBody .subtitle {
+  margin-bottom: 2rem;
+  font-size: 1rem;
+  color: #475569;
+}
+
+.auBody .form {
+  gap: 1.125rem;
+}
+
+.auBody .field label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.auBody .input,
+.auBody .select {
+  height: 3rem;
+  padding: 0 1rem;
+  border: 1px solid #cdd5dc;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.9375rem;
+}
+
+.auBody textarea.input {
+  height: auto;
+  padding: 0.75rem 1rem;
+}
+
+.auBody .input:hover,
+.auBody .select:hover {
+  border-color: #a9b6c1;
+}
+
+.auBody .input:focus,
+.auBody .select:focus {
+  border-color: #0a7bbf;
+  box-shadow: 0 0 0 3px rgba(10, 123, 191, 0.2);
+  outline: none;
+}
+
+.auBody .passwordWrap .input {
+  padding-right: 3rem;
+}
+
+.auBody .checkboxRow input {
+  accent-color: #0a7bbf;
+}
+
+.auBody .buttonPrimary {
+  background: #0a7bbf;
+  border-color: #0a7bbf;
+}
+
+.auBody .buttonPrimary:hover:not(:disabled) {
+  background: #0868a3;
+  border-color: #0868a3;
+}
+
+.auBody .buttonLg {
+  height: 3.125rem;
+  gap: 0.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.auBody .authRowBetween a,
+.auBody .footerRow a,
+.auBody .footerRow button,
+.auBody .textLink {
+  color: #0a7bbf;
+  font-weight: 700;
+}
+
+.auBody .footerRow {
+  text-align: center;
+}
+
+.auBody .regSection span {
+  background: rgba(10, 123, 191, 0.1);
+  color: #0a7bbf;
+}
+
+@media (max-width: 900px) {
+  .auCard,
+  .auCardWide {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .auVisual {
+    display: none;
+  }
+
+  .auMobileLogo {
+    display: block;
+  }
+
+  .auBody {
+    padding: 1.75rem 1.5rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .auPage {
+    padding: 1rem;
+    align-items: flex-start;
+  }
+
+  .auCard {
+    border-radius: 20px;
+    padding: 6px;
+  }
+
+  .auBody {
+    padding: 1.5rem 1.125rem;
+  }
+
+  .auBody .title {
+    font-size: 1.625rem;
   }
 }

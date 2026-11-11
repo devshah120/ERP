@@ -16,7 +16,7 @@ export default function LoginForm() {
   const justReset = searchParams.get("reset") === "1";
   const next = safeNext(searchParams.get("next"));
 
-  const [usernameOrEmail, setUsernameOrEmail] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +31,7 @@ export default function LoginForm() {
       await apiFetch("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          usernameOrEmail: usernameOrEmail.trim(),
+          email: email.trim().toLowerCase(),
           password,
           rememberMe,
         }),
@@ -50,7 +50,7 @@ export default function LoginForm() {
   return (
     <AuthLayout>
       <h1 className="title">Welcome back!</h1>
-      <p className="subtitle">Sign in to manage sales, stock and accounts in one place.</p>
+      <p className="subtitle">Sign in with your email to manage sales, stock and accounts.</p>
 
       {justVerified && (
         <div className="banner bannerSuccess" style={{ marginBottom: "1.25rem" }} role="status">
@@ -84,16 +84,17 @@ export default function LoginForm() {
 
       <form className="form" onSubmit={handleSubmit} noValidate={false}>
         <div className="field">
-          <label htmlFor="user">Username or email</label>
+          <label htmlFor="email">Email</label>
           <input
-            id="user"
+            id="email"
             className="input"
+            type="email"
             required
             autoFocus
-            value={usernameOrEmail}
-            onChange={(e) => setUsernameOrEmail(e.target.value)}
-            placeholder="asha or asha@rangoli.com"
-            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@business.com"
+            autoComplete="email"
             autoCapitalize="none"
             spellCheck={false}
           />

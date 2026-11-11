@@ -6,13 +6,13 @@
  * consistent rather than hand-crafted rows that bypass business rules.
  *
  * Usage:  node scripts/seed-demo.mjs [--base http://localhost:3000]
- *         (set SEED_DOMAIN / SEED_USER / SEED_PASSWORD to target another tenant)
+ *         (set SEED_DOMAIN / SEED_EMAIL / SEED_PASSWORD to target another tenant)
  */
 
 const args = process.argv.slice(2);
 const BASE = args.includes("--base") ? args[args.indexOf("--base") + 1] : "http://localhost:3000";
 const DOMAIN = process.env.SEED_DOMAIN ?? "rangoli-textiles";
-const USER = process.env.SEED_USER ?? "asha";
+const EMAIL = process.env.SEED_EMAIL ?? "asha@rangoli.test";
 const PASSWORD = process.env.SEED_PASSWORD ?? "Str0ng!Passw0rd";
 
 let cookie = "";
@@ -81,10 +81,10 @@ console.log(`Seeding demo data into ${BASE} (tenant: ${DOMAIN})\n`);
 
 const login = await call("/api/auth/login", {
   method: "POST",
-  body: JSON.stringify({ domain: DOMAIN, usernameOrEmail: USER, password: PASSWORD }),
+  body: JSON.stringify({ domain: DOMAIN, email: EMAIL, password: PASSWORD }),
 });
 if (!login.body?.success) fail("login", login);
-console.log(`✓ logged in as ${login.body.data.user.username}\n`);
+console.log(`✓ logged in as ${login.body.data.user.email}\n`);
 
 // ---- Masters ------------------------------------------------------------
 console.log("Masters");

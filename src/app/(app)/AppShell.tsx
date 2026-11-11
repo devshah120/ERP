@@ -11,7 +11,7 @@ import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
 import { FinancialYearMenu } from "@/components/shell/HeaderWidgets";
-import { IconSearch, IconChevronRight, IconBrandMark, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
+import { IconSearch, IconChevronRight, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
 
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
 
@@ -153,9 +153,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </button>
 
         <Link href="/dashboard" className="hdrBrand" title={me.business?.name ?? "NEXORA"}>
-          <span className="hdrBrandMark">
-            <IconBrandMark />
-          </span>
           <span className="hdrBrandText">
             NEXORA
           </span>

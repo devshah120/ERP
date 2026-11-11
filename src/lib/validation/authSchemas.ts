@@ -15,7 +15,7 @@ const optionalText = (min: number, max: number) => z.preprocess(blankToUndefined
 /**
  * Sign-up. The form asks only for store name, GSTIN, phone, owner name, email
  * and password; everything else is optional here and defaulted by
- * registerBusiness (trade name = store name, username from the email, state
+ * registerBusiness (trade name = store name, state
  * from the GSTIN, India / INR / April financial year).
  */
 export const registerSchema = z
@@ -32,15 +32,6 @@ export const registerSchema = z
       .optional(),
 
     ownerName: z.string().trim().min(2, "Your name is required").max(120),
-    username: z.preprocess(
-      blankToUndefined,
-      z
-        .string()
-        .trim()
-        .toLowerCase()
-        .regex(/^[a-z0-9._-]{3,32}$/, "Username may only contain letters, numbers, dot, underscore, hyphen")
-        .optional()
-    ),
     email: z.string().trim().toLowerCase().email("Enter a valid email address"),
     phone: optionalText(7, 20),
     password: passwordField,
@@ -84,9 +75,9 @@ export const resendOtpSchema = z.object({
 export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
 
 export const loginSchema = z.object({
-  /** Optional: needed only when the same username exists in more than one workspace. */
+  /** Optional: limits the lookup to one workspace (API callers). */
   domain: z.string().trim().toLowerCase().optional(),
-  usernameOrEmail: z.string().trim().min(1),
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
   password: z.string().min(1),
   /** false = session ends when the browser closes. Defaults to staying signed in. */
   rememberMe: z.boolean().optional().default(true),
@@ -96,14 +87,14 @@ export type LoginInput = z.input<typeof loginSchema>;
 
 export const forgotPasswordSchema = z.object({
   domain: z.string().trim().toLowerCase().optional(),
-  usernameOrEmail: z.string().trim().min(1),
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
 });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
 export const resetPasswordSchema = z
   .object({
     domain: z.string().trim().toLowerCase().optional(),
-    usernameOrEmail: z.string().trim().min(1),
+    email: z.string().trim().toLowerCase().email("Enter a valid email address"),
     code: z.string().regex(/^\d{6}$/, "Code must be 6 digits"),
     password: passwordField,
     confirmPassword: z.string(),

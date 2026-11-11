@@ -338,8 +338,8 @@ export async function managerCashFlow(ctx: ReportContext, query: ReportQuery): P
   }
 
   const ids = [...byUser.keys()].filter((k) => Types.ObjectId.isValid(k));
-  const users = await User.find({ businessId: ctx.businessId, _id: { $in: ids } }, { name: 1, username: 1 }).lean<AnyDoc[]>();
-  const nameOf = new Map(users.map((u) => [u._id.toString(), `${u.name} (@${u.username})`]));
+  const users = await User.find({ businessId: ctx.businessId, _id: { $in: ids } }, { name: 1, email: 1 }).lean<AnyDoc[]>();
+  const nameOf = new Map(users.map((u) => [u._id.toString(), `${u.name}`]));
 
   let totalCashNet = ZERO;
   const rows = [...byUser.entries()]

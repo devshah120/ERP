@@ -17,6 +17,7 @@ import { sendOtp } from "@/lib/services/notifications/otpSender";
 import { recordAudit } from "@/lib/services/auditService";
 import { computeCurrentFinancialYear } from "@/lib/services/financialYearService";
 import { resolveGstState } from "@/lib/gst/states";
+import { usernameFromEmail } from "@/lib/auth/username";
 import type { RegisterInput, LoginInput } from "@/lib/validation/authSchemas";
 
 export interface RegisterResult {
@@ -45,20 +46,14 @@ async function uniqueDomain(base: string): Promise<string> {
   return `${base}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** "asha.rao+shop@x.com" → "asha.rao"; padded/trimmed to the 3–32 character username rule. */
-function usernameFromEmail(email: string): string {
-  const local = email.split("@")[0].toLowerCase().split("+")[0].replace(/[^a-z0-9._-]/g, "");
-  const name = local.length >= 3 ? local : `${local || "owner"}${"001".slice(local.length)}`;
-  return name.slice(0, 32);
-}
-
 export async function registerBusiness(input: RegisterInput, ip?: string): Promise<RegisterResult> {
   const env = getEnv();
 
   // The short sign-up form leaves these out; fill them with sensible defaults.
   const tradeName = input.tradeName ?? input.legalName;
   const businessType = input.businessType ?? "Retail";
-  const username = input.username ?? usernameFromEmail(input.email);
+  // Sign-in is by email; the internal username is derived from it.
+  const username = usernameFromEmail(input.email);
   const phone = input.phone ?? "";
   const state = input.state ?? resolveGstState({ gstin: input.gstin })?.name ?? "";
 
@@ -347,7 +342,6 @@ export interface LoginResult {
   user: {
     id: string;
     name: string;
-    username: string;
     email: string;
     businessId: string;
     roleId: string;
@@ -384,14 +378,14 @@ async function issueSession(
 }
 
 /**
- * Every account matching a username/email in active workspaces. With a domain
+ * Every account with this email in active workspaces. With a domain
  * (still accepted from API callers) the search is limited to that workspace.
- * Usernames are only unique per workspace, so this can return several users.
+ * Emails are only unique per workspace, so this can return several users.
  */
-async function findAccounts(usernameOrEmail: string, domain?: string, withPassword = false) {
-  const target = usernameOrEmail.toLowerCase();
+async function findAccounts(email: string, domain?: string, withPassword = false) {
+  const target = email.trim().toLowerCase();
   const scope = domain?.trim().toLowerCase();
-  const filter: Record<string, unknown> = { $or: [{ username: target }, { email: target }] };
+  const filter: Record<string, unknown> = { email: target };
   if (scope) {
     const business = await Business.findOne({ domain: scope }, { _id: 1 }).lean();
     if (!business) return [];
@@ -407,13 +401,13 @@ async function findAccounts(usernameOrEmail: string, domain?: string, withPasswo
 
 /**
  * Finds the account a sign-in attempt is for. One match is the usual case.
- * When the same username exists in several workspaces, the password decides:
+ * When the same email exists in several workspaces, the password decides:
  * the account it unlocks wins (the most recently used one if it unlocks more
  * than one). If it unlocks none, the first match goes through the normal
  * failure path so lockout still applies.
  */
 async function findLoginUser(input: LoginInput) {
-  const live = await findAccounts(input.usernameOrEmail, input.domain, true);
+  const live = await findAccounts(input.email, input.domain, true);
   if (live.length <= 1) return live[0] ?? null;
 
   const usable = live.filter((u) => u.status !== "DISABLED" && u.status !== "PENDING_VERIFICATION").slice(0, 5);
@@ -511,7 +505,6 @@ export async function login(input: LoginInput, meta: { userAgent?: string; ip?: 
     user: {
       id: user._id.toString(),
       name: user.name,
-      username: user.username,
       email: user.email,
       businessId: user.businessId.toString(),
       roleId: user.roleId.toString(),
@@ -572,16 +565,16 @@ export async function logout(refreshToken: string | undefined): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 /** Same answer whether or not the account exists, so the endpoint can't be
- * used to discover which usernames or emails are registered. */
+ * used to discover which emails are registered. */
 const RESET_INVALID = "Invalid or expired reset code. Request a new code and try again.";
 
 /**
- * Accounts a reset can apply to. Usually one; if the same username exists in
+ * Accounts a reset can apply to. Usually one; if the same email exists in
  * several workspaces each gets its own code, and the code entered later
  * identifies which account is being reset.
  */
-async function findResettableUsers(domain: string | undefined, usernameOrEmail: string) {
-  const users = await findAccounts(usernameOrEmail, domain);
+async function findResettableUsers(domain: string | undefined, email: string) {
+  const users = await findAccounts(email, domain);
   // Unverified registrations finish through OTP verification instead, and a
   // disabled account must not be re-opened by resetting its password.
   return users.filter((u) => u.status !== "PENDING_VERIFICATION" && u.status !== "DISABLED");
@@ -592,10 +585,10 @@ async function findResettableUsers(domain: string | undefined, usernameOrEmail: 
  * account exists; a request inside the resend cooldown is ignored silently.
  */
 export async function requestPasswordReset(
-  input: { domain?: string; usernameOrEmail: string },
+  input: { domain?: string; email: string },
   ip?: string
 ): Promise<void> {
-  for (const user of await findResettableUsers(input.domain, input.usernameOrEmail)) {
+  for (const user of await findResettableUsers(input.domain, input.email)) {
     await sendResetCode(user, ip);
   }
 }
@@ -661,10 +654,10 @@ async function sendResetCode(user: Awaited<ReturnType<typeof findResettableUsers
  * out everywhere — and any lockout is cleared.
  */
 export async function resetPassword(
-  input: { domain?: string; usernameOrEmail: string; code: string; password: string },
+  input: { domain?: string; email: string; code: string; password: string },
   ip?: string
 ): Promise<void> {
-  const users = await findResettableUsers(input.domain, input.usernameOrEmail);
+  const users = await findResettableUsers(input.domain, input.email);
   if (users.length === 0) throw AppError.badRequest(RESET_INVALID, "RESET_INVALID");
 
   // Each account's newest pending code; with several accounts, the one whose

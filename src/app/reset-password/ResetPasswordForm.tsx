@@ -14,7 +14,7 @@ const COOLDOWN = 60;
 export default function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const user = params.get("user") ?? "";
+  const user = params.get("email") ?? "";
   const justSent = params.get("sent") === "1";
 
   const [code, setCode] = useState("");
@@ -42,7 +42,7 @@ export default function ResetPasswordForm() {
           <IconAlertCircle />
         </span>
         <h1 className="title">Start with your account details</h1>
-        <p className="subtitle">We need your username or email before we can send a reset code.</p>
+        <p className="subtitle">We need your email before we can send a reset code.</p>
         <Link href="/forgot-password" className="button buttonPrimary buttonLg buttonBlock">
           Request a reset code
         </Link>
@@ -62,7 +62,7 @@ export default function ResetPasswordForm() {
     try {
       await apiFetch("/api/auth/reset-password", {
         method: "POST",
-        body: JSON.stringify({ usernameOrEmail: user, code, password, confirmPassword: confirm }),
+        body: JSON.stringify({ email: user, code, password, confirmPassword: confirm }),
       });
       router.push("/login?reset=1");
     } catch (err) {
@@ -76,7 +76,7 @@ export default function ResetPasswordForm() {
     try {
       await apiFetch("/api/auth/forgot-password", {
         method: "POST",
-        body: JSON.stringify({ usernameOrEmail: user }),
+        body: JSON.stringify({ email: user }),
       });
       setInfo("If the account exists, a new code has been sent. Earlier codes no longer work.");
       setCode("");

@@ -156,14 +156,6 @@ export function IconPlus(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function IconBrandMark(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Icon strokeWidth={2.2} {...props}>
-      <path d="M5 16v3M10 12v7M15 9v10M20 5v14" />
-    </Icon>
-  );
-}
-
 export function IconRefresh(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

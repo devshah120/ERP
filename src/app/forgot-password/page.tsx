@@ -9,7 +9,7 @@ import { IconAlertCircle, IconArrowLeft } from "@/components/icons";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [usernameOrEmail, setUsernameOrEmail] = useState("");
+  const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,13 +17,13 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    const u = usernameOrEmail.trim();
+    const u = email.trim().toLowerCase();
     try {
       await apiFetch("/api/auth/forgot-password", {
         method: "POST",
-        body: JSON.stringify({ usernameOrEmail: u }),
+        body: JSON.stringify({ email: u }),
       });
-      router.push(`/reset-password?user=${encodeURIComponent(u)}&sent=1`);
+      router.push(`/reset-password?email=${encodeURIComponent(u)}&sent=1`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not reach the server. Try again.");
       setSubmitting(false);
@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
     >
       <h1 className="title">Reset your password</h1>
       <p className="subtitle">
-        Enter your username or email. If the account exists, we&apos;ll email a 6-digit code to the address on file.
+        Enter your email. If it has an account, we&apos;ll send a 6-digit code to it.
       </p>
 
       {error && (
@@ -52,15 +52,16 @@ export default function ForgotPasswordPage() {
 
       <form className="form" onSubmit={handleSubmit}>
         <div className="field">
-          <label htmlFor="user">Username or email</label>
+          <label htmlFor="email">Email</label>
           <input
-            id="user"
+            id="email"
             className="input"
+            type="email"
             required
-            value={usernameOrEmail}
-            onChange={(e) => setUsernameOrEmail(e.target.value)}
-            placeholder="asha"
-            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@business.com"
+            autoComplete="email"
             autoCapitalize="none"
             spellCheck={false}
             autoFocus

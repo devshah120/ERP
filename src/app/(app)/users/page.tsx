@@ -18,7 +18,6 @@ import { IconRefresh, IconPlus, IconCopy, IconAlertCircle } from "@/components/i
 interface UserRow {
   id: string;
   name: string;
-  username: string;
   email: string;
   phone: string | null;
   status: string;
@@ -77,7 +76,7 @@ export default function UsersPage() {
 
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
-  const [created, setCreated] = useState<{ domain: string; username: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -112,7 +111,7 @@ export default function UsersPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q || !rows) return rows ?? [];
-    return rows.filter((r) => [r.name, r.username, r.email, r.role ?? ""].some((v) => v.toLowerCase().includes(q)));
+    return rows.filter((r) => [r.name, r.email, r.role ?? ""].some((v) => v.toLowerCase().includes(q)));
   }, [rows, query]);
 
   function resetForm(values: Record<string, string>) {
@@ -122,7 +121,7 @@ export default function UsersPage() {
   }
 
   function openInvite() {
-    resetForm({ name: "", username: "", email: "", phone: "", roleId: roles.find((r) => r.name !== "Owner")?.id ?? roles[0]?.id ?? "", password: generatePassword() });
+    resetForm({ name: "", email: "", phone: "", roleId: roles.find((r) => r.name !== "Owner")?.id ?? roles[0]?.id ?? "", password: generatePassword() });
     setCreated(null);
     setInviting(true);
   }
@@ -137,8 +136,8 @@ export default function UsersPage() {
     setFormError(null);
     setFieldErrors({});
     try {
-      const res = await apiFetch<{ domain: string; username: string }>("/api/admin/users", { method: "POST", body: JSON.stringify(form) });
-      setCreated({ domain: res.domain, username: res.username, password: form.password });
+      const res = await apiFetch<{ email: string }>("/api/admin/users", { method: "POST", body: JSON.stringify(form) });
+      setCreated({ email: res.email, password: form.password });
       toast.success("Employee added");
       load();
     } catch (err) {
@@ -212,7 +211,7 @@ export default function UsersPage() {
   );
 
   if (isForbidden(error)) return <AccessDenied detail={(error as Error).message} />;
-  const cols = canEdit || canDisable ? 8 : 7;
+  const cols = canEdit || canDisable ? 7 : 6;
 
   return (
     <>
@@ -235,7 +234,7 @@ export default function UsersPage() {
       />
 
       <div className="toolbar">
-        <SearchBox value={query} onChange={setQuery} placeholder="Search name, username, email or role…" width="20rem" />
+        <SearchBox value={query} onChange={setQuery} placeholder="Search name, email or role…" width="20rem" />
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh" title="Refresh (Ctrl + R)">
             {loading ? <span className="spinner" /> : <IconRefresh />}
@@ -248,7 +247,6 @@ export default function UsersPage() {
           <thead>
             <tr>
               <th>Employee</th>
-              <th>Username</th>
               <th>Role</th>
               <th>Phone</th>
               <th>Status</th>
@@ -287,7 +285,6 @@ export default function UsersPage() {
                       </span>
                     </span>
                   </td>
-                  <td className="cellMono cellMuted">@{u.username}</td>
                   <td>{u.role ?? <span className="cellMuted">—</span>}</td>
                   <td className="cellMuted tabular">{u.phone ?? "—"}</td>
                   <td>
@@ -344,8 +341,8 @@ export default function UsersPage() {
             <div style={{ display: "grid", gap: "0.75rem" }}>
               <dl className="settingsList">
                 <div className="settingsRow">
-                  <dt>Username</dt>
-                  <dd className="cellMono">{created.username}</dd>
+                  <dt>Email (sign-in)</dt>
+                  <dd className="cellMono">{created.email}</dd>
                 </div>
                 <div className="settingsRow">
                   <dt>Temporary password</dt>
@@ -357,7 +354,7 @@ export default function UsersPage() {
                 className="button buttonSecondary"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(`Username: ${created.username}\nPassword: ${created.password}`);
+                    await navigator.clipboard.writeText(`Email: ${created.email}\nPassword: ${created.password}`);
                     toast.success("Sign-in details copied");
                   } catch {
                     toast.error("Couldn't copy", "Your browser blocked clipboard access.");
@@ -378,8 +375,7 @@ export default function UsersPage() {
               )}
               <div className="formGrid">
                 {input("name", "Full name")}
-                {input("username", "Username", { hint: "for sign-in" })}
-                {input("email", "Email", { type: "email" })}
+                {input("email", "Email", { type: "email", hint: "used to sign in" })}
                 {input("phone", "Phone", { type: "tel" })}
                 {roleSelect}
                 <div className="field">
@@ -401,7 +397,7 @@ export default function UsersPage() {
       {editing && (
         <Modal
           title={`Edit ${editing.name}`}
-          subtitle={`@${editing.username} · ${editing.email}`}
+          subtitle={editing.email}
           onClose={() => setEditing(null)}
           busy={busy}
           footer={

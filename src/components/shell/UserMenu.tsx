@@ -47,7 +47,7 @@ export default function UserMenu({ variant }: { variant: "sidebar" | "topbar" })
         <IconSettings />
         <span className="menuItemText">
           Workspace settings
-          <small>{me.role?.name ?? "Member"} · @{me.username}</small>
+          <small>{me.role?.name ?? "Member"}</small>
         </span>
       </Link>
       <button

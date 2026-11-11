@@ -742,28 +742,6 @@ kbd {
   z-index: -1;
 }
 
-.authBrand {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.authBrandMark {
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius);
-  background: #fff;
-  color: var(--accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-
 .authMain {
   display: flex;
   flex-direction: column;
@@ -779,17 +757,6 @@ kbd {
   font-size: 0.8125rem;
   color: var(--text-secondary);
   min-height: 2rem;
-}
-
-.authMainTop .authBrand {
-  display: none;
-  color: var(--text);
-  margin-right: auto;
-}
-
-.authMainTop .authBrandMark {
-  background: var(--accent);
-  color: #fff;
 }
 
 .authContent {
@@ -1056,10 +1023,6 @@ kbd {
 
   .authAside {
     display: none;
-  }
-
-  .authMainTop .authBrand {
-    display: flex;
   }
 }
 
@@ -9339,12 +9302,6 @@ html.posFocus .mainArea {
   mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 70%);
 }
 
-.awAside > .authBrand {
-  position: absolute;
-  top: 2.5rem;
-  left: 3.5rem;
-}
-
 /* decorations */
 
 .awTags {
@@ -9479,10 +9436,6 @@ html.posFocus .mainArea {
   color: #fff;
 }
 
-.awStats strong span {
-  color: #4fb3ef;
-}
-
 .awStats small {
   font-size: 0.8125rem;
   color: rgba(255, 255, 255, 0.72);
@@ -9518,25 +9471,10 @@ html.posFocus .mainArea {
   color: #0c2a42;
 }
 
-.authLogo .authBrandMark {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 11px;
-  background: linear-gradient(145deg, #1d9be0, #0a6fae);
-  color: #fff;
-  font-size: 1.15rem;
-  box-shadow: 0 6px 16px -6px rgba(10, 111, 174, 0.6);
-}
-
 /* status icon (key, clock, warning) sits on its own line under the logo */
 .authCardWelcome .authIconBadge {
   display: flex;
   margin-top: -0.75rem;
-}
-
-.authLogoDot {
-  color: var(--accent-bright);
-  margin-left: -0.5rem;
 }
 
 .authCardWelcome .title {

@@ -123,7 +123,7 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     for (let i = 0; i < 3; i++) {
       await expect(
         login(
-          { domain: "acme-garments", usernameOrEmail: "priya", password: "wrong-password" },
+          { domain: "acme-garments", email: "priya@acme.test", password: "wrong-password" },
           {}
         )
       ).rejects.toMatchObject({ code: i < 2 ? "INVALID_CREDENTIALS" : "INVALID_CREDENTIALS" });
@@ -133,7 +133,7 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     expect(user?.status).toBe("LOCKED");
 
     await expect(
-      login({ domain: "acme-garments", usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {})
+      login({ domain: "acme-garments", email: "priya@acme.test", password: "Str0ng!Passw0rd" }, {})
     ).rejects.toMatchObject({ code: "ACCOUNT_LOCKED" });
   });
 
@@ -146,13 +146,13 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     await User.updateOne({ username: "priya" }, { status: "ACTIVE", failedLoginAttempts: 0, lockedUntil: null });
 
     const result = await login(
-      { domain: "acme-garments", usernameOrEmail: "priya@acme.test", password: "Str0ng!Passw0rd" },
+      { domain: "acme-garments", email: "priya@acme.test", password: "Str0ng!Passw0rd" },
       { ip: "127.0.0.1", userAgent: "vitest" }
     );
 
     expect(result.accessToken).toBeTruthy();
     expect(result.refreshToken).toBeTruthy();
-    expect(result.user.username).toBe("priya");
+    expect(result.user.email).toBe("priya@acme.test");
 
     const sessionBefore = await Session.findOne({ userId: result.user.id, revokedAt: null });
     expect(sessionBefore).toBeTruthy();
@@ -168,26 +168,29 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     await expect(refreshSession(refreshed.refreshToken, {})).rejects.toMatchObject({ code: "SESSION_EXPIRED" });
   });
 
-  it("signs in without a business domain when the username is unique", async () => {
+  it("signs in by email only — without a business domain, and never by username", async () => {
     const { login } = await import("@/lib/services/authService");
 
-    const byUsername = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
-    expect(byUsername.user.username).toBe("priya");
+    const byEmailOnly = await login({ email: "priya@acme.test", password: "Str0ng!Passw0rd" }, {});
+    expect(byEmailOnly.user.email).toBe("priya@acme.test");
 
-    const byEmail = await login({ domain: "", usernameOrEmail: "PRIYA@acme.test", password: "Str0ng!Passw0rd" }, {});
-    expect(byEmail.user.username).toBe("priya");
+    // The old username no longer signs anyone in.
+    await expect(login({ email: "priya", password: "Str0ng!Passw0rd" }, {})).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
 
-    await expect(login({ usernameOrEmail: "nobody", password: "Str0ng!Passw0rd" }, {})).rejects.toMatchObject({
+    const byEmail = await login({ domain: "", email: "PRIYA@acme.test", password: "Str0ng!Passw0rd" }, {});
+    expect(byEmail.user.email).toBe("priya@acme.test");
+
+    await expect(login({ email: "nobody@acme.test", password: "Str0ng!Passw0rd" }, {})).rejects.toMatchObject({
       code: "INVALID_CREDENTIALS",
     });
   });
 
-  it("lets the password pick the account when the same username exists in two workspaces", async () => {
+  it("lets the password pick the account when the same email exists in two workspaces", async () => {
     const { login } = await import("@/lib/services/authService");
     const { Business } = await import("@/models/Business");
     const { User } = await import("@/models/User");
 
-    // A second active workspace with its own user called "priya".
+    // A second active workspace with its own account for the same email.
     const original = await Business.findOne({ domain: "acme-garments" }).lean();
     const businessFields: Record<string, unknown> = { ...original };
     delete businessFields._id;
@@ -199,24 +202,24 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     await User.create({ ...userFields, businessId: other._id, passwordHash: await hashPassword("0ther!Passw0rd") });
 
     // Each password opens its own workspace — no business domain needed.
-    const first = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
+    const first = await login({ email: "priya@acme.test", password: "Str0ng!Passw0rd" }, {});
     expect(first.user.businessId).toBe(String(original!._id));
-    const second = await login({ usernameOrEmail: "priya", password: "0ther!Passw0rd" }, {});
+    const second = await login({ email: "priya@acme.test", password: "0ther!Passw0rd" }, {});
     expect(second.user.businessId).toBe(String(other._id));
 
     // A password that opens neither is just invalid.
-    await expect(login({ usernameOrEmail: "priya", password: "Wrong!Passw0rd" }, {})).rejects.toMatchObject({
+    await expect(login({ email: "priya@acme.test", password: "Wrong!Passw0rd" }, {})).rejects.toMatchObject({
       code: "INVALID_CREDENTIALS",
     });
     await User.updateMany({ username: "priya" }, { status: "ACTIVE", failedLoginAttempts: 0, lockedUntil: null });
 
     // API callers may still name the workspace explicitly.
-    const scoped = await login({ domain: "other-garments", usernameOrEmail: "priya", password: "0ther!Passw0rd" }, {});
+    const scoped = await login({ domain: "other-garments", email: "priya@acme.test", password: "0ther!Passw0rd" }, {});
     expect(scoped.user.businessId).toBe(String(other._id));
 
     // An inactive workspace doesn't count as a second match.
     await Business.updateOne({ _id: other._id }, { status: "SUSPENDED" });
-    const single = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
+    const single = await login({ email: "priya@acme.test", password: "Str0ng!Passw0rd" }, {});
     expect(single.user.businessId).toBe(String(original!._id));
   });
 
@@ -257,6 +260,27 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     const owner = await User.findOne({ businessId: result.businessId }).lean();
     expect(owner?.username).toBe("kiran.mehta");
     expect(owner?.phone).toBe("");
+  });
+
+  it("adds employees by email, with the internal username generated for them", async () => {
+    const { createUser } = await import("@/lib/services/adminWriteService");
+    const { Business } = await import("@/models/Business");
+    const { Role } = await import("@/models/Role");
+    const { User } = await import("@/models/User");
+    const { Types } = await import("mongoose");
+    const biz = await Business.findOne({ domain: "acme-garments" }).lean();
+    const role = await Role.findOne({ businessId: biz!._id }).lean();
+    const ctx = { businessId: biz!._id, userId: new Types.ObjectId(), roleId: role!._id, permissions: ["*"], branchIds: [], warehouseIds: [] };
+    const base = { name: "Ravi Kumar", phone: "9999988888", roleId: String(role!._id), password: "Str0ng!Passw0rd" };
+
+    const first = await createUser({ ...base, email: "ravi@acme.test" }, ctx as never);
+    expect(first.email).toBe("ravi@acme.test");
+    // Same mailbox name at another domain: the hidden username gets a number, sign-in is unaffected.
+    await createUser({ ...base, email: "ravi@other.test" }, ctx as never);
+    const names = (await User.find({ businessId: biz!._id, email: /^ravi@/ }).lean()).map((u) => u.username).sort();
+    expect(names).toEqual(["ravi", "ravi2"]);
+
+    await expect(createUser({ ...base, email: "RAVI@acme.test".toLowerCase() }, ctx as never)).rejects.toMatchObject({ code: "USER_EXISTS" });
   });
 
   it("rejects a duplicate domain registration with a clean 409-style AppError", async () => {

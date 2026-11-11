@@ -29,7 +29,6 @@ export const GET = withApiHandler(async (req: NextRequest) => {
   return ok({
     id: user._id.toString(),
     name: user.name,
-    username: user.username,
     email: user.email,
     businessId: ctx.businessId.toString(),
     role: role ? { id: role._id.toString(), name: role.name } : null,

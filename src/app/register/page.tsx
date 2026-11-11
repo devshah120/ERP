@@ -10,7 +10,7 @@ import { IconAlertCircle } from "@/components/icons";
 
 /**
  * Sign-up asks only for what's needed to open a store. The server fills the
- * rest: trade name = store name, username from the email, state from the GST
+ * rest: trade name = store name, state from the GST
  * number, India / INR / April financial year. All of it can be changed later.
  */
 interface RegisterForm {

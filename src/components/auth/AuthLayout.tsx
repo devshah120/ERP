@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { IconBrandMark } from "@/components/icons";
 
 /**
  * Split-screen frame for every signed-out page: an illustrated welcome panel
@@ -29,12 +28,7 @@ export default function AuthLayout({
         {topRight && <div className="authMainTop">{topRight}</div>}
         <div className="authContent">
           <div className={`authCard authCardWelcome ${wide ? "wide" : ""}`}>
-            <div className="authLogo">
-              <span className="authBrandMark">
-                <IconBrandMark />
-              </span>
-              NEXORA<span className="authLogoDot">.</span>
-            </div>
+            <div className="authLogo">NEXORA</div>
             {children}
           </div>
         </div>
@@ -49,9 +43,9 @@ export default function AuthLayout({
 
 /** What NEXORA does — real product capabilities, not marketing numbers. */
 const HIGHLIGHTS = [
-  { big: "GST", accent: ".", small: "CGST · SGST · IGST billing" },
-  { big: "POS", accent: ".", small: "cash, UPI & card counter" },
-  { big: "Live", accent: ".", small: "stock by size & colour" },
+  { big: "GST", small: "CGST · SGST · IGST billing" },
+  { big: "POS", small: "cash, UPI & card counter" },
+  { big: "Live", small: "stock by size & colour" },
 ];
 
 const PETALS = Array.from({ length: 16 }, (_, i) => i * (360 / 16));
@@ -117,9 +111,7 @@ function WelcomeAside({ eyebrow = "Welcome to", lead = DEFAULT_LEAD }: { eyebrow
           ))}
         </g>
       </svg>
-      <span className="awCore">
-        <IconBrandMark />
-      </span>
+      <span className="awCore" />
 
       <div className="awPitch">
         <p className="awEyebrow">{eyebrow}</p>
@@ -128,10 +120,7 @@ function WelcomeAside({ eyebrow = "Welcome to", lead = DEFAULT_LEAD }: { eyebrow
         <div className="awStats">
           {HIGHLIGHTS.map((h) => (
             <div key={h.big}>
-              <strong>
-                {h.big}
-                <span>{h.accent}</span>
-              </strong>
+              <strong>{h.big}</strong>
               <small>{h.small}</small>
             </div>
           ))}

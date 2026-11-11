@@ -72,7 +72,7 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     await Business.updateOne({ _id: reg.businessId }, { status: "ACTIVE" });
     await User.updateOne({ _id: reg.userId }, { status: "ACTIVE", isEmailVerified: true });
 
-    const session = await login({ domain: DOMAIN, usernameOrEmail: "ravi", password: OLD_PASSWORD }, {});
+    const session = await login({ domain: DOMAIN, email: "ravi@reset.test", password: OLD_PASSWORD }, {});
     refreshToken = session.refreshToken;
     expect(refreshToken).toBeTruthy();
   });
@@ -81,8 +81,8 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     const { requestPasswordReset } = await import("@/lib/services/authService");
     const { OtpVerification } = await import("@/models/OtpVerification");
 
-    await expect(requestPasswordReset({ domain: DOMAIN, usernameOrEmail: "nobody" })).resolves.toBeUndefined();
-    await expect(requestPasswordReset({ domain: "no-such-domain", usernameOrEmail: "ravi" })).resolves.toBeUndefined();
+    await expect(requestPasswordReset({ domain: DOMAIN, email: "nobody@reset.test" })).resolves.toBeUndefined();
+    await expect(requestPasswordReset({ domain: "no-such-domain", email: "ravi@reset.test" })).resolves.toBeUndefined();
     expect(await OtpVerification.countDocuments({ purpose: "PASSWORD_RESET" })).toBe(0);
   });
 
@@ -90,8 +90,8 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     const { requestPasswordReset } = await import("@/lib/services/authService");
     const { OtpVerification } = await import("@/models/OtpVerification");
 
-    await requestPasswordReset({ domain: DOMAIN, usernameOrEmail: "ravi@reset.test" });
-    await requestPasswordReset({ domain: DOMAIN, usernameOrEmail: "ravi" });
+    await requestPasswordReset({ domain: DOMAIN, email: "ravi@reset.test" });
+    await requestPasswordReset({ domain: DOMAIN, email: "ravi@reset.test" });
 
     const pending = await OtpVerification.find({ purpose: "PASSWORD_RESET", status: "PENDING" }).lean();
     expect(pending).toHaveLength(1);
@@ -103,14 +103,14 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     await plantResetCode("111111");
 
     await expect(
-      resetPassword({ domain: DOMAIN, usernameOrEmail: "ravi", code: "999999", password: NEW_PASSWORD })
+      resetPassword({ domain: DOMAIN, email: "ravi@reset.test", code: "999999", password: NEW_PASSWORD })
     ).rejects.toMatchObject({ code: "OTP_INVALID" });
   });
 
   it("rejects a valid code presented for a different account", async () => {
     const { resetPassword } = await import("@/lib/services/authService");
     await expect(
-      resetPassword({ domain: DOMAIN, usernameOrEmail: "nobody", code: "111111", password: NEW_PASSWORD })
+      resetPassword({ domain: DOMAIN, email: "nobody@reset.test", code: "111111", password: NEW_PASSWORD })
     ).rejects.toMatchObject({ code: "RESET_INVALID" });
   });
 
@@ -121,7 +121,7 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     // Lock the account first: a reset must also clear the lockout.
     await User.updateOne({ username: "ravi" }, { status: "LOCKED", lockedUntil: new Date(Date.now() + 3_600_000), failedLoginAttempts: 3 });
 
-    await resetPassword({ domain: DOMAIN, usernameOrEmail: "ravi", code: "111111", password: NEW_PASSWORD });
+    await resetPassword({ domain: DOMAIN, email: "ravi@reset.test", code: "111111", password: NEW_PASSWORD });
 
     const user = await User.findOne({ username: "ravi" }).lean();
     expect(user?.status).toBe("ACTIVE");
@@ -130,31 +130,31 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     // The session opened before the reset is dead.
     await expect(refreshSession(refreshToken, {})).rejects.toMatchObject({ code: "SESSION_EXPIRED" });
 
-    await expect(login({ domain: DOMAIN, usernameOrEmail: "ravi", password: OLD_PASSWORD }, {})).rejects.toMatchObject({
+    await expect(login({ domain: DOMAIN, email: "ravi@reset.test", password: OLD_PASSWORD }, {})).rejects.toMatchObject({
       code: "INVALID_CREDENTIALS",
     });
-    const fresh = await login({ domain: DOMAIN, usernameOrEmail: "ravi", password: NEW_PASSWORD }, {});
+    const fresh = await login({ domain: DOMAIN, email: "ravi@reset.test", password: NEW_PASSWORD }, {});
     expect(fresh.accessToken).toBeTruthy();
   });
 
-  it("resets without a business domain, using just the username", async () => {
+  it("resets without a business domain, using just the email", async () => {
     const { requestPasswordReset, resetPassword, login } = await import("@/lib/services/authService");
     const { OtpVerification } = await import("@/models/OtpVerification");
     // Let the resend cooldown pass so a fresh code is issued.
     await OtpVerification.updateMany({ purpose: "PASSWORD_RESET" }, { lastSentAt: new Date(0) });
 
-    await requestPasswordReset({ usernameOrEmail: "ravi" });
+    await requestPasswordReset({ email: "ravi@reset.test" });
     await plantResetCode("222222");
-    await resetPassword({ usernameOrEmail: "ravi@reset.test", code: "222222", password: OLD_PASSWORD });
+    await resetPassword({ email: "ravi@reset.test", code: "222222", password: OLD_PASSWORD });
 
-    const back = await login({ usernameOrEmail: "ravi", password: OLD_PASSWORD }, {});
-    expect(back.user.username).toBe("ravi");
+    const back = await login({ email: "ravi@reset.test", password: OLD_PASSWORD }, {});
+    expect(back.user.email).toBe("ravi@reset.test");
   });
 
   it("won't accept the same code twice", async () => {
     const { resetPassword } = await import("@/lib/services/authService");
     await expect(
-      resetPassword({ domain: DOMAIN, usernameOrEmail: "ravi", code: "111111", password: OLD_PASSWORD })
+      resetPassword({ domain: DOMAIN, email: "ravi@reset.test", code: "111111", password: OLD_PASSWORD })
     ).rejects.toMatchObject({ code: "RESET_INVALID" });
   });
 });

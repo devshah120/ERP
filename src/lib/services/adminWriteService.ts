@@ -1,3 +1,4 @@
+import { uniqueUsername } from "@/lib/auth/username";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
@@ -19,11 +20,6 @@ type AnyDoc = any;
 
 export const userCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  username: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9._-]{3,32}$/, "3–32 characters: letters, numbers, dot, underscore, hyphen"),
   email: z.string().trim().toLowerCase().email(),
   phone: z.string().trim().min(7).max(20),
   roleId: z.string().trim().min(1, "Choose a role"),
@@ -55,26 +51,19 @@ async function revokeSessions(businessId: Types.ObjectId, userId: Types.ObjectId
 
 /**
  * Adds a colleague with a temporary password the owner hands over. They sign
- * in with their username or email, then change it from Forgot password.
+ * in with their email, then change it from Forgot password.
  */
 export async function createUser(input: z.infer<typeof userCreateSchema>, ctx: AuthContext) {
   await requireRole(ctx.businessId, input.roleId);
 
-  const clash = await User.findOne({
-    businessId: ctx.businessId,
-    $or: [{ username: input.username }, { email: input.email }],
-  }).lean<AnyDoc>();
-  if (clash) {
-    throw AppError.conflict(
-      clash.username === input.username ? "That username is already taken" : "That email already has an account",
-      "USER_EXISTS"
-    );
-  }
+  const clash = await User.findOne({ businessId: ctx.businessId, email: input.email }).lean<AnyDoc>();
+  if (clash) throw AppError.conflict("That email already has an account", "USER_EXISTS");
+  const username = await uniqueUsername(ctx.businessId, input.email);
 
   const user = await User.create({
     businessId: ctx.businessId,
     name: input.name,
-    username: input.username,
+    username,
     email: input.email,
     phone: input.phone,
     passwordHash: await hashPassword(input.password),
@@ -93,11 +82,11 @@ export async function createUser(input: z.infer<typeof userCreateSchema>, ctx: A
     module: "users",
     documentType: "User",
     documentId: user._id,
-    newValue: { username: input.username, email: input.email, roleId: input.roleId },
+    newValue: { email: input.email, roleId: input.roleId },
   });
 
   const business = await Business.findById(ctx.businessId, { domain: 1 }).lean<AnyDoc>();
-  return { id: user._id.toString(), username: user.username, domain: business?.domain ?? "" };
+  return { id: user._id.toString(), email: user.email, domain: business?.domain ?? "" };
 }
 
 export async function updateUser(id: string, input: z.infer<typeof userUpdateSchema>, ctx: AuthContext) {

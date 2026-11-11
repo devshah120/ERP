@@ -159,7 +159,7 @@ export default function DashboardPage() {
   // Greeting follows the sync time so server and client render the same text.
   const hour = synced?.getHours();
   const greeting = hour === undefined ? "Welcome back" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = (me.name || me.username).split(" ")[0];
+  const firstName = (me.name || me.email).split(" ")[0];
 
   // Headline cash figures for the hero band (replaces the old "Cash Position" card).
   type HeroStat = { label: string; value: string; previous?: string; goodWhen?: "up" | "down"; note?: string; tone?: string };

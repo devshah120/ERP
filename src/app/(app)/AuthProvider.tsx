@@ -7,7 +7,6 @@ import { apiFetch, ApiError, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
 export interface Me {
   id: string;
   name: string;
-  username: string;
   email: string;
   businessId: string;
   role: { id: string; name: string } | null;

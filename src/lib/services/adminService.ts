@@ -23,7 +23,6 @@ export async function listUsers(businessId: Types.ObjectId) {
     items: users.map((u) => ({
       id: u._id.toString(),
       name: u.name,
-      username: u.username,
       email: u.email,
       phone: u.phone ?? null,
       status: u.status,

@@ -12,7 +12,7 @@ export interface Me {
   businessId: string;
   role: { id: string; name: string } | null;
   permissions: string[];
-  business: { name: string; currency: string; state?: string; gstin?: string } | null;
+  business: { name: string; currency: string; state?: string; gstin?: string; phone?: string; email?: string; city?: string; address?: string } | null;
   financialYear: { label: string; startDate: string; endDate: string } | null;
 }
 

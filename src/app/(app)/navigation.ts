@@ -263,7 +263,7 @@ export const NAV_SECTIONS: NavSection[] = [
         children: [
           { href: "/storage", label: "Storage", enabled: true, keywords: "files documents drive upload" },
           { href: "/barcode-labels", label: "Barcode / Labels", enabled: true, keywords: "print label tag sticker" },
-          { href: "/tally-export", label: "Export to Tally", enabled: true, keywords: "tally xml accountant" },
+          { href: "/tally-export", label: "Export to Tally", enabled: false, keywords: "tally xml accountant" },
         ],
       },
       {

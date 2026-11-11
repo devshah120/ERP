@@ -41,6 +41,11 @@ export const GET = withApiHandler(async (req: NextRequest) => {
           // Needed client-side to work out CGST+SGST vs IGST before saving.
           state: business.state,
           gstin: business.gstin,
+          // Printed on product labels ("Mfg. & Pkd. by", customer care).
+          phone: business.phone,
+          email: business.email,
+          city: business.city,
+          address: business.address,
         }
       : null,
     financialYear: financialYear

@@ -9893,3 +9893,45 @@ html.posFocus .mainArea {
     padding-top: 2rem;
   }
 }
+
+/* ---- short sign-up form: numbered sections ---- */
+
+.authCardWelcome.wide {
+  max-width: 29rem;
+}
+
+.regSection {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0c2a42;
+}
+
+.regSection span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.regDivider {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.375rem 0;
+}
+
+.regRequired {
+  color: var(--danger-solid);
+}
+
+.authCardWelcome .formGrid {
+  gap: 1rem;
+}

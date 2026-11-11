@@ -8,11 +8,21 @@ const passwordField = z
     message: "Password must include an uppercase letter, lowercase letter, digit, and symbol",
   });
 
+/** "" from an untouched optional input means "not given". */
+const blankToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
+const optionalText = (min: number, max: number) => z.preprocess(blankToUndefined, z.string().trim().min(min).max(max).optional());
+
+/**
+ * Sign-up. The form asks only for store name, GSTIN, phone, owner name, email
+ * and password; everything else is optional here and defaulted by
+ * registerBusiness (trade name = store name, username from the email, state
+ * from the GSTIN, India / INR / April financial year).
+ */
 export const registerSchema = z
   .object({
-    legalName: z.string().trim().min(2).max(200),
-    tradeName: z.string().trim().min(2).max(200),
-    businessType: z.string().trim().min(2).max(100),
+    legalName: z.string().trim().min(2, "Store name is required").max(200),
+    tradeName: optionalText(2, 200),
+    businessType: optionalText(2, 100),
     /** Internal workspace ID. Optional: generated from the trade name when left out. */
     domain: z
       .string()
@@ -21,29 +31,41 @@ export const registerSchema = z
       .regex(/^[a-z0-9-]{3,63}$/, "Domain may only contain lowercase letters, numbers and hyphens")
       .optional(),
 
-    ownerName: z.string().trim().min(2).max(120),
-    username: z
-      .string()
-      .trim()
-      .toLowerCase()
-      .regex(/^[a-z0-9._-]{3,32}$/, "Username may only contain letters, numbers, dot, underscore, hyphen"),
-    email: z.string().trim().toLowerCase().email(),
-    phone: z.string().trim().min(7).max(20),
+    ownerName: z.string().trim().min(2, "Your name is required").max(120),
+    username: z.preprocess(
+      blankToUndefined,
+      z
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(/^[a-z0-9._-]{3,32}$/, "Username may only contain letters, numbers, dot, underscore, hyphen")
+        .optional()
+    ),
+    email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+    phone: optionalText(7, 20),
     password: passwordField,
-    confirmPassword: z.string(),
+    confirmPassword: z.string().optional(),
 
-    country: z.string().trim().min(2).max(100),
-    state: z.string().trim().min(2).max(100),
-    city: z.string().trim().min(2).max(100),
-    address: z.string().trim().min(2).max(300),
+    country: z.preprocess(blankToUndefined, z.string().trim().min(2).max(100).default("India")),
+    state: optionalText(2, 100),
+    city: optionalText(2, 100),
+    address: optionalText(2, 300),
 
     currency: z.string().trim().toUpperCase().length(3).default("INR"),
     timeZone: z.string().trim().min(2).default("Asia/Kolkata"),
-    gstin: z.string().trim().toUpperCase().optional(),
-    registrationNumber: z.string().trim().optional(),
+    gstin: z.preprocess(
+      blankToUndefined,
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[0-9]{2}[A-Z0-9]{13}$/, "A GST number is 15 characters, starting with the 2-digit state code")
+        .optional()
+    ),
+    registrationNumber: z.preprocess(blankToUndefined, z.string().trim().optional()),
     financialYearStartMonth: z.number().int().min(1).max(12).default(4),
   })
-  .refine((data) => data.password === data.confirmPassword, {
+  .refine((data) => data.confirmPassword === undefined || data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });

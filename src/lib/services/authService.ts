@@ -16,6 +16,7 @@ import { signAccessToken, generateRefreshToken, hashToken } from "@/lib/auth/tok
 import { sendOtp } from "@/lib/services/notifications/otpSender";
 import { recordAudit } from "@/lib/services/auditService";
 import { computeCurrentFinancialYear } from "@/lib/services/financialYearService";
+import { resolveGstState } from "@/lib/gst/states";
 import type { RegisterInput, LoginInput } from "@/lib/validation/authSchemas";
 
 export interface RegisterResult {
@@ -44,8 +45,22 @@ async function uniqueDomain(base: string): Promise<string> {
   return `${base}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** "asha.rao+shop@x.com" → "asha.rao"; padded/trimmed to the 3–32 character username rule. */
+function usernameFromEmail(email: string): string {
+  const local = email.split("@")[0].toLowerCase().split("+")[0].replace(/[^a-z0-9._-]/g, "");
+  const name = local.length >= 3 ? local : `${local || "owner"}${"001".slice(local.length)}`;
+  return name.slice(0, 32);
+}
+
 export async function registerBusiness(input: RegisterInput, ip?: string): Promise<RegisterResult> {
   const env = getEnv();
+
+  // The short sign-up form leaves these out; fill them with sensible defaults.
+  const tradeName = input.tradeName ?? input.legalName;
+  const businessType = input.businessType ?? "Retail";
+  const username = input.username ?? usernameFromEmail(input.email);
+  const phone = input.phone ?? "";
+  const state = input.state ?? resolveGstState({ gstin: input.gstin })?.name ?? "";
 
   // The domain is an internal tenant ID. People no longer type it, so it is
   // derived from the trade name; an explicit one (API callers) must be free.
@@ -56,7 +71,7 @@ export async function registerBusiness(input: RegisterInput, ip?: string): Promi
     }
     domain = input.domain;
   } else {
-    domain = await uniqueDomain(slugifyDomain(input.tradeName || input.legalName));
+    domain = await uniqueDomain(slugifyDomain(tradeName));
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -73,15 +88,15 @@ export async function registerBusiness(input: RegisterInput, ip?: string): Promi
         [
           {
             legalName: input.legalName,
-            tradeName: input.tradeName,
-            businessType: input.businessType,
+            tradeName,
+            businessType,
             domain,
             email: input.email,
-            phone: input.phone,
+            phone,
             country: input.country,
-            state: input.state,
-            city: input.city,
-            address: input.address,
+            state,
+            city: input.city ?? "",
+            address: input.address ?? "",
             currency: input.currency,
             timeZone: input.timeZone,
             gstin: input.gstin,
@@ -142,9 +157,9 @@ export async function registerBusiness(input: RegisterInput, ip?: string): Promi
           {
             businessId,
             name: input.ownerName,
-            username: input.username,
+            username,
             email: input.email,
-            phone: input.phone,
+            phone,
             passwordHash,
             roleId: ownerRole._id,
             branchIds: [],

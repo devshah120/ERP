@@ -48,7 +48,7 @@ export default function PasswordField({
   extraLabel,
 }: {
   id: string;
-  label: string;
+  label: React.ReactNode;
   value: string;
   onChange: (v: string) => void;
   autoComplete: "current-password" | "new-password";

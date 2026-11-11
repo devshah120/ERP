@@ -231,6 +231,34 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     expect(created?.domain).toBe("acme-garments-2");
   });
 
+  it("registers with only the short sign-up fields and fills sensible defaults", async () => {
+    const { registerBusiness } = await import("@/lib/services/authService");
+    const { registerSchema } = await import("@/lib/validation/authSchemas");
+    const { Business } = await import("@/models/Business");
+    const { User } = await import("@/models/User");
+
+    // Exactly what the sign-up form sends (blank optionals come through as "").
+    const input = registerSchema.parse({
+      legalName: "Mehta Fabrics",
+      gstin: "27AAACM1234A1Z5",
+      phone: "",
+      ownerName: "Kiran Mehta",
+      email: "Kiran.Mehta+shop@mehta.test",
+      password: "Str0ng!Passw0rd",
+    });
+    const result = await registerBusiness(input);
+
+    const biz = await Business.findById(result.businessId).lean();
+    expect(biz?.tradeName).toBe("Mehta Fabrics");
+    expect(biz?.domain).toBe("mehta-fabrics");
+    expect(biz?.state).toBe("Maharashtra"); // from GSTIN state code 27
+    expect(biz?.country).toBe("India");
+    expect(biz?.businessType).toBe("Retail");
+    const owner = await User.findOne({ businessId: result.businessId }).lean();
+    expect(owner?.username).toBe("kiran.mehta");
+    expect(owner?.phone).toBe("");
+  });
+
   it("rejects a duplicate domain registration with a clean 409-style AppError", async () => {
     const { registerBusiness } = await import("@/lib/services/authService");
     await expect(registerBusiness({ ...registerInput, username: "someoneelse", email: "x@acme.test" } as never)).rejects.toMatchObject(

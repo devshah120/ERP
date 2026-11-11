@@ -23,7 +23,7 @@ import {
   IconClose,
   IconList,
   IconMaximize,
-  IconMinimize,
+  IconLogout,
   IconMinus,
   IconPause,
   IconPlus,
@@ -755,16 +755,16 @@ export default function PosRegisterPage() {
           <button type="button" className="posxGhostBtn" onClick={() => (setClosing(true), setCloseError(null))}>
             <IconWallet /> Close register
           </button>
-          <button
-            type="button"
-            className="posxIconBtn"
-            onClick={toggleFocus}
-            title={fullScreen ? "Exit full screen" : "Full screen"}
-            aria-label={fullScreen ? "Exit full screen" : "Full screen"}
-            aria-pressed={fullScreen}
-          >
-            {fullScreen ? <IconMinimize /> : <IconMaximize />}
-          </button>
+          {/* Full screen stays on for next time; leaving the counter goes to the dashboard. */}
+          {fullScreen ? (
+            <Link href="/dashboard" className="posxGhostBtn" title="Exit to dashboard">
+              <IconLogout /> Exit
+            </Link>
+          ) : (
+            <button type="button" className="posxIconBtn" onClick={toggleFocus} title="Full screen" aria-label="Full screen">
+              <IconMaximize />
+            </button>
+          )}
         </div>
       </header>
 

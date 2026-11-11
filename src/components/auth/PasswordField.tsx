@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { IconEye, IconEyeOff } from "@/components/icons";
 
 /** Mirrors the server rule in lib/auth/password.ts so the meter never disagrees with the API. */
 export function passwordChecks(pw: string) {
@@ -85,8 +86,9 @@ export default function PasswordField({
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
+          title={visible ? "Hide password" : "Show password"}
         >
-          {visible ? "Hide" : "Show"}
+          {visible ? <IconEyeOff /> : <IconEye />}
         </button>
       </div>
       {showStrength && (

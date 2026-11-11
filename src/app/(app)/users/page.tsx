@@ -344,10 +344,6 @@ export default function UsersPage() {
             <div style={{ display: "grid", gap: "0.75rem" }}>
               <dl className="settingsList">
                 <div className="settingsRow">
-                  <dt>Workspace</dt>
-                  <dd className="cellMono">{created.domain}</dd>
-                </div>
-                <div className="settingsRow">
                   <dt>Username</dt>
                   <dd className="cellMono">{created.username}</dd>
                 </div>
@@ -361,7 +357,7 @@ export default function UsersPage() {
                 className="button buttonSecondary"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(`Workspace: ${created.domain}\nUsername: ${created.username}\nPassword: ${created.password}`);
+                    await navigator.clipboard.writeText(`Username: ${created.username}\nPassword: ${created.password}`);
                     toast.success("Sign-in details copied");
                   } catch {
                     toast.error("Couldn't copy", "Your browser blocked clipboard access.");

@@ -55,7 +55,7 @@ async function revokeSessions(businessId: Types.ObjectId, userId: Types.ObjectId
 
 /**
  * Adds a colleague with a temporary password the owner hands over. They sign
- * in with the workspace domain, then change it from Forgot password.
+ * in with their username or email, then change it from Forgot password.
  */
 export async function createUser(input: z.infer<typeof userCreateSchema>, ctx: AuthContext) {
   await requireRole(ctx.businessId, input.roleId);

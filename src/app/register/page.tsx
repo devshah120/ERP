@@ -13,7 +13,6 @@ interface RegisterForm {
   legalName: string;
   tradeName: string;
   businessType: string;
-  domain: string;
   ownerName: string;
   username: string;
   email: string;
@@ -35,7 +34,6 @@ const initialForm: RegisterForm = {
   legalName: "",
   tradeName: "",
   businessType: "",
-  domain: "",
   ownerName: "",
   username: "",
   email: "",
@@ -65,8 +63,8 @@ type Key = keyof RegisterForm;
 const STEPS: { title: string; blurb: string; fields: Key[] }[] = [
   {
     title: "Business",
-    blurb: "Tell us about the business. The domain becomes your workspace ID at sign-in.",
-    fields: ["legalName", "tradeName", "businessType", "domain", "gstin", "registrationNumber"],
+    blurb: "Tell us about the business.",
+    fields: ["legalName", "tradeName", "businessType", "gstin", "registrationNumber"],
   },
   {
     title: "Owner account",
@@ -80,14 +78,6 @@ const STEPS: { title: string; blurb: string; fields: Key[] }[] = [
   },
 ];
 
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
-
 /** Client-side mirror of registerSchema, so most mistakes are caught before the round trip. */
 function validate(form: RegisterForm, fields: Key[]): Partial<Record<Key, string>> {
   const e: Partial<Record<Key, string>> = {};
@@ -99,10 +89,6 @@ function validate(form: RegisterForm, fields: Key[]): Partial<Record<Key, string
       case "legalName": min2(k, "Legal name"); break;
       case "tradeName": min2(k, "Trade name"); break;
       case "businessType": min2(k, "Business type"); break;
-      case "domain":
-        if (!/^[a-z0-9-]{3,63}$/.test(form.domain.trim().toLowerCase()))
-          e.domain = "3–63 characters: lowercase letters, numbers and hyphens";
-        break;
       case "gstin":
         if (form.gstin.trim() && !/^[0-9]{2}[A-Z0-9]{13}$/i.test(form.gstin.trim()))
           e.gstin = "A GSTIN is 15 characters, starting with the 2-digit state code";
@@ -142,19 +128,13 @@ export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState<RegisterForm>(initialForm);
   const [step, setStep] = useState(0);
-  const [domainTouched, setDomainTouched] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<Key, string>>>({});
 
   function update<K extends Key>(key: K, value: RegisterForm[K]) {
-    setForm((f) => {
-      const next = { ...f, [key]: value };
-      // Suggest a domain from the trade name until the user edits it themselves.
-      if (key === "tradeName" && !domainTouched) next.domain = slugify(String(value));
-      return next;
-    });
+    setForm((f) => ({ ...f, [key]: value }));
     if (fieldErrors[key]) setFieldErrors((fe) => ({ ...fe, [key]: undefined }));
   }
 
@@ -186,7 +166,6 @@ export default function RegisterPage() {
     try {
       const payload = {
         ...form,
-        domain: form.domain.trim().toLowerCase(),
         username: form.username.trim().toLowerCase(),
         email: form.email.trim().toLowerCase(),
         gstin: form.gstin.trim() || undefined,
@@ -210,7 +189,6 @@ export default function RegisterPage() {
             if (typeof key === "string") next[key as Key] = issue.message;
           }
         }
-        if (err.code === "DOMAIN_TAKEN") next.domain = "This domain is already taken — try another";
         setFieldErrors(next);
         // Jump back to the step that holds the first problem.
         const firstBad = STEPS.findIndex((s) => s.fields.some((f) => next[f]));
@@ -226,14 +204,8 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       wide
-      topRight={
-        <>
-          <span className="hideMobile">Already registered?</span>
-          <Link href="/login" className="button buttonSecondary buttonSm">
-            Sign in
-          </Link>
-        </>
-      }
+      eyebrow="Get started with"
+      lead="Quotations, stock, POS and GST in one connected system — built for garment manufacturers and traders."
     >
       <h1 className="title">Create your workspace</h1>
       <p className="subtitle">
@@ -279,21 +251,6 @@ export default function RegisterPage() {
                   <option key={t} value={t} />
                 ))}
               </datalist>
-            </Field>
-            <Field id="domain" label="Workspace domain" hint="Used to sign in" error={fe.domain}>
-              <input
-                id="domain"
-                className="input"
-                value={form.domain}
-                onChange={(e) => {
-                  setDomainTouched(true);
-                  update("domain", e.target.value.toLowerCase());
-                }}
-                placeholder="rangoli-textiles"
-                autoCapitalize="none"
-                spellCheck={false}
-                aria-invalid={!!fe.domain}
-              />
             </Field>
             <Field id="gstin" label="GSTIN" hint="Optional" error={fe.gstin}>
               <input id="gstin" className="input" value={form.gstin} onChange={(e) => update("gstin", e.target.value.toUpperCase())} placeholder="24AAACR1234A1Z5" maxLength={15} aria-invalid={!!fe.gstin} />
@@ -396,6 +353,10 @@ export default function RegisterPage() {
           </button>
         </div>
       </form>
+
+      <p className="footerRow" style={{ textAlign: "center" }}>
+        Already registered? <Link href="/login">Sign in</Link>
+      </p>
     </AuthLayout>
   );
 }

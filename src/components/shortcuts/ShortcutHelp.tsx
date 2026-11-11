@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import { SHORTCUTS, displayKeys, isMacPlatform, type ShortcutScopeName } from "@/lib/shortcuts/registry";
 
-const SCOPE_ORDER: ShortcutScopeName[] = ["Global", "Listing", "Form", "Document", "Navigation"];
+const SCOPE_ORDER: ShortcutScopeName[] = ["Global", "Listing", "Form", "Document", "POS", "Navigation"];
 
 const SCOPE_BLURB: Record<ShortcutScopeName, string> = {
   Global: "Work anywhere in the ERP.",
   Listing: "Work on any list screen — masters, documents and reports.",
   Form: "Work while a create or edit form is open.",
   Document: "Work on sales and purchase documents.",
+  POS: "Work on the Point of Sale billing counter.",
   Navigation: "Jump straight to a screen or start a new entry from anywhere.",
 };
 

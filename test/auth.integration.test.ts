@@ -168,6 +168,69 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
     await expect(refreshSession(refreshed.refreshToken, {})).rejects.toMatchObject({ code: "SESSION_EXPIRED" });
   });
 
+  it("signs in without a business domain when the username is unique", async () => {
+    const { login } = await import("@/lib/services/authService");
+
+    const byUsername = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
+    expect(byUsername.user.username).toBe("priya");
+
+    const byEmail = await login({ domain: "", usernameOrEmail: "PRIYA@acme.test", password: "Str0ng!Passw0rd" }, {});
+    expect(byEmail.user.username).toBe("priya");
+
+    await expect(login({ usernameOrEmail: "nobody", password: "Str0ng!Passw0rd" }, {})).rejects.toMatchObject({
+      code: "INVALID_CREDENTIALS",
+    });
+  });
+
+  it("lets the password pick the account when the same username exists in two workspaces", async () => {
+    const { login } = await import("@/lib/services/authService");
+    const { Business } = await import("@/models/Business");
+    const { User } = await import("@/models/User");
+
+    // A second active workspace with its own user called "priya".
+    const original = await Business.findOne({ domain: "acme-garments" }).lean();
+    const businessFields: Record<string, unknown> = { ...original };
+    delete businessFields._id;
+    const other = await Business.create({ ...businessFields, domain: "other-garments", legalName: "Other Garments Pvt Ltd" });
+    const priya = await User.findOne({ username: "priya" }).select("+passwordHash").lean();
+    const userFields: Record<string, unknown> = { ...priya };
+    delete userFields._id;
+    const { hashPassword } = await import("@/lib/auth/password");
+    await User.create({ ...userFields, businessId: other._id, passwordHash: await hashPassword("0ther!Passw0rd") });
+
+    // Each password opens its own workspace — no business domain needed.
+    const first = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
+    expect(first.user.businessId).toBe(String(original!._id));
+    const second = await login({ usernameOrEmail: "priya", password: "0ther!Passw0rd" }, {});
+    expect(second.user.businessId).toBe(String(other._id));
+
+    // A password that opens neither is just invalid.
+    await expect(login({ usernameOrEmail: "priya", password: "Wrong!Passw0rd" }, {})).rejects.toMatchObject({
+      code: "INVALID_CREDENTIALS",
+    });
+    await User.updateMany({ username: "priya" }, { status: "ACTIVE", failedLoginAttempts: 0, lockedUntil: null });
+
+    // API callers may still name the workspace explicitly.
+    const scoped = await login({ domain: "other-garments", usernameOrEmail: "priya", password: "0ther!Passw0rd" }, {});
+    expect(scoped.user.businessId).toBe(String(other._id));
+
+    // An inactive workspace doesn't count as a second match.
+    await Business.updateOne({ _id: other._id }, { status: "SUSPENDED" });
+    const single = await login({ usernameOrEmail: "priya", password: "Str0ng!Passw0rd" }, {});
+    expect(single.user.businessId).toBe(String(original!._id));
+  });
+
+  it("generates a unique workspace ID when registering without a domain", async () => {
+    const { registerBusiness } = await import("@/lib/services/authService");
+    const { Business } = await import("@/models/Business");
+    const input: Record<string, unknown> = { ...registerInput, username: "neha", email: "neha@acme2.test" };
+    delete input.domain;
+    // "Acme Garments" → "acme-garments" is taken, so the next free one is used.
+    const result = await registerBusiness(input as never);
+    const created = await Business.findById(result.businessId).lean();
+    expect(created?.domain).toBe("acme-garments-2");
+  });
+
   it("rejects a duplicate domain registration with a clean 409-style AppError", async () => {
     const { registerBusiness } = await import("@/lib/services/authService");
     await expect(registerBusiness({ ...registerInput, username: "someoneelse", email: "x@acme.test" } as never)).rejects.toMatchObject(

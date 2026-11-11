@@ -1,4 +1,4 @@
-# Garment ERP
+# NEXORA
 
 A multi-tenant, production-grade ERP for garment manufacturers and traders. Next.js (App Router) + Node + MongoDB, TypeScript throughout.
 

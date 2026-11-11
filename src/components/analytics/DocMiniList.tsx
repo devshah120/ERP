@@ -108,7 +108,11 @@ export default function DocMiniList({
                         {d.documentNumber || "Draft"}
                       </Link>
                     </td>
-                    <td style={{ maxWidth: "11rem", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <td
+                      className="miniTableParty"
+                      style={{ maxWidth: "11rem", overflow: "hidden", textOverflow: "ellipsis" }}
+                      title={d.customer?.name ?? d.vendor?.name ?? undefined}
+                    >
                       {d.customer?.name ?? d.vendor?.name ?? "—"}
                     </td>
                     <td className="cellMuted">

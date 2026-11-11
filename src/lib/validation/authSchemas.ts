@@ -13,11 +13,13 @@ export const registerSchema = z
     legalName: z.string().trim().min(2).max(200),
     tradeName: z.string().trim().min(2).max(200),
     businessType: z.string().trim().min(2).max(100),
+    /** Internal workspace ID. Optional: generated from the trade name when left out. */
     domain: z
       .string()
       .trim()
       .toLowerCase()
-      .regex(/^[a-z0-9-]{3,63}$/, "Domain may only contain lowercase letters, numbers and hyphens"),
+      .regex(/^[a-z0-9-]{3,63}$/, "Domain may only contain lowercase letters, numbers and hyphens")
+      .optional(),
 
     ownerName: z.string().trim().min(2).max(120),
     username: z
@@ -60,7 +62,8 @@ export const resendOtpSchema = z.object({
 export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
 
 export const loginSchema = z.object({
-  domain: z.string().trim().toLowerCase().min(1),
+  /** Optional: needed only when the same username exists in more than one workspace. */
+  domain: z.string().trim().toLowerCase().optional(),
   usernameOrEmail: z.string().trim().min(1),
   password: z.string().min(1),
   /** false = session ends when the browser closes. Defaults to staying signed in. */
@@ -70,14 +73,14 @@ export const loginSchema = z.object({
 export type LoginInput = z.input<typeof loginSchema>;
 
 export const forgotPasswordSchema = z.object({
-  domain: z.string().trim().toLowerCase().min(1),
+  domain: z.string().trim().toLowerCase().optional(),
   usernameOrEmail: z.string().trim().min(1),
 });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
 export const resetPasswordSchema = z
   .object({
-    domain: z.string().trim().toLowerCase().min(1),
+    domain: z.string().trim().toLowerCase().optional(),
     usernameOrEmail: z.string().trim().min(1),
     code: z.string().regex(/^\d{6}$/, "Code must be 6 digits"),
     password: passwordField,

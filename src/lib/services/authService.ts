@@ -25,12 +25,38 @@ export interface RegisterResult {
   otpExpiresAt: Date;
 }
 
+/** "Rangoli Textiles" → "rangoli-textiles", padded so it always meets the 3-character minimum. */
+function slugifyDomain(s: string): string {
+  const base = s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return base.length >= 3 ? base : `${base || "workspace"}-ws`;
+}
+
+/** First free ID among base, base-2, base-3… then a random suffix as a last resort. */
+async function uniqueDomain(base: string): Promise<string> {
+  for (let i = 1; i <= 50; i++) {
+    const candidate = i === 1 ? base : `${base}-${i}`;
+    if (!(await Business.exists({ domain: candidate }))) return candidate;
+  }
+  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export async function registerBusiness(input: RegisterInput, ip?: string): Promise<RegisterResult> {
   const env = getEnv();
 
-  const existingDomain = await Business.findOne({ domain: input.domain }).lean();
-  if (existingDomain) {
-    throw AppError.conflict("This domain is already taken", "DOMAIN_TAKEN");
+  // The domain is an internal tenant ID. People no longer type it, so it is
+  // derived from the trade name; an explicit one (API callers) must be free.
+  let domain: string;
+  if (input.domain) {
+    if (await Business.findOne({ domain: input.domain }).lean()) {
+      throw AppError.conflict("This domain is already taken", "DOMAIN_TAKEN");
+    }
+    domain = input.domain;
+  } else {
+    domain = await uniqueDomain(slugifyDomain(input.tradeName || input.legalName));
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -49,7 +75,7 @@ export async function registerBusiness(input: RegisterInput, ip?: string): Promi
             legalName: input.legalName,
             tradeName: input.tradeName,
             businessType: input.businessType,
-            domain: input.domain,
+            domain,
             email: input.email,
             phone: input.phone,
             country: input.country,
@@ -342,20 +368,53 @@ async function issueSession(
   return { accessToken, refreshToken };
 }
 
+/**
+ * Every account matching a username/email in active workspaces. With a domain
+ * (still accepted from API callers) the search is limited to that workspace.
+ * Usernames are only unique per workspace, so this can return several users.
+ */
+async function findAccounts(usernameOrEmail: string, domain?: string, withPassword = false) {
+  const target = usernameOrEmail.toLowerCase();
+  const scope = domain?.trim().toLowerCase();
+  const filter: Record<string, unknown> = { $or: [{ username: target }, { email: target }] };
+  if (scope) {
+    const business = await Business.findOne({ domain: scope }, { _id: 1 }).lean();
+    if (!business) return [];
+    filter.businessId = business._id;
+  }
+  const query = User.find(filter).limit(10);
+  const candidates = await (withPassword ? query.select("+passwordHash") : query);
+  if (candidates.length === 0) return [];
+  const active = await Business.find({ _id: { $in: candidates.map((c) => c.businessId) }, status: "ACTIVE" }, { _id: 1 }).lean();
+  const activeIds = new Set(active.map((b) => String(b._id)));
+  return candidates.filter((c) => activeIds.has(String(c.businessId)));
+}
+
+/**
+ * Finds the account a sign-in attempt is for. One match is the usual case.
+ * When the same username exists in several workspaces, the password decides:
+ * the account it unlocks wins (the most recently used one if it unlocks more
+ * than one). If it unlocks none, the first match goes through the normal
+ * failure path so lockout still applies.
+ */
+async function findLoginUser(input: LoginInput) {
+  const live = await findAccounts(input.usernameOrEmail, input.domain, true);
+  if (live.length <= 1) return live[0] ?? null;
+
+  const usable = live.filter((u) => u.status !== "DISABLED" && u.status !== "PENDING_VERIFICATION").slice(0, 5);
+  const matches = [];
+  for (const u of usable) {
+    if (await verifyPassword(input.password, u.passwordHash)) matches.push(u);
+  }
+  if (matches.length === 0) return live[0];
+  matches.sort((a, b) => (b.lastLoginAt?.getTime() ?? 0) - (a.lastLoginAt?.getTime() ?? 0));
+  return matches[0];
+}
+
 export async function login(input: LoginInput, meta: { userAgent?: string; ip?: string }): Promise<LoginResult> {
   const env = getEnv();
 
-  const business = await Business.findOne({ domain: input.domain }).lean();
-  if (!business || business.status !== "ACTIVE") {
-    throw AppError.unauthorized("Invalid business domain or credentials", "INVALID_CREDENTIALS");
-  }
-
-  const target = input.usernameOrEmail.toLowerCase();
-  const user = await User.findOne({
-    businessId: business._id,
-    $or: [{ username: target }, { email: target }],
-  }).select("+passwordHash");
-
+  const user = await findLoginUser(input);
   if (!user) {
     throw AppError.unauthorized("Invalid credentials", "INVALID_CREDENTIALS");
   }
@@ -501,18 +560,16 @@ export async function logout(refreshToken: string | undefined): Promise<void> {
  * used to discover which usernames or emails are registered. */
 const RESET_INVALID = "Invalid or expired reset code. Request a new code and try again.";
 
-async function findResettableUser(domain: string, usernameOrEmail: string) {
-  const business = await Business.findOne({ domain }).lean();
-  if (!business || business.status !== "ACTIVE") return null;
-  const target = usernameOrEmail.toLowerCase();
-  const user = await User.findOne({
-    businessId: business._id,
-    $or: [{ username: target }, { email: target }],
-  });
+/**
+ * Accounts a reset can apply to. Usually one; if the same username exists in
+ * several workspaces each gets its own code, and the code entered later
+ * identifies which account is being reset.
+ */
+async function findResettableUsers(domain: string | undefined, usernameOrEmail: string) {
+  const users = await findAccounts(usernameOrEmail, domain);
   // Unverified registrations finish through OTP verification instead, and a
   // disabled account must not be re-opened by resetting its password.
-  if (!user || user.status === "PENDING_VERIFICATION" || user.status === "DISABLED") return null;
-  return user;
+  return users.filter((u) => u.status !== "PENDING_VERIFICATION" && u.status !== "DISABLED");
 }
 
 /**
@@ -520,12 +577,16 @@ async function findResettableUser(domain: string, usernameOrEmail: string) {
  * account exists; a request inside the resend cooldown is ignored silently.
  */
 export async function requestPasswordReset(
-  input: { domain: string; usernameOrEmail: string },
+  input: { domain?: string; usernameOrEmail: string },
   ip?: string
 ): Promise<void> {
+  for (const user of await findResettableUsers(input.domain, input.usernameOrEmail)) {
+    await sendResetCode(user, ip);
+  }
+}
+
+async function sendResetCode(user: Awaited<ReturnType<typeof findResettableUsers>>[number], ip?: string): Promise<void> {
   const env = getEnv();
-  const user = await findResettableUser(input.domain, input.usernameOrEmail);
-  if (!user) return;
 
   const pending = await OtpVerification.findOne({
     businessId: user.businessId,
@@ -585,20 +646,27 @@ export async function requestPasswordReset(
  * out everywhere — and any lockout is cleared.
  */
 export async function resetPassword(
-  input: { domain: string; usernameOrEmail: string; code: string; password: string },
+  input: { domain?: string; usernameOrEmail: string; code: string; password: string },
   ip?: string
 ): Promise<void> {
-  const user = await findResettableUser(input.domain, input.usernameOrEmail);
-  if (!user) throw AppError.badRequest(RESET_INVALID, "RESET_INVALID");
+  const users = await findResettableUsers(input.domain, input.usernameOrEmail);
+  if (users.length === 0) throw AppError.badRequest(RESET_INVALID, "RESET_INVALID");
 
-  const otp = await OtpVerification.findOne({
-    businessId: user.businessId,
-    userId: user._id,
-    purpose: "PASSWORD_RESET",
-    status: "PENDING",
-  })
-    .sort({ createdAt: -1 })
-    .select("+codeHash");
+  // Each account's newest pending code; with several accounts, the one whose
+  // code was entered is the one being reset.
+  const pendings = await Promise.all(
+    users.map((u) =>
+      OtpVerification.findOne({ businessId: u.businessId, userId: u._id, purpose: "PASSWORD_RESET", status: "PENDING" })
+        .sort({ createdAt: -1 })
+        .select("+codeHash")
+    )
+  );
+  const codeHash = hashOtpCode(input.code);
+  let idx = pendings.findIndex((o) => o && o.codeHash === codeHash);
+  if (idx < 0) idx = pendings.findIndex((o) => o);
+  if (idx < 0) throw AppError.badRequest(RESET_INVALID, "RESET_INVALID");
+  const user = users[idx];
+  const otp = pendings[idx];
 
   if (!otp) throw AppError.badRequest(RESET_INVALID, "RESET_INVALID");
 

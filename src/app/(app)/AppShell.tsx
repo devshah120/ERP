@@ -10,8 +10,8 @@ import { usePopover } from "@/components/ui/usePopover";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
-import { CalculatorButton, FinancialYearMenu, HelpMenu } from "@/components/shell/HeaderWidgets";
-import { IconSearch, IconChevronRight, IconBrandMark, IconMenu, IconSidebar, IconPlus, IconHome, IconClose } from "@/components/icons";
+import { FinancialYearMenu, HelpMenu } from "@/components/shell/HeaderWidgets";
+import { IconSearch, IconChevronRight, IconBrandMark, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
 
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
 const PLANNED_KEY = "erp.sidebar.showPlanned";
@@ -165,12 +165,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <IconMenu />
         </button>
 
-        <Link href="/dashboard" className="hdrBrand" title={me.business?.name ?? "Garment ERP"}>
+        <Link href="/dashboard" className="hdrBrand" title={me.business?.name ?? "NEXORA"}>
           <span className="hdrBrandMark">
             <IconBrandMark />
           </span>
           <span className="hdrBrandText">
-            garment<span>erp</span>
+            NEXORA
           </span>
         </Link>
 
@@ -187,7 +187,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="hdrActions">
           <QuickCreate />
           <span className="hdrDivider hideMobile" aria-hidden />
-          <CalculatorButton />
+          <Link
+            href="/pos/register"
+            className="hdrIconBtn posToggle"
+            aria-label="Open POS register"
+            title="Point of Sale"
+            aria-current={isActive(pathname, "/pos/register") ? "page" : undefined}
+          >
+            <IconStore />
+          </Link>
           <NotificationsMenu />
           <HelpMenu />
           <UserMenu variant="topbar" />

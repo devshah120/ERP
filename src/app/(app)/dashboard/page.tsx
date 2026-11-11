@@ -16,6 +16,7 @@ import { COLORS } from "@/lib/analytics/types";
 import {
   DateRangePill,
   Delta,
+  fmtDay,
   Gauge,
   OverviewTile,
   Panel,
@@ -30,7 +31,7 @@ import {
   PaymentModePanel,
   SalesBreakdownPanel,
 } from "@/components/dashboard/Panels";
-import { IconRefresh, IconCheckCircle, IconChevronRight } from "@/components/icons";
+import { IconRefresh, IconCheckCircle } from "@/components/icons";
 
 interface LowStockRow {
   itemName?: string;
@@ -155,6 +156,29 @@ export default function DashboardPage() {
   const collection = kpi("collection");
   const synced = dash ? new Date(dash.generatedAt) : null;
 
+  // Greeting follows the sync time so server and client render the same text.
+  const hour = synced?.getHours();
+  const greeting = hour === undefined ? "Welcome back" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = (me.name || me.username).split(" ")[0];
+
+  // Headline cash figures for the hero band (replaces the old "Cash Position" card).
+  type HeroStat = { label: string; value: string; previous?: string; goodWhen?: "up" | "down"; note?: string; tone?: string };
+  let heroStats: HeroStat[] | null = null;
+  if (ov) {
+    const m = ov.metrics;
+    const net = m.paidOut ? Number(m.received.current) - Number(m.paidOut.current) : null;
+    heroStats = [
+      { label: "Sales", value: m.sales.current, previous: m.sales.previous },
+      { label: "Money in", value: m.received.current, previous: m.received.previous },
+      m.paidOut
+        ? { label: "Money out", value: m.paidOut.current, previous: m.paidOut.previous, goodWhen: "down" }
+        : { label: "To receive", value: kpi("receivable")?.value ?? "0", note: "All open invoices" },
+      net !== null
+        ? { label: "Net movement", value: String(net), note: net < 0 ? "More paid out than received" : "Received minus paid out", tone: net < 0 ? "#fca5a5" : "#86efac" }
+        : { label: "To pay", value: kpi("payable")?.value ?? "0", note: "All open bills" },
+    ];
+  }
+
   return (
     <div className="dash">
       {error !== null && !dash && (
@@ -167,26 +191,65 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ------------------------------------------------------- hero */}
+      <section className="dHero" aria-label="Summary">
+        <div className="dHeroTop">
+          <div className="dHeroIntro">
+            <p className="dHeroEyebrow">{me.business?.name ?? "NEXORA"}</p>
+            <h1 className="dHeroTitle">
+              {greeting}, {firstName}
+            </h1>
+            <p className="dHeroSub">
+              {range ? (
+                <>
+                  Here&apos;s how the business moved from {fmtDay(range.fromDate)} to {fmtDay(range.toDate)}.
+                </>
+              ) : (
+                "Here's how the business is moving."
+              )}
+            </p>
+          </div>
+          <div className="dHeroControls">
+            {synced && (
+              <span className="dSynced" title="When these figures were calculated">
+                <small>Last synced</small>
+                {synced.toLocaleDateString("en-GB")}, {synced.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <DateRangePill value={period} onChange={setPeriod} range={range} />
+            <button type="button" className="dRefresh" onClick={refreshAll} disabled={loading} aria-label="Refresh dashboard" title="Refresh (Ctrl + R)">
+              {loading ? <span className="spinner" /> : <IconRefresh />}
+            </button>
+          </div>
+        </div>
+
+        <div className="dHeroStats">
+          {heroStats
+            ? heroStats.map((s) => (
+                <div key={s.label} className="dHeroStat">
+                  <span className="dHeroStatLabel">{s.label}</span>
+                  <strong className="dHeroStatValue" title={`₹${formatMoney(s.value)}`} style={s.tone ? { color: s.tone } : undefined}>
+                    ₹{formatCompact(s.value)}
+                  </strong>
+                  {s.previous !== undefined ? (
+                    <Delta current={s.value} previous={s.previous} goodWhen={s.goodWhen} />
+                  ) : (
+                    <span className="dHeroStatNote">{s.note}</span>
+                  )}
+                </div>
+              ))
+            : Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="dHeroStat" aria-busy="true">
+                  <span className="dHeroStatLabel">&nbsp;</span>
+                  <span className="dHeroSkel" />
+                </div>
+              ))}
+        </div>
+      </section>
+
       <div className="dashGrid">
         {/* ---------------------------------------------------- overview */}
-        <Panel
-          className="span9"
-          title="Overview"
-          actions={
-            <>
-              <DateRangePill value={period} onChange={setPeriod} range={range} />
-              {synced && (
-                <span className="dSynced">
-                  <small>Last synced</small>
-                  {synced.toLocaleDateString("en-GB")}, {synced.toLocaleTimeString("en-GB")}
-                </span>
-              )}
-              <button type="button" className="dRefresh" onClick={refreshAll} disabled={loading} aria-label="Refresh dashboard" title="Refresh (Ctrl + R)">
-                {loading ? <span className="spinner" /> : <IconRefresh />}
-              </button>
-            </>
-          }
-        >
+        <Panel className="span9" title="Overview" actions={<RangeTag range={range} />}>
           {tiles.length === 0 ? (
             <div className="ovGrid" aria-busy="true">
               {Array.from({ length: 20 }, (_, i) => (
@@ -229,35 +292,6 @@ export default function DashboardPage() {
             <Link href="/analysis/accounting" className="dLink" style={{ display: "block", textAlign: "center", marginTop: "0.5rem" }}>
               Cash &amp; settlement analysis
             </Link>
-          </Panel>
-
-          <Panel title="Cash Position">
-            {ov ? (
-              <div className="cashList">
-                <div>
-                  <span>Money in</span>
-                  <strong>₹{formatMoney(ov.metrics.received.current)}</strong>
-                  <Delta current={ov.metrics.received.current} previous={ov.metrics.received.previous} />
-                </div>
-                {ov.metrics.paidOut && (
-                  <div>
-                    <span>Money out</span>
-                    <strong>₹{formatMoney(ov.metrics.paidOut.current)}</strong>
-                    <Delta current={ov.metrics.paidOut.current} previous={ov.metrics.paidOut.previous} goodWhen="down" />
-                  </div>
-                )}
-                {ov.metrics.paidOut && (
-                  <div className="cashNet">
-                    <span>Net movement</span>
-                    <strong style={{ color: Number(ov.metrics.received.current) - Number(ov.metrics.paidOut.current) < 0 ? "var(--danger)" : "var(--success)" }}>
-                      ₹{formatMoney(Number(ov.metrics.received.current) - Number(ov.metrics.paidOut.current))}
-                    </strong>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <SkeletonBlock lines={3} />
-            )}
           </Panel>
         </div>
 
@@ -307,91 +341,64 @@ export default function DashboardPage() {
         {ov && <CustomerInsightPanel segments={ov.segments} range={range!} />}
         {ov && <SalesBreakdownPanel categories={ov.categories} range={range!} />}
 
-        {/* -------------------------------------- items + attention */}
+        {/* ----------------------------------------- items + low stock */}
         {ov && <ItemPerformancePanel items={ov.items} range={range!} />}
 
-        <div className="span5 dRail">
-          <Panel title="Needs Attention" actions={<RangeTag range={range} />}>
-            {!dash ? (
-              <SkeletonBlock lines={3} />
-            ) : dash.insights.length === 0 ? (
-              <EmptyState compact icon={<IconCheckCircle style={{ color: "var(--success-solid)" }} />} title="Nothing flagged" description="No overdue money, stuck orders or stock problems in this period." />
-            ) : (
-              <div className="attentionList">
-                {dash.insights.map((i) => (
-                  <div key={i.key} className="attentionItem" style={{ padding: "0.75rem 0" }}>
-                    <span className={`notifTone notifTone-${i.tone}`} aria-label={i.tone} />
-                    <div className="attentionText">
-                      {i.headline}
-                      {i.action && (
-                        <div>
-                          <Link href={i.action.href}>
-                            {i.action.label} <IconChevronRight style={{ verticalAlign: "-2px" }} />
-                          </Link>
-                        </div>
+        <Panel
+          className="span5"
+          title={
+            <>
+              Low Stock
+              {lowStock && lowStock.total > 0 && <span className="dChip">{lowStock.total}</span>}
+            </>
+          }
+          actions={
+            <Link href="/reports/stock-summary?stockFilter=LOW" className="dLink">
+              View all
+            </Link>
+          }
+        >
+          {!lowStock ? (
+            <SkeletonBlock lines={3} />
+          ) : lowStock.rows.length === 0 ? (
+            <EmptyState compact icon={<IconCheckCircle style={{ color: "var(--success-solid)" }} />} title="Stock levels are healthy" description="No item with a reorder level has fallen to it." />
+          ) : (
+            <ul className="lowList">
+              {lowStock.rows.map((r, i) => {
+                const pct = r.reorderLevel ? Math.min(100, ((r.quantity ?? 0) / r.reorderLevel) * 100) : 0;
+                return (
+                  <li key={`${r.itemName}-${r.variantSku}-${i}`}>
+                    <div>
+                      {r.itemNameHref ? (
+                        <Link href={r.itemNameHref} className="cellLink">
+                          {r.itemName}
+                        </Link>
+                      ) : (
+                        r.itemName
                       )}
+                      <small>
+                        {[r.variantSku && r.variantSku !== "—" ? r.variantSku : null, r.warehouse].filter(Boolean).join(" · ")}
+                      </small>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          <Panel
-            title={
-              <>
-                Low Stock
-                {lowStock && lowStock.total > 0 && <span className="dChip">{lowStock.total}</span>}
-              </>
-            }
-            actions={
-              <Link href="/reports/stock-summary?stockFilter=LOW" className="dLink">
-                View all
-              </Link>
-            }
-          >
-            {!lowStock ? (
-              <SkeletonBlock lines={3} />
-            ) : lowStock.rows.length === 0 ? (
-              <EmptyState compact icon={<IconCheckCircle style={{ color: "var(--success-solid)" }} />} title="Stock levels are healthy" description="No item with a reorder level has fallen to it." />
-            ) : (
-              <ul className="lowList">
-                {lowStock.rows.map((r, i) => {
-                  const pct = r.reorderLevel ? Math.min(100, ((r.quantity ?? 0) / r.reorderLevel) * 100) : 0;
-                  return (
-                    <li key={`${r.itemName}-${r.variantSku}-${i}`}>
-                      <div>
-                        {r.itemNameHref ? (
-                          <Link href={r.itemNameHref} className="cellLink">
-                            {r.itemName}
-                          </Link>
-                        ) : (
-                          r.itemName
-                        )}
-                        <small>
-                          {[r.variantSku && r.variantSku !== "—" ? r.variantSku : null, r.warehouse].filter(Boolean).join(" · ")}
-                        </small>
-                      </div>
-                      <span className="stockLevelTrack" style={{ width: "4.5rem", flex: "none" }}>
-                        <span className="stockLevelFill low" style={{ width: `${Math.max(4, pct)}%` }} />
-                      </span>
-                      <span className="lowQty">
-                        {formatQuantity(r.quantity ?? 0)} / {formatQuantity(r.reorderLevel ?? 0)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Panel>
-        </div>
+                    <span className="stockLevelTrack" style={{ width: "4.5rem", flex: "none" }}>
+                      <span className="stockLevelFill low" style={{ width: `${Math.max(4, pct)}%` }} />
+                    </span>
+                    <span className="lowQty">
+                      {formatQuantity(r.quantity ?? 0)} / {formatQuantity(r.reorderLevel ?? 0)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
 
         {/* --------------------------------------------- live lists */}
         <div className="span6">
           <DocMiniList title="Pending deliveries" subtitle="Oldest orders first" basePath="/sales-orders" viewAllHref="/sales-orders?pendingDelivery=true" state={pendingDelivery} emptyText="Every confirmed order has been dispatched." />
         </div>
         <div className="span6">
-          <DocMiniList title="Recent invoices" basePath="/sales-invoices" viewAllHref="/sales-invoices" state={invoices} status="payment" emptyText="No invoices yet." />
+          <DocMiniList title="Recent invoices" subtitle="Newest first" basePath="/sales-invoices" viewAllHref="/sales-invoices" state={invoices} status="payment" emptyText="No invoices yet." />
         </div>
       </div>
     </div>

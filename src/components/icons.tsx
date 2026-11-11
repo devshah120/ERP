@@ -728,3 +728,45 @@ export function IconPlug(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+export function IconMaximize(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+    </Icon>
+  );
+}
+
+export function IconMinimize(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+    </Icon>
+  );
+}
+
+export function IconMinus(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h14" />
+    </Icon>
+  );
+}
+
+export function IconPause(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </Icon>
+  );
+}
+
+export function IconEyeOff(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M10.6 5.6A10 10 0 0 1 12 5.5c7 0 10.2 6.5 10.2 6.5a17 17 0 0 1-3 3.9M6.6 6.6C3.5 8.4 1.8 12 1.8 12S5 18.5 12 18.5a9.6 9.6 0 0 0 5.4-1.6" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
+    </Icon>
+  );
+}

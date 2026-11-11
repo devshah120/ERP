@@ -52,5 +52,8 @@ const userSchema = new Schema<IUser>(
 // Username/email are unique per-tenant, not globally — two businesses can each have a user "admin".
 userSchema.index({ businessId: 1, username: 1 }, { unique: true });
 userSchema.index({ businessId: 1, email: 1 }, { unique: true });
+// Sign-in without a business domain looks users up across workspaces.
+userSchema.index({ username: 1 });
+userSchema.index({ email: 1 });
 
 export const User = models.User ?? model<IUser>("User", userSchema);

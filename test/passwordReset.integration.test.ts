@@ -137,6 +137,20 @@ describe("password reset (real MongoDB replica set, real transactions)", () => {
     expect(fresh.accessToken).toBeTruthy();
   });
 
+  it("resets without a business domain, using just the username", async () => {
+    const { requestPasswordReset, resetPassword, login } = await import("@/lib/services/authService");
+    const { OtpVerification } = await import("@/models/OtpVerification");
+    // Let the resend cooldown pass so a fresh code is issued.
+    await OtpVerification.updateMany({ purpose: "PASSWORD_RESET" }, { lastSentAt: new Date(0) });
+
+    await requestPasswordReset({ usernameOrEmail: "ravi" });
+    await plantResetCode("222222");
+    await resetPassword({ usernameOrEmail: "ravi@reset.test", code: "222222", password: OLD_PASSWORD });
+
+    const back = await login({ usernameOrEmail: "ravi", password: OLD_PASSWORD }, {});
+    expect(back.user.username).toBe("ravi");
+  });
+
   it("won't accept the same code twice", async () => {
     const { resetPassword } = await import("@/lib/services/authService");
     await expect(

@@ -7,14 +7,13 @@ import { apiFetch, ApiError } from "@/lib/api/client";
 import AuthLayout from "@/components/auth/AuthLayout";
 import OtpInput from "@/components/auth/OtpInput";
 import PasswordField, { passwordMeetsPolicy } from "@/components/auth/PasswordField";
-import { IconAlertCircle, IconArrowLeft, IconCheckCircle, IconLock } from "@/components/icons";
+import { IconAlertCircle, IconArrowLeft, IconCheckCircle } from "@/components/icons";
 
 const COOLDOWN = 60;
 
 export default function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const domain = params.get("domain") ?? "";
   const user = params.get("user") ?? "";
   const justSent = params.get("sent") === "1";
 
@@ -36,14 +35,14 @@ export default function ResetPasswordForm() {
 
   const startCooldown = () => setCooldown(COOLDOWN);
 
-  if (!domain || !user) {
+  if (!user) {
     return (
       <AuthLayout>
         <span className="authIconBadge warn">
           <IconAlertCircle />
         </span>
         <h1 className="title">Start with your account details</h1>
-        <p className="subtitle">We need your workspace and username before we can send a reset code.</p>
+        <p className="subtitle">We need your username or email before we can send a reset code.</p>
         <Link href="/forgot-password" className="button buttonPrimary buttonLg buttonBlock">
           Request a reset code
         </Link>
@@ -63,7 +62,7 @@ export default function ResetPasswordForm() {
     try {
       await apiFetch("/api/auth/reset-password", {
         method: "POST",
-        body: JSON.stringify({ domain, usernameOrEmail: user, code, password, confirmPassword: confirm }),
+        body: JSON.stringify({ usernameOrEmail: user, code, password, confirmPassword: confirm }),
       });
       router.push("/login?reset=1");
     } catch (err) {
@@ -77,7 +76,7 @@ export default function ResetPasswordForm() {
     try {
       await apiFetch("/api/auth/forgot-password", {
         method: "POST",
-        body: JSON.stringify({ domain, usernameOrEmail: user }),
+        body: JSON.stringify({ usernameOrEmail: user }),
       });
       setInfo("If the account exists, a new code has been sent. Earlier codes no longer work.");
       setCode("");
@@ -95,13 +94,10 @@ export default function ResetPasswordForm() {
         </Link>
       }
     >
-      <span className="authIconBadge">
-        <IconLock />
-      </span>
       <h1 className="title">Choose a new password</h1>
       <p className="subtitle">
-        Enter the code sent for <strong style={{ color: "var(--text)" }}>{user}</strong> at{" "}
-        <strong style={{ color: "var(--text)" }}>{domain}</strong>. Resetting signs you out on every device.
+        Enter the code sent for <strong style={{ color: "var(--text)" }}>{user}</strong>. Resetting signs you out on
+        every device.
       </p>
 
       {error && (

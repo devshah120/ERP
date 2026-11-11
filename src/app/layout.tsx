@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Garment ERP",
+  title: "NEXORA",
   description: "Multi-tenant ERP for garment manufacturers and traders",
 };
 

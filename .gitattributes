@@ -1,0 +1,13 @@
+# Store text files with LF line endings and check them out as LF on every OS,
+# so Windows machines with core.autocrlf=true stop warning on each file.
+* text=auto eol=lf
+
+# Binary files: never touch line endings or try to diff them.
+*.exe binary
+*.wt binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+WiredTiger* binary

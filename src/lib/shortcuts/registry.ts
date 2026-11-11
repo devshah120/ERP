@@ -4,7 +4,7 @@
  * can never be implemented but undocumented, or documented but dead.
  */
 
-export type ShortcutScopeName = "Global" | "Listing" | "Form" | "Document" | "Navigation";
+export type ShortcutScopeName = "Global" | "Listing" | "Form" | "Document" | "Navigation" | "POS";
 
 export interface ShortcutDef {
   /** Canonical id, also used as the React key. */
@@ -43,6 +43,16 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "forward", keys: "Alt + →", description: "Go forward", scope: "Navigation" },
   { id: "goDashboard", keys: "Alt + D", description: "Go to the Dashboard", scope: "Navigation" },
   { id: "goReports", keys: "Alt + L", description: "Go to Reports", scope: "Navigation" },
+
+  // --- point of sale (handled by the register screen itself) --------
+  { id: "posSearch", keys: "F2", description: "Jump to the product search / barcode box", scope: "POS", appliesTo: "Open Register" },
+  { id: "posCard", keys: "F3", description: "Take the whole bill by card and complete the sale", scope: "POS", appliesTo: "Open Register" },
+  { id: "posCash", keys: "F4", description: "Take the whole bill in cash and complete the sale", scope: "POS", appliesTo: "Open Register" },
+  { id: "posUpi", keys: "F5", description: "Take the whole bill by UPI and complete the sale", scope: "POS", appliesTo: "Open Register" },
+  { id: "posHold", keys: "F6", description: "Put the current bill on hold", scope: "POS", appliesTo: "Open Register" },
+  { id: "posHeld", keys: "F7", description: "Show bills on hold to recall one", scope: "POS", appliesTo: "Open Register" },
+  { id: "posSplit", keys: "F8", description: "Split the payment or enter cash tendered for change", scope: "POS", appliesTo: "Open Register" },
+  { id: "posPay", keys: "F9", description: "Complete the sale in the default payment mode", scope: "POS", appliesTo: "Open Register" },
 
   // --- quick create -------------------------------------------------
   { id: "newQuotation", keys: "Alt + Q", description: "New Sales Quotation", scope: "Navigation", appliesTo: "Sales" },

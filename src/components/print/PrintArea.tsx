@@ -58,7 +58,7 @@ export function PrintArea({ size, children }: { size: PaperSize; children: React
  * only thing on the page while `printPortal()` prints. Lets a screen like
  * the POS register print a receipt without leaving the page.
  */
-export function PrintPortal({ layoutId, model }: { layoutId: LayoutId; model: PrintModel }) {
+export function PrintPortal({ layoutId, model, id = "main" }: { layoutId: LayoutId; model: PrintModel; id?: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     // Portals need document.body, which only exists after hydration.
@@ -67,7 +67,7 @@ export function PrintPortal({ layoutId, model }: { layoutId: LayoutId; model: Pr
   }, []);
   if (!mounted) return null;
   return createPortal(
-    <div className="pfPrintRoot" aria-hidden data-paper={PRINT_LAYOUTS[layoutId].size}>
+    <div className="pfPrintRoot" aria-hidden data-paper={PRINT_LAYOUTS[layoutId].size} data-print-id={id}>
       <PrintSheet layoutId={layoutId} model={model} />
     </div>,
     document.body
@@ -75,18 +75,21 @@ export function PrintPortal({ layoutId, model }: { layoutId: LayoutId; model: Pr
 }
 
 /**
- * Prints only the mounted PrintPortal. Its @page rule is added just for this
- * print, so printing the rest of the screen keeps the normal paper size.
+ * Prints only the PrintPortal with this id. Its @page rule is added just for
+ * this print, so printing the rest of the screen keeps the normal paper size.
  */
-export function printPortal() {
-  const root = document.querySelector<HTMLElement>(".pfPrintRoot");
-  const size = (root?.dataset.paper ?? "THERMAL_80") as PaperSize;
+export function printPortal(id = "main") {
+  const root = document.querySelector<HTMLElement>(`.pfPrintRoot[data-print-id="${id}"]`);
+  if (!root) return;
+  const size = (root.dataset.paper ?? "THERMAL_80") as PaperSize;
   const style = document.createElement("style");
   style.textContent = `@media print { ${pageCss(size)} }`;
   document.head.appendChild(style);
+  root.classList.add("pfPrinting");
   document.body.classList.add("printingPortal");
   const done = () => {
     document.body.classList.remove("printingPortal");
+    root.classList.remove("pfPrinting");
     style.remove();
     window.removeEventListener("afterprint", done);
   };

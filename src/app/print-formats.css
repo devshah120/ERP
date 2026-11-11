@@ -488,11 +488,11 @@
     display: none !important;
   }
 
-  body.printingPortal > :not(.pfPrintRoot) {
+  body.printingPortal > :not(.pfPrinting) {
     display: none !important;
   }
 
-  body.printingPortal .pfPrintRoot {
+  body.printingPortal .pfPrintRoot.pfPrinting {
     position: static;
     left: auto;
     visibility: visible;

@@ -737,11 +737,16 @@ export async function listOrders(params: URLSearchParams, ctx: AuthContext) {
     PosOrder.countDocuments(filter),
     PosOrder.aggregate([{ $match: { ...filter, status: "COMPLETED" } }, { $group: { _id: null, total: { $sum: "$totals.grandTotal" } } }]),
   ]);
+  // Cashier names for the page in one query (the register's bill list shows them).
+  const cashierIds = [...new Set(docs.map((d) => String(d.createdBy ?? "")).filter(Boolean))];
+  const cashiers = cashierIds.length ? await User.find({ _id: { $in: cashierIds } }, { name: 1 }).lean<AnyDoc[]>() : [];
+  const cashierName = new Map(cashiers.map((u) => [String(u._id), String(u.name)]));
   return {
     items: docs.map((d) => ({
       ...(serializeDoc(d) as AnyDoc),
       itemCount: d.lines.reduce((s: number, l: AnyDoc) => s + l.quantity, 0),
       paymentModes: [...new Set((d.payments ?? []).map((p: AnyDoc) => p.mode))].join(" + "),
+      cashierName: cashierName.get(String(d.createdBy ?? "")) ?? "—",
     })),
     total,
     salesTotal: D((sum as AnyDoc[])[0]?.total).toFixed(2),

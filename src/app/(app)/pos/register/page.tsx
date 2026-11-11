@@ -13,9 +13,10 @@ import { SkeletonBlock } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { useWarehouses } from "@/components/forms/useWarehouses";
 import { loadItemOptions, variantLabel, type ItemOption } from "@/components/inventory/ItemLinesInput";
-import { PrintPortal, ScaledSheet, printPortal as printReceipt } from "@/components/print/PrintArea";
+import { PrintPortal, ScaledSheet, printPortal } from "@/components/print/PrintArea";
 import { fromPosOrder } from "@/components/print/model";
 import { PAPER_SIZES, resolveLayout } from "@/lib/printFormats/catalog";
+import TodaysBillsDialog from "@/components/pos/TodaysBillsDialog";
 import {
   IconAlertCircle,
   IconArrowLeft,
@@ -112,6 +113,7 @@ const MODE_LABEL: Record<Mode, string> = { CASH: "Cash", CARD: "Card", UPI: "UPI
 const SELLABLE = new Set(["FINISHED_GOODS", "SERVICE", undefined]);
 const FOCUS_KEY = "nexora:pos:focus";
 const PRINT_KEY = "nexora:pos:autoprint";
+const TILES_KEY = "nexora:pos:tiles";
 const heldKey = (registerId: string) => `nexora:pos:held:${registerId}`;
 
 let nextKey = 1;
@@ -192,6 +194,7 @@ export default function PosRegisterPage() {
   const [saleError, setSaleError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
   const [printFormats, setPrintFormats] = useState<Record<string, string> | null>(null);
+  const [billsOpen, setBillsOpen] = useState(false);
   const [printPending, setPrintPending] = useState(false);
 
   // split / tender dialog
@@ -204,6 +207,8 @@ export default function PosRegisterPage() {
   const [heldOpen, setHeldOpen] = useState(false);
   const [focus, setFocus] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
+  // Off = no product tiles: one full-width bill with a search bar on top.
+  const [showTiles, setShowTiles] = useState(true);
 
   // close register
   const [closing, setClosing] = useState(false);
@@ -250,6 +255,7 @@ export default function PosRegisterPage() {
     // Device preferences live in localStorage, which only exists after mount.
     setFocus(readJson(FOCUS_KEY, true));
     setAutoPrint(readJson(PRINT_KEY, false));
+    setShowTiles(readJson(TILES_KEY, true));
   }, [loadRegister]);
 
   useEffect(() => {
@@ -288,6 +294,14 @@ export default function PosRegisterPage() {
       window.localStorage.setItem(PRINT_KEY, JSON.stringify(!p));
       return !p;
     });
+  }
+
+  function toggleTiles() {
+    setShowTiles((t) => {
+      window.localStorage.setItem(TILES_KEY, JSON.stringify(!t));
+      return !t;
+    });
+    searchRef.current?.focus();
   }
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
@@ -511,11 +525,13 @@ export default function PosRegisterPage() {
     [receipt, business, settings?.receiptHeader, settings?.receiptFooter]
   );
 
+  const printReceipt = () => printPortal("main");
+
   // Print once the receipt portal has rendered.
   useEffect(() => {
     if (!receipt || !printPending) return;
     const t = setTimeout(() => {
-      printReceipt();
+      printPortal("main");
       setPrintPending(false);
     }, 80);
     return () => clearTimeout(t);
@@ -576,10 +592,10 @@ export default function PosRegisterPage() {
   }
 
   // --- keyboard -------------------------------------------------------------
-  // F2 search · F3 card · F4 cash · F5 UPI · F6 hold · F7 held bills · F8 split · F9 pay (default mode)
+  // F2 search · F3 card · F4 cash · F5 UPI · F6 hold · F7 held bills · F8 split · F9 pay (default mode) · F10 today's bills
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!register || closing || receipt) return;
+      if (!register || closing || receipt || billsOpen) return;
       const map: Record<string, () => void> = {
         F2: () => searchRef.current?.focus(),
         F3: () => quickPay("CARD"),
@@ -589,6 +605,7 @@ export default function PosRegisterPage() {
         F7: () => setHeldOpen(true),
         F8: () => openSplit(),
         F9: () => (splitOpen ? completeSplit() : quickPay(settings?.defaultPaymentMode ?? "CASH")),
+        F10: () => hasPermission("pos.view") && setBillsOpen(true),
       };
       const fn = map[e.key];
       if (fn) {
@@ -730,9 +747,11 @@ export default function PosRegisterPage() {
         </div>
 
         <div className="posxBarRight">
-          <Link href={`/pos/orders?registerId=${register.id}`} className="posxGhostBtn">
-            <IconList /> Today&apos;s bills
-          </Link>
+          {hasPermission("pos.view") && (
+            <button type="button" className="posxGhostBtn" onClick={() => setBillsOpen(true)} title="Today's bills (F10)">
+              <IconList /> Today&apos;s bills
+            </button>
+          )}
           <button type="button" className="posxGhostBtn" onClick={() => (setClosing(true), setCloseError(null))}>
             <IconWallet /> Close register
           </button>
@@ -749,7 +768,7 @@ export default function PosRegisterPage() {
         </div>
       </header>
 
-      <div className="posxBody">
+      <div className="posxBody" data-tiles={showTiles ? "on" : "off"}>
         {/* ------------------------------------------------------------ bill */}
         <section className="posxBill" aria-label="Current bill">
           <div className="posxCustomer">
@@ -1003,28 +1022,70 @@ export default function PosRegisterPage() {
 
         {/* -------------------------------------------------------- catalogue */}
         <section className="posxCatalog" aria-label="Products">
-          <div className="posxSearch">
-            <IconSearch />
-            <input
-              ref={searchRef}
-              autoFocus
-              placeholder="Scan barcode or search name, code, SKU…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && matches[0]) {
-                  e.preventDefault();
-                  addToCart(matches[0].item, matches[0].sku);
-                  setSearch("");
-                }
-                if (e.key === "Escape") setSearch("");
-              }}
-              aria-label="Search products"
-            />
-            <kbd>F2</kbd>
+          <div className="posxSearchBar">
+            <div className="posxSearch">
+              <IconSearch />
+              <input
+                ref={searchRef}
+                autoFocus
+                placeholder="Scan barcode or search name, code, SKU…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && matches[0]) {
+                    e.preventDefault();
+                    addToCart(matches[0].item, matches[0].sku);
+                    setSearch("");
+                  }
+                  if (e.key === "Escape") setSearch("");
+                }}
+                aria-label="Search products"
+              />
+              <kbd>F2</kbd>
+            </div>
+            <label className="posxToggle" title="Show the product tiles beside the bill">
+              <input type="checkbox" checked={showTiles} onChange={toggleTiles} />
+              <span aria-hidden />
+              Product tiles
+            </label>
           </div>
 
-          {usedCategories.length > 0 && (
+          {/* Without tiles, typing lists matches under the search bar. */}
+          {!showTiles && search.trim() && (
+            <ul className="posxResults" role="listbox" aria-label="Matching products">
+              {matches.length === 0 ? (
+                <li className="posxResultsEmpty">No product matches “{search.trim()}”.</li>
+              ) : (
+                matches.slice(0, 8).map((m, i) => {
+                  const variant = m.item.variants?.find((v) => v.sku === m.sku);
+                  return (
+                    <li key={`${m.item.id}:${m.sku}`}>
+                      <button
+                        type="button"
+                        className="posxResult"
+                        role="option"
+                        aria-selected={i === 0}
+                        onClick={() => {
+                          addToCart(m.item, m.sku);
+                          setSearch("");
+                          searchRef.current?.focus();
+                        }}
+                      >
+                        <span className="posxResultName">
+                          {m.item.name}
+                          <small>{variant ? `${variantLabel(variant)} · ${variant.sku}` : m.item.itemCode}</small>
+                        </span>
+                        <span className="tabular">₹{formatMoney(String(m.item.sellingPrice ?? "0"))}</span>
+                        {i === 0 && <kbd>Enter</kbd>}
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          )}
+
+          {showTiles && usedCategories.length > 0 && (
             <div className="posxChips" role="tablist" aria-label="Categories">
               {[{ id: "ALL", name: "All" }, ...usedCategories].map((c) => (
                 <button key={c.id} type="button" role="tab" aria-selected={category === c.id} className="posxChip" onClick={() => setCategory(c.id)}>
@@ -1034,34 +1095,36 @@ export default function PosRegisterPage() {
             </div>
           )}
 
-          <div className="posxGrid">
-            {!itemsLoaded ? (
-              Array.from({ length: 12 }, (_, i) => <div key={i} className="posxTile posxTileSkel" aria-hidden />)
-            ) : tiles.length === 0 ? (
-              <div className="posxGridEmpty">
-                {search ? `No product matches “${search}”.` : "No sellable products in this category."}
-              </div>
-            ) : (
-              tiles.map((it) => {
-                const hue = tileHue(it.itemCode || it.name);
-                const variants = (it.variants ?? []).filter((v) => v.isActive !== false);
-                const inCart = qtyInCart.get(it.id) ?? 0;
-                return (
-                  <button key={it.id} type="button" className="posxTile" onClick={() => tapTile(it)} title={`${it.name} · ${it.itemCode}`}>
-                    <span className="posxTileArt" style={{ "--h": hue } as CSSProperties} aria-hidden>
-                      {initials(it.name)}
-                    </span>
-                    {inCart > 0 && <span className="posxTileQty">{formatQuantity(inCart)}</span>}
-                    <span className="posxTileName">{it.name}</span>
-                    <span className="posxTileMeta">
-                      <span>₹{formatMoney(String(it.sellingPrice ?? "0"))}</span>
-                      {variants.length > 1 && <small>{variants.length} sizes</small>}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+          {showTiles && (
+            <div className="posxGrid">
+              {!itemsLoaded ? (
+                Array.from({ length: 12 }, (_, i) => <div key={i} className="posxTile posxTileSkel" aria-hidden />)
+              ) : tiles.length === 0 ? (
+                <div className="posxGridEmpty">
+                  {search ? `No product matches “${search}”.` : "No sellable products in this category."}
+                </div>
+              ) : (
+                tiles.map((it) => {
+                  const hue = tileHue(it.itemCode || it.name);
+                  const variants = (it.variants ?? []).filter((v) => v.isActive !== false);
+                  const inCart = qtyInCart.get(it.id) ?? 0;
+                  return (
+                    <button key={it.id} type="button" className="posxTile" onClick={() => tapTile(it)} title={`${it.name} · ${it.itemCode}`}>
+                      <span className="posxTileArt" style={{ "--h": hue } as CSSProperties} aria-hidden>
+                        {initials(it.name)}
+                      </span>
+                      {inCart > 0 && <span className="posxTileQty">{formatQuantity(inCart)}</span>}
+                      <span className="posxTileName">{it.name}</span>
+                      <span className="posxTileMeta">
+                        <span>₹{formatMoney(String(it.sellingPrice ?? "0"))}</span>
+                        {variants.length > 1 && <small>{variants.length} sizes</small>}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </section>
       </div>
 
@@ -1208,6 +1271,16 @@ export default function PosRegisterPage() {
         </Modal>
       )}
       {receiptModel && <PrintPortal layoutId={receiptLayout.id} model={receiptModel} />}
+
+      {billsOpen && register && (
+        <TodaysBillsDialog
+          registerId={register.id}
+          layoutId={receiptLayout.id}
+          business={{ ...business, name: business?.name ?? "" }}
+          text={{ header: settings?.receiptHeader, footer: settings?.receiptFooter }}
+          onClose={() => (setBillsOpen(false), searchRef.current?.focus())}
+        />
+      )}
 
       {closing && (
         <Modal

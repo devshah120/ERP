@@ -1,25 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { Chart, ChartPoint } from "@/lib/analytics/types";
+import * as echarts from "echarts";
+import type { Chart } from "@/lib/analytics/types";
 import { formatByKind, formatCompact } from "@/lib/format/number";
+import EChart from "./EChart";
 
-/**
- * Charts are hand-drawn SVG rather than a charting library: the shapes here
- * are simple, and every bar/slice/point has to be a drill-through target,
- * which is easier to guarantee with plain elements than with a library's
- * event model. It also keeps the client bundle free of a ~500 KB dependency.
- */
+const CHART_HEIGHT = 240;
 
-const CHART_HEIGHT = 200;
-
-function valueLabel(chart: Chart, value: number): string {
-  return formatByKind(value, chart.valueKind, { compact: true });
-}
-
-function fullLabel(chart: Chart, point: ChartPoint): string {
-  return `${point.label}: ${formatByKind(point.value, chart.valueKind)}`;
-}
+const DONUT_COLORS = [
+  "#16a34a",
+  "#d97706",
+  "#dc2626",
+  "#0a7bbf",
+  "#0f9f8c",
+  "#8b5cf6",
+  "#e0559a",
+  "#64748b",
+];
 
 function useNavigate() {
   const router = useRouter();
@@ -28,278 +27,376 @@ function useNavigate() {
   };
 }
 
-/** Nothing to plot — say so rather than showing an empty axis. */
-function EmptyChart({ message }: { message: string }) {
-  return <div className="chartEmpty">{message}</div>;
-}
-
-function niceMax(max: number): number {
-  if (max <= 0) return 1;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
-  const normalised = max / magnitude;
-  const step = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
-  return step * magnitude;
-}
-
+/* ------------------------------------------------------------------ */
+/* Vertical & Grouped Bars                                            */
 /* ------------------------------------------------------------------ */
 
 function VerticalBars({ chart, grouped }: { chart: Chart; grouped: boolean }) {
   const go = useNavigate();
   const labels = chart.series[0]?.points.map((p) => p.label) ?? [];
   const allValues = chart.series.flatMap((s) => s.points.map((p) => p.value));
-  const max = niceMax(Math.max(0, ...allValues));
+  const isEmpty = labels.length === 0 || allValues.every((v) => v === 0);
 
-  if (labels.length === 0 || allValues.every((v) => v === 0)) {
-    return <EmptyChart message={chart.emptyMessage ?? "No data for this period."} />;
-  }
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
 
-  const groupCount = labels.length;
-  const seriesCount = grouped ? chart.series.length : 1;
-  const slot = 100 / groupCount;
-  const barWidth = (slot * 0.7) / seriesCount;
+    return {
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          if (!Array.isArray(params) || params.length === 0) return "";
+          const header = `<div style="font-weight:600;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.2);padding-bottom:2px">${params[0].axisValueLabel}</div>`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows = params.map((p: any) => {
+            const val = formatByKind(p.value, chart.valueKind);
+            return `<div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
+              <span style="color:#cbd5e1">${p.seriesName}:</span>
+              <strong style="margin-left:auto">${val}</strong>
+            </div>`;
+          });
+          return `${header}${rows.join("")}`;
+        },
+      },
+      legend:
+        grouped && chart.series.length > 1
+          ? {
+              top: "top",
+              icon: "circle",
+              textStyle: { color: "#64748b", fontSize: 12 },
+            }
+          : undefined,
+      grid: {
+        top: grouped && chart.series.length > 1 ? 40 : 16,
+        left: 12,
+        right: 12,
+        bottom: 8,
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisLabel: { color: "#64748b", fontSize: 11 },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 11,
+          formatter: (v: number) => formatByKind(v, chart.valueKind, { compact: true }),
+        },
+      },
+      series: chart.series.map((s) => ({
+        name: s.name,
+        type: "bar",
+        data: s.points.map((p) => p.value),
+        barMaxWidth: 36,
+        itemStyle: {
+          color: s.color || "#0a7bbf",
+          borderRadius: [4, 4, 0, 0],
+        },
+      })),
+    };
+  }, [chart, labels, isEmpty, grouped]);
 
   return (
-    <div className="chartBody">
-      <div className="chartPlot" style={{ height: CHART_HEIGHT }}>
-        {[1, 0.75, 0.5, 0.25, 0].map((f) => (
-          <div key={f} className="chartGridLine" style={{ bottom: `${f * 100}%` }}>
-            <span>{valueLabel(chart, max * f)}</span>
-          </div>
-        ))}
-
-        {chart.series.map((series, si) =>
-          series.points.map((point, pi) => {
-            const height = max > 0 ? (point.value / max) * 100 : 0;
-            const left = pi * slot + slot * 0.15 + (grouped ? si * barWidth : 0);
-            return (
-              <button
-                key={`${series.name}-${point.label}`}
-                type="button"
-                className={`chartBar ${point.href ? "chartBarLink" : ""}`}
-                style={{
-                  left: `${left}%`,
-                  width: `${barWidth}%`,
-                  height: `${Math.max(height, point.value > 0 ? 1 : 0)}%`,
-                  background: series.color,
-                }}
-                title={`${series.name} — ${fullLabel(chart, point)}`}
-                onClick={() => go(point.href)}
-                disabled={!point.href}
-              >
-                <span className="chartBarValue">{valueLabel(chart, point.value)}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      <div className="chartAxis">
-        {labels.map((label) => (
-          <span key={label} style={{ width: `${slot}%` }} title={label}>
-            {label}
-          </span>
-        ))}
-      </div>
-
-      {grouped && chart.series.length > 1 && (
-        <div className="chartLegend">
-          {chart.series.map((s) => (
-            <span key={s.name}>
-              <i style={{ background: s.color }} />
-              {s.name}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+    <EChart
+      option={option}
+      height={CHART_HEIGHT}
+      empty={isEmpty}
+      emptyMessage={chart.emptyMessage ?? "No data for this period."}
+      onPointClick={(p) => {
+        const seriesIdx = p.seriesIndex ?? 0;
+        const point = chart.series[seriesIdx]?.points[p.dataIndex];
+        if (point?.href) go(point.href);
+      }}
+    />
   );
 }
 
 /* ------------------------------------------------------------------ */
+/* Horizontal Bars                                                    */
+/* ------------------------------------------------------------------ */
 
 function HorizontalBars({ chart }: { chart: Chart }) {
   const go = useNavigate();
-  const points = chart.series[0]?.points ?? [];
-  const color = chart.series[0]?.color ?? "#2f80ed";
-  const max = Math.max(0, ...points.map((p) => p.value));
+  const series = chart.series[0];
+  const points = series?.points ?? [];
+  const color = series?.color ?? "#0a7bbf";
+  const isEmpty = points.length === 0 || points.every((p) => p.value === 0);
 
-  if (points.length === 0 || max === 0) {
-    return <EmptyChart message={chart.emptyMessage ?? "No data for this period."} />;
-  }
+  // ECharts renders bottom-to-top on horizontal category axes, so reverse for natural top-to-bottom reading
+  const reversedPoints = useMemo(() => [...points].reverse(), [points]);
+
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
+
+    return {
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          const val = formatByKind(params.value, chart.valueKind);
+          return `<div style="font-weight:600">${params.name}</div>
+                  <div style="color:#cbd5e1;margin-top:2px">${val}</div>`;
+        },
+      },
+      grid: {
+        top: 12,
+        left: 12,
+        right: 48,
+        bottom: 8,
+        containLabel: true,
+      },
+      xAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 11,
+          formatter: (v: number) => formatByKind(v, chart.valueKind, { compact: true }),
+        },
+      },
+      yAxis: {
+        type: "category",
+        data: reversedPoints.map((p) => p.label),
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisTick: { show: false },
+        axisLabel: { color: "#475569", fontSize: 12 },
+      },
+      series: [
+        {
+          type: "bar",
+          data: reversedPoints.map((p) => p.value),
+          barMaxWidth: 20,
+          itemStyle: {
+            color,
+            borderRadius: [0, 4, 4, 0],
+          },
+          label: {
+            show: true,
+            position: "right",
+            color: "#64748b",
+            fontSize: 11,
+            formatter: (p: { value: unknown }) =>
+              formatByKind(Number(p.value), chart.valueKind, { compact: true }),
+          },
+        },
+      ],
+    };
+  }, [chart, reversedPoints, color, isEmpty]);
 
   return (
-    <div className="chartHBars">
-      {points.map((point) => (
-        <button
-          key={point.label}
-          type="button"
-          className={`chartHRow ${point.href ? "chartHRowLink" : ""}`}
-          onClick={() => go(point.href)}
-          disabled={!point.href}
-          title={fullLabel(chart, point)}
-        >
-          <span className="chartHLabel">{point.label}</span>
-          <span className="chartHTrack">
-            <span
-              className="chartHFill"
-              style={{ width: `${max > 0 ? Math.max((point.value / max) * 100, 1) : 0}%`, background: color }}
-            />
-          </span>
-          <span className="chartHValue">{valueLabel(chart, point.value)}</span>
-        </button>
-      ))}
-    </div>
+    <EChart
+      option={option}
+      height={Math.max(CHART_HEIGHT, points.length * 34 + 40)}
+      empty={isEmpty}
+      emptyMessage={chart.emptyMessage ?? "No data for this period."}
+      onPointClick={(p) => {
+        const point = reversedPoints[p.dataIndex];
+        if (point?.href) go(point.href);
+      }}
+    />
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Line Chart                                                         */
 /* ------------------------------------------------------------------ */
 
 function LineChart({ chart }: { chart: Chart }) {
   const go = useNavigate();
   const series = chart.series[0];
   const points = series?.points ?? [];
-  const max = niceMax(Math.max(0, ...points.map((p) => p.value)));
+  const color = series?.color ?? "#0a7bbf";
+  const isEmpty = points.length === 0 || points.every((p) => p.value === 0);
 
-  if (points.length === 0 || points.every((p) => p.value === 0)) {
-    return <EmptyChart message={chart.emptyMessage ?? "No data for this period."} />;
-  }
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
 
-  const width = 100;
-  const height = 100;
-  const step = points.length > 1 ? width / (points.length - 1) : 0;
-  const coords = points.map((p, i) => ({
-    x: points.length === 1 ? width / 2 : i * step,
-    y: height - (max > 0 ? (p.value / max) * height : 0),
-    point: p,
-  }));
-  const path = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ");
-  const area = `${path} L${coords[coords.length - 1].x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
-
-  // Long ranges get too many ticks to read, so label roughly eight of them.
-  const labelEvery = Math.max(1, Math.ceil(points.length / 8));
+    return {
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          if (!Array.isArray(params) || params.length === 0) return "";
+          const p = params[0];
+          const val = formatByKind(p.value, chart.valueKind);
+          return `<div style="font-weight:600">${p.axisValueLabel}</div>
+                  <div style="color:#93c5fd;margin-top:2px">${series.name}: <b>${val}</b></div>`;
+        },
+      },
+      grid: {
+        top: 16,
+        left: 12,
+        right: 16,
+        bottom: 8,
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: points.map((p) => p.label),
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisLabel: { color: "#64748b", fontSize: 11 },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 11,
+          formatter: (v: number) => formatByKind(v, chart.valueKind, { compact: true }),
+        },
+      },
+      series: [
+        {
+          name: series.name,
+          type: "line",
+          smooth: true,
+          data: points.map((p) => p.value),
+          symbol: "circle",
+          symbolSize: 6,
+          itemStyle: { color },
+          lineStyle: { width: 2.5, color },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: "rgba(10, 123, 191, 0.35)" },
+              { offset: 1, color: "rgba(10, 123, 191, 0.02)" },
+            ]),
+          },
+        },
+      ],
+    };
+  }, [chart, series, points, color, isEmpty]);
 
   return (
-    <div className="chartBody">
-      <div className="chartPlot" style={{ height: CHART_HEIGHT }}>
-        {[1, 0.75, 0.5, 0.25, 0].map((f) => (
-          <div key={f} className="chartGridLine" style={{ bottom: `${f * 100}%` }}>
-            <span>{valueLabel(chart, max * f)}</span>
-          </div>
-        ))}
-        <svg
-          className="chartSvg"
-          viewBox={`0 0 ${width} ${height}`}
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <path d={area} fill={series.color} fillOpacity={0.12} />
-          <path
-            d={path}
-            fill="none"
-            stroke={series.color}
-            strokeWidth={0.8}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-        {coords.map((c) => (
-          <button
-            key={c.point.label}
-            type="button"
-            className={`chartDot ${c.point.href ? "chartDotLink" : ""}`}
-            style={{ left: `${c.x}%`, bottom: `${height - c.y}%`, borderColor: series.color }}
-            title={fullLabel(chart, c.point)}
-            onClick={() => go(c.point.href)}
-            disabled={!c.point.href}
-          />
-        ))}
-      </div>
-      <div className="chartAxis chartAxisSparse">
-        {points.map((p, i) => (
-          <span key={p.label} style={{ width: `${100 / points.length}%` }}>
-            {i % labelEvery === 0 ? p.label : ""}
-          </span>
-        ))}
-      </div>
-    </div>
+    <EChart
+      option={option}
+      height={CHART_HEIGHT}
+      empty={isEmpty}
+      emptyMessage={chart.emptyMessage ?? "No data for this period."}
+      onPointClick={(p) => {
+        const point = points[p.dataIndex];
+        if (point?.href) go(point.href);
+      }}
+    />
   );
 }
 
 /* ------------------------------------------------------------------ */
-
-// First three are status colours (paid / partly / unpaid); the rest follow the categorical order.
-const DONUT_COLORS = ["#16a34a", "#d97706", "#dc2626", "#2f80ed", "#0f9f8c", "#8b5cf6"];
+/* Donut Chart                                                        */
+/* ------------------------------------------------------------------ */
 
 function DonutChart({ chart }: { chart: Chart }) {
   const go = useNavigate();
   const points = chart.series[0]?.points ?? [];
   const total = points.reduce((a, p) => a + p.value, 0);
+  const isEmpty = total === 0;
 
-  if (total === 0) return <EmptyChart message={chart.emptyMessage ?? "No data for this period."} />;
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
 
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-
-  // Each arc starts where the previous one ended. The running offset is
-  // computed up front rather than mutated inside the map, so rendering stays
-  // a pure function of the data.
-  const arcs: { point: ChartPoint; dash: number; offset: number; color: string }[] = [];
-  let cursor = 0;
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i];
-    if (p.value <= 0) continue;
-    const dash = (p.value / total) * circumference;
-    arcs.push({ point: p, dash, offset: cursor, color: DONUT_COLORS[i % DONUT_COLORS.length] });
-    cursor += dash;
-  }
+    return {
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          const val = formatByKind(params.value, chart.valueKind);
+          return `<div style="font-weight:600">${params.name}</div>
+                  <div style="color:#cbd5e1;margin-top:2px">${val} (${params.percent}%)</div>`;
+        },
+      },
+      legend: {
+        orient: "horizontal",
+        bottom: 0,
+        icon: "circle",
+        textStyle: { color: "#64748b", fontSize: 11 },
+        formatter: (name: string) => {
+          const point = points.find((p) => p.label === name);
+          if (!point) return name;
+          const pct = total > 0 ? ((point.value / total) * 100).toFixed(0) : "0";
+          return `${name} · ${pct}%`;
+        },
+      },
+      title: {
+        text: formatCompact(total),
+        subtext: "total",
+        left: "center",
+        top: "34%",
+        textStyle: {
+          fontSize: 20,
+          fontWeight: 700,
+          color: "#0f172a",
+        },
+        subtextStyle: {
+          fontSize: 12,
+          color: "#64748b",
+        },
+      },
+      series: [
+        {
+          name: chart.title,
+          type: "pie",
+          radius: ["50%", "72%"],
+          center: ["50%", "42%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 4,
+            borderColor: "#ffffff",
+            borderWidth: 2,
+          },
+          label: { show: false },
+          emphasis: {
+            label: { show: false },
+            scaleSize: 6,
+          },
+          data: points
+            .filter((p) => p.value > 0)
+            .map((p, i) => ({
+              name: p.label,
+              value: p.value,
+              itemStyle: { color: DONUT_COLORS[i % DONUT_COLORS.length] },
+            })),
+        },
+      ],
+    };
+  }, [chart, points, total, isEmpty]);
 
   return (
-    <div className="chartDonutWrap">
-      <svg viewBox="0 0 120 120" className="chartDonut" role="img" aria-label={chart.title}>
-        {arcs.map((arc) => (
-          <circle
-            key={arc.point.label}
-            cx="60"
-            cy="60"
-            r={radius}
-            fill="none"
-            stroke={arc.color}
-            strokeWidth="16"
-            strokeDasharray={`${arc.dash} ${circumference - arc.dash}`}
-            strokeDashoffset={-arc.offset}
-            transform="rotate(-90 60 60)"
-            style={{ cursor: arc.point.href ? "pointer" : "default" }}
-            onClick={() => go(arc.point.href)}
-          >
-            <title>{fullLabel(chart, arc.point)}</title>
-          </circle>
-        ))}
-        <text x="60" y="57" textAnchor="middle" className="chartDonutTotal">
-          {formatCompact(total)}
-        </text>
-        <text x="60" y="71" textAnchor="middle" className="chartDonutCaption">
-          total
-        </text>
-      </svg>
-
-      <div className="chartDonutLegend">
-        {points.map((p, i) => (
-          <button
-            key={p.label}
-            type="button"
-            className={p.href ? "chartLegendLink" : undefined}
-            onClick={() => go(p.href)}
-            disabled={!p.href}
-          >
-            <i style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-            <span className="chartLegendLabel">{p.label}</span>
-            <span className="chartLegendValue">
-              {formatByKind(p.value, chart.valueKind, { compact: true })}
-              <em>{total > 0 ? ` · ${((p.value / total) * 100).toFixed(0)}%` : ""}</em>
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
+    <EChart
+      option={option}
+      height={260}
+      empty={isEmpty}
+      emptyMessage={chart.emptyMessage ?? "No data for this period."}
+      onPointClick={(p) => {
+        const point = points.find((pt) => pt.label === p.name);
+        if (point?.href) go(point.href);
+      }}
+    />
   );
 }
 

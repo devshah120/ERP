@@ -171,37 +171,64 @@ export function OverviewTile({ t }: { t: TileSpec }) {
   );
 }
 
+import * as echarts from "echarts";
+import EChart from "@/components/charts/EChart";
+
 /* ------------------------------------------------------------------ */
 /* Semicircle gauge                                                    */
 /* ------------------------------------------------------------------ */
 
 export function Gauge({ percent, label, caption }: { percent: number | null; label: string; caption?: ReactNode }) {
   const p = percent === null ? 0 : Math.max(0, Math.min(100, percent));
-  const r = 80;
-  const c = Math.PI * r;
-  const color = percent === null ? "var(--border)" : p >= 80 ? "#16a34a" : p >= 40 ? "#d97706" : "#dc2626";
+  const color = percent === null ? "#cbd5e1" : p >= 80 ? "#16a34a" : p >= 40 ? "#d97706" : "#dc2626";
+
+  const option: echarts.EChartsOption = useMemo(() => {
+    return {
+      series: [
+        {
+          type: "gauge",
+          startAngle: 180,
+          endAngle: 0,
+          min: 0,
+          max: 100,
+          radius: "100%",
+          center: ["50%", "75%"],
+          progress: {
+            show: percent !== null,
+            roundCap: true,
+            width: 14,
+            itemStyle: { color },
+          },
+          pointer: { show: false },
+          axisLine: {
+            roundCap: true,
+            lineStyle: { width: 14, color: [[1, "#f1f5f9"]] },
+          },
+          axisTick: { show: false },
+          splitLine: { show: false },
+          axisLabel: { show: false },
+          detail: {
+            offsetCenter: [0, "-12%"],
+            fontSize: 22,
+            fontWeight: "bold",
+            color: "#0f172a",
+            formatter: percent === null ? "—" : "{value}%",
+          },
+          title: {
+            offsetCenter: [0, "20%"],
+            fontSize: 12,
+            color: "#64748b",
+          },
+          data: [{ value: Number(p.toFixed(1)), name: label }],
+        },
+      ],
+    };
+  }, [percent, p, color, label]);
+
   return (
-    <div className="gauge">
-      <svg viewBox="0 0 200 112" role="img" aria-label={`${label}: ${percent === null ? "no data" : `${p.toFixed(1)}%`}`}>
-        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e8eef4" strokeWidth="16" strokeLinecap="round" />
-        {p > 0 && (
-        <path
-          d="M 20 100 A 80 80 0 0 1 180 100"
-          fill="none"
-          stroke={color}
-          strokeWidth="16"
-          strokeLinecap="round"
-          strokeDasharray={`${(p / 100) * c} ${c}`}
-        />
-        )}
-        <text x="100" y="86" textAnchor="middle" className="gaugeValue">
-          {percent === null ? "—" : `${p.toFixed(1)}%`}
-        </text>
-        <text x="100" y="104" textAnchor="middle" className="gaugeLabel">
-          {label}
-        </text>
-      </svg>
-      {caption && <div className="gaugeCaption">{caption}</div>}
+    <div className="gauge" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <EChart option={option} height={120} width={200} />
+      {caption && <div className="gaugeCaption" style={{ marginTop: -8 }}>{caption}</div>}
     </div>
   );
 }
@@ -216,106 +243,97 @@ export interface TrendSeries {
   points: { label: string; value: number; href?: string }[];
 }
 
-export function TrendChart({ series, height = 220 }: { series: TrendSeries[]; height?: number }) {
+export function TrendChart({ series, height = 230 }: { series: TrendSeries[]; height?: number }) {
   const router = useRouter();
-  const [hover, setHover] = useState<number | null>(null);
   const labels = series[0]?.points.map((p) => p.label) ?? [];
-  const max = useMemo(() => {
-    const m = Math.max(0, ...series.flatMap((s) => s.points.map((p) => p.value)));
-    if (m <= 0) return 1;
-    const mag = Math.pow(10, Math.floor(Math.log10(m)));
-    const n = m / mag;
-    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
-  }, [series]);
+  const isEmpty = labels.length === 0 || series.every((s) => s.points.every((p) => p.value === 0));
 
-  if (labels.length === 0 || series.every((s) => s.points.every((p) => p.value === 0))) {
-    return <div className="chartEmpty">No sales or purchases in this period.</div>;
-  }
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
 
-  const W = 640;
-  const H = height;
-  const padL = 44;
-  const padB = 24;
-  const padT = 8;
-  const plotW = W - padL - 8;
-  const plotH = H - padB - padT;
-  const x = (i: number) => padL + (labels.length === 1 ? plotW / 2 : (i / (labels.length - 1)) * plotW);
-  const y = (v: number) => padT + plotH - (v / max) * plotH;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
-  const every = Math.max(1, Math.ceil(labels.length / 8));
+    return {
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "cross", crossStyle: { color: "#94a3b8" } },
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          if (!Array.isArray(params) || params.length === 0) return "";
+          const header = `<div style="font-weight:600;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.2);padding-bottom:2px">${params[0].axisValueLabel}</div>`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows = params.map((p: any) => {
+            return `<div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
+              <span style="color:#cbd5e1">${p.seriesName}:</span>
+              <strong style="margin-left:auto">₹${formatMoney(p.value)}</strong>
+            </div>`;
+          });
+          return `${header}${rows.join("")}`;
+        },
+      },
+      legend: {
+        top: 0,
+        right: 0,
+        icon: "circle",
+        textStyle: { color: "#64748b", fontSize: 12 },
+      },
+      grid: {
+        top: 32,
+        left: 12,
+        right: 16,
+        bottom: 12,
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLine: { lineStyle: { color: "#e2e8f0" } },
+        axisLabel: { color: "#64748b", fontSize: 11 },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+        axisLabel: {
+          color: "#94a3b8",
+          fontSize: 11,
+          formatter: (v: number) => `₹${formatCompact(v).replace("₹", "")}`,
+        },
+      },
+      series: series.map((s) => ({
+        name: s.name,
+        type: "line",
+        smooth: true,
+        data: s.points.map((p) => p.value),
+        symbol: "circle",
+        symbolSize: 6,
+        itemStyle: { color: s.color },
+        lineStyle: { width: 2.5, color: s.color },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: s.color ? `${s.color}33` : "rgba(10, 123, 191, 0.2)" },
+            { offset: 1, color: "rgba(255, 255, 255, 0.0)" },
+          ]),
+        },
+      })),
+    };
+  }, [series, labels, isEmpty]);
 
   return (
-    <div className="trend">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="trendSvg"
-        onMouseLeave={() => setHover(null)}
-        onMouseMove={(e) => {
-          const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-          const px = ((e.clientX - rect.left) / rect.width) * W;
-          const i = Math.round(((px - padL) / plotW) * (labels.length - 1));
-          setHover(Math.max(0, Math.min(labels.length - 1, i)));
-        }}
-        onClick={() => {
-          if (hover === null) return;
-          const href = series[0]?.points[hover]?.href;
-          if (href) router.push(href);
-        }}
-        role="img"
-        aria-label={`${series.map((s) => s.name).join(" and ")} by ${labels.length > 31 ? "month" : "day"}`}
-      >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={padL} x2={W - 8} y1={y(t)} y2={y(t)} stroke="#eef2f6" />
-            <text x={padL - 6} y={y(t) + 3} textAnchor="end" className="trendTick">
-              {formatCompact(t).replace("₹", "")}
-            </text>
-          </g>
-        ))}
-        {labels.map((l, i) =>
-          i % every === 0 || i === labels.length - 1 ? (
-            <text key={l + i} x={x(i)} y={H - 6} textAnchor="middle" className="trendTick">
-              {l}
-            </text>
-          ) : null
-        )}
-        {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={padT} y2={padT + plotH} stroke="#cbd5e1" strokeDasharray="3 3" />}
-        {series.map((s) => (
-          <g key={s.name}>
-            <polyline
-              fill="none"
-              stroke={s.color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              points={s.points.map((p, i) => `${x(i)},${y(p.value)}`).join(" ")}
-            />
-            {s.points.map((p, i) => (
-              <circle key={i} cx={x(i)} cy={y(p.value)} r={hover === i ? 4.5 : 3} fill={hover === i ? s.color : "#fff"} stroke={s.color} strokeWidth="2" />
-            ))}
-          </g>
-        ))}
-      </svg>
-      {hover !== null && (
-        <div className="trendTip" style={{ left: `${(x(hover) / W) * 100}%` }}>
-          <strong>{labels[hover]}</strong>
-          {series.map((s) => (
-            <span key={s.name}>
-              <i style={{ background: s.color }} />
-              {s.name} <b>₹{formatMoney(s.points[hover]?.value ?? 0)}</b>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="chartLegend">
-        {series.map((s) => (
-          <span key={s.name}>
-            <i style={{ background: s.color }} />
-            {s.name}
-          </span>
-        ))}
-      </div>
-    </div>
+    <EChart
+      option={option}
+      height={height}
+      empty={isEmpty}
+      emptyMessage="No sales or purchases in this period."
+      onPointClick={(p) => {
+        const href = series[0]?.points[p.dataIndex]?.href;
+        if (href) router.push(href);
+      }}
+    />
   );
 }
 
@@ -336,63 +354,88 @@ export function Donut({
   centerValue: string;
 }) {
   const total = slices.reduce((a, s) => a + s.value, 0);
-  const r = 70;
-  const c = 2 * Math.PI * r;
-  // Where each slice starts along the ring — computed up front, not mutated while rendering.
-  const lengths = slices.map((s) => (total > 0 ? (s.value / total) * c : 0));
-  const starts = lengths.map((_, i) => lengths.slice(0, i).reduce((a, b) => a + b, 0));
+  const isEmpty = total <= 0;
 
-  if (total <= 0) return <div className="chartEmpty">Nothing recorded in this period.</div>;
+  const option: echarts.EChartsOption = useMemo(() => {
+    if (isEmpty) return {};
+
+    return {
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(15, 23, 42, 0.9)",
+        borderColor: "transparent",
+        textStyle: { color: "#ffffff", fontSize: 12 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) => {
+          const slice = slices.find((s) => s.label === params.name);
+          const display = slice ? slice.display : `₹${formatMoney(params.value)}`;
+          return `<div style="font-weight:600">${params.name}</div>
+                  <div style="color:#cbd5e1;margin-top:2px">${display} (${params.percent}%)</div>`;
+        },
+      },
+      legend: {
+        orient: "horizontal",
+        bottom: 0,
+        icon: "circle",
+        textStyle: { color: "#64748b", fontSize: 11 },
+        formatter: (name: string) => {
+          const slice = slices.find((s) => s.label === name);
+          if (!slice) return name;
+          return `${name} · ${slice.percent ? `${slice.percent}%` : `${((slice.value / total) * 100).toFixed(0)}%`}`;
+        },
+      },
+      title: {
+        text: centerValue,
+        subtext: centerLabel.toUpperCase(),
+        left: "center",
+        top: "32%",
+        textStyle: {
+          fontSize: 18,
+          fontWeight: 700,
+          color: "#0f172a",
+        },
+        subtextStyle: {
+          fontSize: 11,
+          fontWeight: 600,
+          color: "#64748b",
+        },
+      },
+      series: [
+        {
+          name: centerLabel,
+          type: "pie",
+          radius: ["50%", "72%"],
+          center: ["50%", "40%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 4,
+            borderColor: "#ffffff",
+            borderWidth: 2,
+          },
+          label: { show: false },
+          emphasis: {
+            label: { show: false },
+            scaleSize: 6,
+          },
+          data: slices
+            .filter((s) => s.value > 0)
+            .map((s, i) => ({
+              name: s.label,
+              value: s.value,
+              itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] },
+            })),
+        },
+      ],
+    };
+  }, [slices, total, centerLabel, centerValue, isEmpty]);
 
   return (
-    <div className="donutWrap">
-      <svg viewBox="0 0 180 180" className="donutSvg" role="img" aria-label={`${centerLabel} ${centerValue}`}>
-        <circle cx="90" cy="90" r={r} fill="none" stroke="#eef2f6" strokeWidth="26" />
-        {slices.map((s, i) => {
-          const len = lengths[i];
-          // A 2px surface gap between slices keeps adjacent colours distinct.
-          const gap = slices.length > 1 ? Math.min(2, len / 2) : 0;
-          const el = (
-            <circle
-              key={s.label}
-              cx="90"
-              cy="90"
-              r={r}
-              fill="none"
-              stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
-              strokeWidth="26"
-              strokeDasharray={`${Math.max(0, len - gap)} ${c}`}
-              strokeDashoffset={-starts[i]}
-              transform="rotate(-90 90 90)"
-            >
-              <title>
-                {s.label}: {s.display}
-                {s.percent ? ` (${s.percent}%)` : ""}
-              </title>
-            </circle>
-          );
-          return el;
-        })}
-        <text x="90" y="84" textAnchor="middle" className="donutCaption">
-          {centerLabel}
-        </text>
-        <text x="90" y="104" textAnchor="middle" className="donutTotal">
-          {centerValue}
-        </text>
-      </svg>
-      <ul className="donutLegend">
-        {slices.map((s, i) => (
-          <li key={s.label}>
-            <i style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
-            <span className="donutLegendLabel" title={s.label}>
-              {s.label}
-            </span>
-            <span className="donutLegendValue">{s.display}</span>
-            {s.percent && <span className="donutLegendPct">{s.percent}%</span>}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <EChart
+      option={option}
+      height={260}
+      empty={isEmpty}
+      emptyMessage="Nothing recorded in this period."
+    />
   );
 }
 

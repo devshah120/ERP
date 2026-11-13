@@ -26,7 +26,7 @@ export function initials(name: string): string {
  * avatar — so it's reachable whether the sidebar is open or not.
  */
 export default function UserMenu({ variant }: { variant: "sidebar" | "topbar" }) {
-  const { me } = useAuth();
+  const { me, hasPermission } = useAuth();
   const router = useRouter();
   const { openHelp } = useShortcuts();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -100,15 +100,17 @@ export default function UserMenu({ variant }: { variant: "sidebar" | "topbar" })
         </Typography>
       </Box>
 
-      <MenuItem component={Link} href="/settings" onClick={handleClose}>
-        <ListItemIcon sx={{ minWidth: 28 }}>
-          <IconSettings />
-        </ListItemIcon>
-        <ListItemText
-          primary={<Typography variant="body2" sx={{ fontWeight: 500 }}>Workspace settings</Typography>}
-          secondary={<Typography variant="caption" color="text.secondary">{me.role?.name ?? "Member"}</Typography>}
-        />
-      </MenuItem>
+      {hasPermission("settings.view") && (
+        <MenuItem component={Link} href="/settings" onClick={handleClose}>
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <IconSettings />
+          </ListItemIcon>
+          <ListItemText
+            primary={<Typography variant="body2" sx={{ fontWeight: 500 }}>Workspace settings</Typography>}
+            secondary={<Typography variant="caption" color="text.secondary">{me.role?.name ?? "Member"}</Typography>}
+          />
+        </MenuItem>
+      )}
 
       <MenuItem
         onClick={() => {

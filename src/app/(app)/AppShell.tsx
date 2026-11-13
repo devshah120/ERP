@@ -225,16 +225,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="hdrActions">
           <QuickCreate />
           <CalculatorButton />
-          <span className="hdrDivider hideMobile" aria-hidden />
-          <Link
-            href="/pos/register"
-            className="hdrIconBtn posToggle"
-            aria-label="Open POS register"
-            title="Point of Sale"
-            aria-current={isActive(pathname, "/pos/register") ? "page" : undefined}
-          >
-            <IconStore />
-          </Link>
+          {(hasPermission("pos.view") || hasPermission("pos.sell")) && (
+            <>
+              <span className="hdrDivider hideMobile" aria-hidden />
+              <Link
+                href="/pos/register"
+                className="hdrIconBtn posToggle"
+                aria-label="Open POS register"
+                title="Point of Sale"
+                aria-current={isActive(pathname, "/pos/register") ? "page" : undefined}
+              >
+                <IconStore />
+              </Link>
+            </>
+          )}
           <NotificationsMenu />
           <UserMenu variant="topbar" />
         </div>

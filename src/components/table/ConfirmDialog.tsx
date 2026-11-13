@@ -5,6 +5,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
@@ -12,7 +13,7 @@ import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
-import { IconWarning } from "@/components/icons";
+import { IconWarning, IconClose } from "@/components/icons";
 
 /**
  * Modernized Confirmation dialog built on Material UI Dialog.
@@ -61,8 +62,8 @@ export default function ConfirmDialog({
       role="alertdialog"
       aria-label={title}
     >
-      <DialogTitle sx={{ pb: 1, pt: 2.5, px: 2.5 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+      <DialogTitle sx={{ pb: 1, pt: 2, px: 2.5, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, flex: 1, minWidth: 0 }}>
           <Box
             sx={{
               display: "flex",
@@ -78,7 +79,7 @@ export default function ConfirmDialog({
           >
             <IconWarning />
           </Box>
-          <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ minWidth: 0, pr: 1 }}>
             <Typography variant="h6" component="div" sx={{ fontWeight: 700, fontSize: "1rem", color: "text.primary" }}>
               {title}
             </Typography>
@@ -87,6 +88,15 @@ export default function ConfirmDialog({
             </Typography>
           </Box>
         </Box>
+        <IconButton
+          aria-label="Close"
+          onClick={onCancel}
+          disabled={busy}
+          size="small"
+          sx={{ color: "text.secondary", mt: -0.5, mr: -0.5 }}
+        >
+          <IconClose />
+        </IconButton>
       </DialogTitle>
 
       <DialogContent sx={{ px: 2.5, pt: 1, pb: 1.5 }}>

@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, type RefObject, type MouseEvent } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Popover from "@mui/material/Popover";
 import Typography from "@mui/material/Typography";
-import { IconChevronDown, IconLayers } from "@/components/icons";
+import { IconChevronDown, IconLayers, IconClose } from "@/components/icons";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 
 export interface ColumnOption {
@@ -124,14 +125,24 @@ export default function ColumnPicker({
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
             Columns
           </Typography>
-          <Button
-            size="small"
-            onClick={() => setDraft([])}
-            disabled={draft.length === 0}
-            sx={{ textTransform: "none", fontSize: "0.75rem", p: 0.5 }}
-          >
-            Reset
-          </Button>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Button
+              size="small"
+              onClick={() => setDraft([])}
+              disabled={draft.length === 0}
+              sx={{ textTransform: "none", fontSize: "0.75rem", p: 0.5 }}
+            >
+              Reset
+            </Button>
+            <IconButton
+              size="small"
+              onClick={close}
+              aria-label="Close"
+              sx={{ color: "text.secondary", p: 0.5 }}
+            >
+              <IconClose />
+            </IconButton>
+          </Box>
         </Box>
 
         <Box sx={{ px: 2, py: 1, bgcolor: "var(--surface-subtle, #f8fbfd)", borderBottom: "1px solid", borderColor: "divider" }}>
@@ -222,7 +233,7 @@ export default function ColumnPicker({
           </Typography>
           <Box sx={{ display: "flex", gap: 1 }}>
             <Button size="small" variant="outlined" color="inherit" onClick={close} sx={{ textTransform: "none", fontSize: "0.75rem" }}>
-              Close
+              Cancel
             </Button>
             <Button size="small" variant="contained" onClick={save} disableElevation sx={{ textTransform: "none", fontSize: "0.75rem", fontWeight: 600 }}>
               Save

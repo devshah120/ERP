@@ -7,7 +7,7 @@ export const theme = createTheme({
     mode: "light",
     primary: {
       main: "#0a7bbf",
-      light: "#1d9be0",
+      light: "#e7f3fb",
       dark: "#0868a3",
       contrastText: "#ffffff",
     },
@@ -33,6 +33,12 @@ export const theme = createTheme({
       main: "#dc2626",
       light: "#fdf3f3",
       dark: "#991b1b",
+      contrastText: "#ffffff",
+    },
+    info: {
+      main: "#0284c7",
+      light: "#e7f3fb",
+      dark: "#0369a1",
       contrastText: "#ffffff",
     },
     background: {
@@ -105,6 +111,49 @@ export const theme = createTheme({
         paper: {
           borderRadius: 12,
           boxShadow: "0 20px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1)",
+        },
+      },
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        root: {
+          fontSize: "0.8125rem",
+          "&:hover": {
+            backgroundColor: "#e7f3fb",
+            color: "#111827",
+            "& .MuiListItemIcon-root": {
+              color: "#0a7bbf",
+            },
+          },
+          "&.Mui-selected": {
+            backgroundColor: "#e7f3fb",
+            color: "#0869a6",
+            fontWeight: 600,
+            "&:hover": {
+              backgroundColor: "#dbebf7",
+            },
+            "& .MuiListItemIcon-root": {
+              color: "#0a7bbf",
+            },
+          },
+        },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          "&:hover": {
+            backgroundColor: "#e7f3fb",
+            color: "#111827",
+          },
+          "&.Mui-selected": {
+            backgroundColor: "#e7f3fb",
+            color: "#0869a6",
+            fontWeight: 600,
+            "&:hover": {
+              backgroundColor: "#dbebf7",
+            },
+          },
         },
       },
     },

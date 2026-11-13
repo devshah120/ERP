@@ -5,6 +5,9 @@ import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
@@ -310,23 +313,37 @@ export default function StockDocumentFormView({
               {record.status}
             </span>
           </div>
-          <div className="docTopActions">
+          <div className="docTopActions" style={{ display: "flex", gap: "0.5rem" }}>
             {record.status !== "CANCELLED" && (
-              <button type="button" className="button buttonDanger" onClick={() => setCancelOpen(true)}>
-                <IconTrash /> Cancel & reverse
-              </button>
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={() => setCancelOpen(true)}
+                startIcon={<IconTrash />}
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
+                Cancel & reverse
+              </Button>
             )}
-            <Link href={basePath} className="button buttonSecondary">
-              <IconClose /> Back
-            </Link>
+            <Button
+              component={Link}
+              href={basePath}
+              variant="outlined"
+              size="small"
+              startIcon={<IconClose />}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Back
+            </Button>
           </div>
         </div>
 
         {record.status === "CANCELLED" && (
-          <div className="banner bannerError" style={{ marginBottom: "0.9rem" }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
             Cancelled{record.cancellationReason ? `: ${record.cancellationReason}` : "."} Offsetting stock
             entries were written, so the ledger still explains how the balance got where it is.
-          </div>
+          </Alert>
         )}
 
         <div className="docHeadGrid">
@@ -440,22 +457,36 @@ export default function StockDocumentFormView({
     <form className="docForm" onSubmit={handleSubmit}>
       <div className="docTopBar">
         <div className="docTopTitle">New {label}</div>
-        <div className="docTopActions">
-          <button
+        <div className="docTopActions" style={{ display: "flex", gap: "0.5rem" }}>
+          <Button
             type="submit"
-            className="button buttonPrimary"
+            variant="contained"
+            size="small"
             disabled={submitting || lines.length === 0 || (!isAdjustment && !toWarehouseId)}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <IconSave />}
             title="Save (Ctrl + S)"
+            sx={{ textTransform: "none", fontWeight: 600 }}
           >
-            <IconSave /> {submitting ? "Posting…" : isAdjustment ? "Post adjustment" : "Complete transfer"}
-          </button>
-          <Link href={basePath} className="button buttonSecondary">
-            <IconClose /> Cancel
-          </Link>
+            {submitting ? "Posting…" : isAdjustment ? "Post adjustment" : "Complete transfer"}
+          </Button>
+          <Button
+            component={Link}
+            href={basePath}
+            variant="outlined"
+            size="small"
+            startIcon={<IconClose />}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
         </div>
       </div>
 
-      {error && <div className="banner bannerError" style={{ marginBottom: "0.9rem" }}>{error}</div>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <div className="docHeadGrid">
         <div className="docHeadField">

@@ -5,6 +5,9 @@ import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Decimal from "decimal.js";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import type { PaymentUi } from "@/lib/payments/ui";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
@@ -252,17 +255,23 @@ export default function PaymentFormView({
             </div>
           </div>
           <div className="pageActions">
-            <Link href={config.basePath} className="button buttonSecondary">
+            <Button
+              component={Link}
+              href={config.basePath}
+              variant="outlined"
+              size="small"
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
               Back to list
-            </Link>
+            </Button>
           </div>
         </div>
 
         {record.status === "CANCELLED" && (
-          <div className="banner bannerError" style={{ marginBottom: "1rem" }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
             This entry was cancelled{record.cancellationReason ? `: ${record.cancellationReason}` : "."} The amounts
             below were returned to the invoices they had settled.
-          </div>
+          </Alert>
         )}
 
         <div className="formCard">
@@ -337,22 +346,35 @@ export default function PaymentFormView({
           <h1 className="pageTitle">New {config.singular}</h1>
           <div className="pageSubtitle">{config.partyHint}</div>
         </div>
-        <div className="pageActions">
-          <Link href={config.basePath} className="button buttonSecondary">
+        <div className="pageActions" style={{ display: "flex", gap: "0.5rem" }}>
+          <Button
+            component={Link}
+            href={config.basePath}
+            variant="outlined"
+            size="small"
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
             Cancel
-          </Link>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="button buttonPrimary"
+            variant="contained"
+            size="small"
             disabled={submitting || !partyId || amountDecimal.lte(0) || overAllocated}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
             title="Save (Ctrl + S)"
+            sx={{ textTransform: "none", fontWeight: 600 }}
           >
             {submitting ? "Saving…" : `Save ${config.singular.toLowerCase()}`}
-          </button>
+          </Button>
         </div>
       </div>
 
-      {error && <div className="banner bannerError" style={{ marginBottom: "1rem" }}>{error}</div>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <div className="formCard">
         <div className="formGrid">
@@ -522,10 +544,10 @@ export default function PaymentFormView({
         </div>
 
         {overAllocated && (
-          <div className="banner bannerError" style={{ marginTop: "0.75rem" }}>
+          <Alert severity="error" sx={{ mt: 1.5, borderRadius: 2 }}>
             You have allocated more than the {config.singular.toLowerCase()} amount. Reduce the allocations or
             increase the amount.
-          </div>
+          </Alert>
         )}
       </div>
     </form>

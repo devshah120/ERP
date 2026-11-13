@@ -1,6 +1,26 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+import { IconClose } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 
@@ -31,8 +51,7 @@ interface PreviewResult {
 
 /**
  * Import flow: download template → upload → preview with row-level errors →
- * commit. Nothing is written until the user confirms, and the server refuses
- * a commit that still has errors.
+ * commit. Nothing is written until the user confirms.
  */
 export default function ImportDialog({
   resource,
@@ -54,8 +73,6 @@ export default function ImportDialog({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  // Escape closes the dialog, but not mid-upload — cancelling a request the
-  // server may already be committing would leave the user unsure what landed.
   useEscapeHandler(onClose, busy === null);
 
   async function downloadTemplate() {
@@ -142,31 +159,70 @@ export default function ImportDialog({
   const canImport = preview && preview.errorRows === 0 && preview.validRows + (skipDuplicates ? 0 : preview.duplicateRows) > 0;
 
   return (
-    <div className="modalBackdrop" onClick={onClose}>
-      <div className="modalCard" onClick={(e) => e.stopPropagation()}>
-        <div className="modalHeader">
-          <div>
-            <div className="modalTitle">Import {title}</div>
-            <div className="modalSubtitle">
-              Download the template, fill it in, then upload to preview before saving.
-            </div>
-          </div>
-          <button type="button" className="button buttonSecondary" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={busy === null ? onClose : undefined}
+      maxWidth="md"
+      fullWidth
+      slotProps={{
+        paper: {
+          elevation: 6,
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+          },
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          p: 2.5,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.125rem" }}>
+            Import {title}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8125rem", mt: 0.5 }}>
+            Download the template, fill it in, then upload to preview before saving.
+          </Typography>
+        </Box>
+        <IconButton
+          aria-label="Close"
+          onClick={onClose}
+          disabled={busy !== null}
+          size="small"
+          sx={{ color: "text.secondary", mt: -0.5, mr: -0.5 }}
+        >
+          <IconClose />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="modalBody">
-          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center", marginBottom: "1rem" }}>
-            <button type="button" className="button buttonSecondary" onClick={downloadTemplate} disabled={busy !== null}>
-              {busy === "template" ? "Preparing..." : "Download sample template"}
-            </button>
+      <DialogContent sx={{ p: 2.5 }}>
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center", mb: 2 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={downloadTemplate}
+            disabled={busy !== null}
+            startIcon={busy === "template" ? <CircularProgress size={14} /> : undefined}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            {busy === "template" ? "Preparing..." : "Download sample template"}
+          </Button>
+
+          <Button variant="outlined" component="label" size="small" sx={{ textTransform: "none" }}>
+            Choose File
             <input
               ref={fileRef}
               type="file"
+              hidden
               accept=".xlsx,.csv"
-              className="input"
-              style={{ fontSize: "0.85rem" }}
               onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
                 setFile(f);
@@ -174,109 +230,126 @@ export default function ImportDialog({
                 if (f) runPreview(f);
               }}
             />
-            {busy === "preview" && <span className="activeFilterNote">Validating...</span>}
-          </div>
+          </Button>
+          {file && (
+            <Typography variant="caption" sx={{ color: "text.primary", fontWeight: 500 }}>
+              {file.name}
+            </Typography>
+          )}
 
-          {error && <div className="banner bannerError" style={{ marginBottom: "1rem" }}>{error}</div>}
-          {done && <div className="banner bannerSuccess" style={{ marginBottom: "1rem" }}>{done}</div>}
+          {busy === "preview" && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary" }}>
+              <CircularProgress size={14} />
+              <Typography variant="caption">Validating…</Typography>
+            </Box>
+          )}
+        </Box>
 
-          {preview && (
-            <>
-              <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-                <span className="importStat">Total: {preview.totalRows}</span>
-                <span className="importStat importStatOk">Ready: {preview.validRows}</span>
-                <span className="importStat importStatWarn">Duplicates: {preview.duplicateRows}</span>
-                <span className="importStat importStatBad">Errors: {preview.errorRows}</span>
-              </div>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {done && <Alert severity="success" sx={{ mb: 2 }}>{done}</Alert>}
 
-              {preview.missingHeaders.length > 0 && (
-                <div className="banner bannerError" style={{ marginBottom: "1rem" }}>
-                  Missing required column(s): {preview.missingHeaders.join(", ")}. Use the sample template.
-                </div>
-              )}
+        {preview && (
+          <Box sx={{ mt: 1 }}>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
+              <Chip label={`Total: ${preview.totalRows}`} size="small" variant="outlined" />
+              <Chip label={`Ready: ${preview.validRows}`} size="small" color="success" />
+              <Chip label={`Duplicates: ${preview.duplicateRows}`} size="small" color="warning" />
+              <Chip label={`Errors: ${preview.errorRows}`} size="small" color="error" />
+            </Box>
 
-              {preview.duplicateRows > 0 && (
-                <label className="checkboxRow" style={{ marginBottom: "0.9rem" }}>
-                  <input
-                    type="checkbox"
+            {preview.missingHeaders.length > 0 && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                Missing required column(s): {preview.missingHeaders.join(", ")}. Use the sample template.
+              </Alert>
+            )}
+
+            {preview.duplicateRows > 0 && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
                     checked={skipDuplicates}
                     onChange={(e) => setSkipDuplicates(e.target.checked)}
                   />
-                  Skip {preview.duplicateRows} row(s) that already exist
-                </label>
-              )}
+                }
+                label={
+                  <Typography variant="body2" sx={{ fontSize: "0.8125rem" }}>
+                    Skip {preview.duplicateRows} row(s) that already exist
+                  </Typography>
+                }
+                sx={{ mb: 1.5 }}
+              />
+            )}
 
-              <div className="tableWrap" style={{ maxHeight: "22rem", overflow: "auto" }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "4rem" }}>Row</th>
-                      <th style={{ width: "7rem" }}>Status</th>
-                      <th>Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.rows.map((r) => {
-                      const status = r.errors.length > 0 ? "ERROR" : r.duplicate ? "DUPLICATE" : "READY";
-                      const cls =
-                        status === "ERROR" ? "badgeDanger" : status === "DUPLICATE" ? "badgeWarning" : "badgeSuccess";
-                      return (
-                        <tr key={r.row}>
-                          <td>{r.row}</td>
-                          <td>
-                            <span className={`badge ${cls}`}>{status}</span>
-                          </td>
-                          <td>
-                            {r.errors.length > 0 ? (
-                              <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
-                                {r.errors.map((e, i) => (
-                                  <li key={i} style={{ color: "var(--danger)", fontSize: "0.8125rem" }}>
-                                    {e.column ? <strong>{e.column}: </strong> : null}
-                                    {e.message}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                                {Object.entries(r.values)
-                                  .filter(([, v]) => typeof v !== "object" && v !== undefined && v !== "")
-                                  .slice(0, 4)
-                                  .map(([k, v]) => `${k}: ${v}`)
-                                  .join(" · ")}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
+            <TableContainer sx={{ maxHeight: 320, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 60, fontWeight: 700 }}>Row</TableCell>
+                    <TableCell sx={{ width: 100, fontWeight: 700 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Details</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {preview.rows.map((r) => {
+                    const status = r.errors.length > 0 ? "ERROR" : r.duplicate ? "DUPLICATE" : "READY";
+                    const chipColor = status === "ERROR" ? "error" : status === "DUPLICATE" ? "warning" : "success";
 
-        <div className="modalFooter">
-          {preview && preview.errorRows > 0 && (
-            <span className="activeFilterNote">
-              Fix the {preview.errorRows} highlighted row(s) and upload again — nothing has been saved.
-            </span>
-          )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="button buttonSecondary" onClick={onClose} disabled={busy !== null}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="button buttonPrimary"
-              onClick={runImport}
-              disabled={!canImport || busy !== null}
-            >
-              {busy === "import" ? "Importing..." : `Import ${preview?.validRows ?? 0} record(s)`}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+                    return (
+                      <TableRow key={r.row} hover>
+                        <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{r.row}</TableCell>
+                        <TableCell>
+                          <Chip label={status} size="small" color={chipColor} sx={{ height: 20, fontSize: "0.6875rem", fontWeight: 700 }} />
+                        </TableCell>
+                        <TableCell>
+                          {r.errors.length > 0 ? (
+                            <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                              {r.errors.map((e, i) => (
+                                <Typography key={i} component="li" variant="caption" sx={{ color: "error.main", display: "list-item" }}>
+                                  {e.column ? <strong>{e.column}: </strong> : null}
+                                  {e.message}
+                                </Typography>
+                              ))}
+                            </Box>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              {Object.entries(r.values)
+                                .filter(([, v]) => typeof v !== "object" && v !== undefined && v !== "")
+                                .slice(0, 4)
+                                .map(([k, v]) => `${k}: ${v}`)
+                                .join(" · ")}
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ p: 2, px: 2.5, borderTop: "1px solid", borderColor: "divider", bgcolor: "var(--surface-subtle, #f8fbfd)" }}>
+        {preview && preview.errorRows > 0 && (
+          <Typography variant="caption" color="error.main" sx={{ mr: "auto" }}>
+            Fix the {preview.errorRows} highlighted row(s) and upload again — nothing has been saved.
+          </Typography>
+        )}
+        <Button variant="outlined" color="inherit" onClick={onClose} disabled={busy !== null}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={runImport}
+          disabled={!canImport || busy !== null}
+          startIcon={busy === "import" ? <CircularProgress size={14} color="inherit" /> : undefined}
+          disableElevation
+        >
+          {busy === "import" ? "Importing..." : `Import ${preview?.validRows ?? 0} record(s)`}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

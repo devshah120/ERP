@@ -2,6 +2,9 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
@@ -107,10 +110,9 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
           </div>
         )}
         {error && (
-          <div className="banner bannerError" role="alert" style={{ marginBottom: "1rem" }}>
-            <IconAlertCircle />
-            <span>{error}</span>
-          </div>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
         )}
 
         {!values && !error && <SkeletonBlock lines={5} />}
@@ -144,10 +146,17 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
                   {dirty ? "Unsaved changes" : "All changes saved"}
                   <span className="hideMobile"> · Ctrl + S to save</span>
                 </span>
-                <button type="submit" className="button buttonPrimary" disabled={saving || !dirty}>
-                  {saving && <span className="spinner" />}
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="small"
+                  disabled={saving || !dirty}
+                  startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
+                  disableElevation
+                  sx={{ textTransform: "none", fontWeight: 600 }}
+                >
                   {saving ? "Saving…" : "Save settings"}
-                </button>
+                </Button>
               </div>
             )}
           </form>

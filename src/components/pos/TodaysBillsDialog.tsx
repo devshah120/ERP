@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Button from "@mui/material/Button";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { formatMoney, formatQuantity } from "@/lib/format/number";
 import type { LayoutId } from "@/lib/printFormats/catalog";
@@ -147,13 +148,26 @@ export default function TodaysBillsDialog({
       width={viewing ? "34rem" : "74rem"}
       footer={
         viewing ? (
-          <div style={{ display: "flex", gap: "0.5rem", width: "100%" }}>
-            <button type="button" className="button buttonSecondary" onClick={() => setBill(null)}>
-              <IconArrowLeft /> Back to bills
-            </button>
-            <button type="button" className="button buttonPrimary" style={{ marginLeft: "auto" }} onClick={() => printPortal(PRINT_ID)} autoFocus>
-              <IconPrint /> Print
-            </button>
+          <div style={{ display: "flex", gap: "0.5rem", width: "100%", alignItems: "center" }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setBill(null)}
+              startIcon={<IconArrowLeft />}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Back to bills
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => printPortal(PRINT_ID)}
+              startIcon={<IconPrint />}
+              autoFocus
+              sx={{ ml: "auto", textTransform: "none", fontWeight: 600 }}
+            >
+              Print
+            </Button>
           </div>
         ) : undefined
       }

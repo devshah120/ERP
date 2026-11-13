@@ -3,6 +3,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { getPath, setPath } from "@/lib/resources/ui/paths";
 import type { ResourceUi, FieldConfig } from "@/lib/resources/ui/types";
@@ -565,15 +568,17 @@ export default function ResourceFormView({
         }
         actions={
           isEdit && (
-            <button
-              type="button"
-              className="button buttonSecondary"
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
               onClick={() => setConfirmDelete(true)}
               disabled={deleting}
-              style={{ color: "var(--danger)" }}
+              startIcon={<IconTrash />}
+              sx={{ textTransform: "none", fontWeight: 600 }}
             >
-              <IconTrash /> Delete
-            </button>
+              Delete
+            </Button>
           )
         }
       />
@@ -592,10 +597,9 @@ export default function ResourceFormView({
 
           <div style={{ minWidth: 0, maxWidth: "62rem" }}>
             {error && (
-              <div className="banner bannerError" role="alert" style={{ marginBottom: "1rem" }}>
-                <IconAlertCircle />
-                <span>{error}</span>
-              </div>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
             )}
 
             {config.sections.map((section) => (
@@ -615,13 +619,27 @@ export default function ResourceFormView({
                 {dirty ? "Unsaved changes" : isEdit ? "All changes saved" : "Fields marked * are required"}
                 <span className="hideMobile"> · Ctrl + S to save</span>
               </span>
-              <Link href={config.basePath} className="button buttonSecondary">
+              <Button
+                component={Link}
+                href={config.basePath}
+                variant="outlined"
+                color="inherit"
+                size="small"
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
                 {isEdit ? "Close" : "Cancel"}
-              </Link>
-              <button type="submit" className="button buttonPrimary" disabled={submitting}>
-                {submitting && <span className="spinner" />}
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                size="small"
+                disabled={submitting}
+                startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                disableElevation
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
                 {submitting ? "Saving…" : isEdit ? "Save changes" : `Create ${singularLower}`}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

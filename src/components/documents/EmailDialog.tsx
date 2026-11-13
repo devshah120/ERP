@@ -1,6 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { IconClose } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
@@ -55,74 +67,107 @@ export default function EmailDialog({
   }
 
   return (
-    <div className="modalBackdrop" onClick={busy ? undefined : onClose}>
-      <div className="modalCard" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Email ${label}`}>
-        <div className="modalHeader">
-          <div>
-            <div className="modalTitle">Email {label} {documentNumber}</div>
-            <div className="modalSubtitle">
-              Sends a formatted summary with line items, the GST breakup and the total in words.
-            </div>
-          </div>
-          <button type="button" className="button buttonSecondary" onClick={onClose} disabled={busy}>
-            Close
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={busy ? undefined : onClose}
+      maxWidth="sm"
+      fullWidth
+      slotProps={{
+        paper: {
+          elevation: 6,
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+          },
+        },
+      }}
+      aria-label={`Email ${label}`}
+    >
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          p: 2.5,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box sx={{ minWidth: 0, pr: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.0625rem" }}>
+            Email {label} {documentNumber}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8125rem", mt: 0.5 }}>
+            Sends a formatted summary with line items, the GST breakup and the total in words.
+          </Typography>
+        </Box>
+        <IconButton
+          aria-label="Close"
+          onClick={onClose}
+          disabled={busy}
+          size="small"
+          sx={{ color: "text.secondary", mt: -0.5, mr: -0.5 }}
+        >
+          <IconClose />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="modalBody">
-          {sent ? (
-            <div className="banner bannerSuccess">Sent to {sent}.</div>
-          ) : (
-            <>
-              <div className="field">
-                <label htmlFor="email-to">To</label>
-                <input
-                  id="email-to"
-                  className="input"
-                  type="email"
-                  autoFocus
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                  placeholder={defaultTo ? defaultTo : "name@example.com"}
-                />
-                <span className="hint">
-                  {defaultTo
-                    ? "Defaults to the address on the document."
-                    : "No address is stored on this document — enter one."}
-                </span>
-              </div>
-              <div className="field">
-                <label htmlFor="email-subject">Subject</label>
-                <input
-                  id="email-subject"
-                  className="input"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                />
-              </div>
-              {error && <div className="banner bannerError">{error}</div>}
-            </>
-          )}
-        </div>
+      <DialogContent sx={{ p: 2.5 }}>
+        {sent ? (
+          <Alert severity="success" sx={{ my: 1 }}>
+            Sent to {sent}.
+          </Alert>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+            <TextField
+              id="email-to"
+              label="Recipient Email"
+              type="email"
+              autoFocus
+              fullWidth
+              size="small"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder={defaultTo ? defaultTo : "name@example.com"}
+              helperText={
+                defaultTo
+                  ? "Defaults to the address on the document."
+                  : "No address is stored on this document — enter one."
+              }
+              disabled={busy}
+            />
 
-        <div className="modalFooter">
-          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="button buttonSecondary" onClick={onClose} disabled={busy}>
-              {sent ? "Done" : "Cancel"}
-            </button>
-            {!sent && (
-              <button
-                type="button"
-                className="button buttonPrimary"
-                onClick={send}
-                disabled={busy || (!to.trim() && !defaultTo)}
-              >
-                {busy ? "Sending…" : "Send email"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+            <TextField
+              id="email-subject"
+              label="Subject"
+              fullWidth
+              size="small"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              disabled={busy}
+            />
+
+            {error && <Alert severity="error">{error}</Alert>}
+          </Box>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ p: 2, px: 2.5, borderTop: "1px solid", borderColor: "divider", bgcolor: "var(--surface-subtle, #f8fbfd)" }}>
+        <Button variant="outlined" color="inherit" onClick={onClose} disabled={busy}>
+          {sent ? "Done" : "Cancel"}
+        </Button>
+        {!sent && (
+          <Button
+            variant="contained"
+            onClick={send}
+            disabled={busy || (!to.trim() && !defaultTo)}
+            startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
+            disableElevation
+          >
+            {busy ? "Sending…" : "Send email"}
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
   );
 }

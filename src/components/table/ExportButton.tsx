@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useImperativeHandle, useRef, useState, type Ref, type MouseEvent } from "react";
+import Alert from "@mui/material/Alert";
+import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Typography from "@mui/material/Typography";
 import { IconChevronDown, IconDownload } from "@/components/icons";
 
 /**
  * Triggers a download from an export endpoint, carrying the caller's current
  * filters and column selection so the file matches the screen exactly.
- *
- * The request goes through fetch (rather than a plain link) so that an error
- * response surfaces as a message instead of downloading a file full of JSON.
  */
 export interface ExportButtonHandle {
   /** Opens the format menu — used by the Ctrl+E shortcut. */
@@ -26,26 +31,26 @@ export default function ExportButton({
   disabled?: boolean;
   ref?: Ref<ExportButtonHandle>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-  useImperativeHandle(ref, () => ({ open: () => setOpen(true) }), []);
+  useImperativeHandle(ref, () => ({ open: () => setAnchorEl(buttonRef.current) }), []);
 
-  useEffect(() => {
-    if (!open) return;
-    function onClickAway(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickAway);
-    return () => document.removeEventListener("mousedown", onClickAway);
-  }, [open]);
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
 
   async function download(format: "xlsx" | "csv") {
     setBusy(format);
     setError(null);
-    setOpen(false);
+    handleClose();
     try {
       const search = params();
       search.set("format", format);
@@ -82,35 +87,83 @@ export default function ExportButton({
   }
 
   return (
-    <div className="columnPicker" ref={wrapRef}>
+    <div className="columnPicker" style={{ position: "relative" }}>
       <button
+        ref={buttonRef}
         type="button"
         className="button buttonSecondary"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleOpen}
         disabled={disabled || busy !== null}
         title="Export the filtered data with the selected columns (Ctrl + E)"
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
-        {busy ? <span className="spinner" /> : <IconDownload />}
+        {busy ? <CircularProgress size={14} color="inherit" /> : <IconDownload />}
         {busy ? `Exporting ${busy.toUpperCase()}…` : "Export"}
         <IconChevronDown style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }} />
       </button>
 
-      {open && (
-        <div className="columnPickerPanel" style={{ minWidth: "14rem", left: "auto", right: 0 }}>
-          <button type="button" className="exportOption" onClick={() => download("xlsx")}>
-            Excel (.xlsx)
-          </button>
-          <button type="button" className="exportOption" onClick={() => download("csv")}>
-            CSV (.csv)
-          </button>
-          <div className="exportNote">Exports all filtered rows using your selected columns.</div>
-        </div>
-      )}
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        slotProps={{
+          paper: {
+            elevation: 4,
+            sx: {
+              minWidth: "15rem",
+              borderRadius: 2.5,
+              border: "1px solid",
+              borderColor: "divider",
+              mt: 1,
+            },
+          },
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={() => download("xlsx")} sx={{ py: 1 }}>
+          <ListItemIcon sx={{ minWidth: 28, color: "success.main" }}>
+            <IconDownload />
+          </ListItemIcon>
+          <ListItemText
+            primary={<Typography variant="body2" sx={{ fontWeight: 600 }}>Excel (.xlsx)</Typography>}
+            secondary={<Typography variant="caption" color="text.secondary">Formatted spreadsheet</Typography>}
+          />
+        </MenuItem>
+
+        <MenuItem onClick={() => download("csv")} sx={{ py: 1 }}>
+          <ListItemIcon sx={{ minWidth: 28, color: "primary.main" }}>
+            <IconDownload />
+          </ListItemIcon>
+          <ListItemText
+            primary={<Typography variant="body2" sx={{ fontWeight: 600 }}>CSV (.csv)</Typography>}
+            secondary={<Typography variant="caption" color="text.secondary">Raw comma-separated values</Typography>}
+          />
+        </MenuItem>
+
+        <Divider sx={{ my: 0.5 }} />
+
+        <Typography variant="caption" sx={{ px: 2, py: 0.5, display: "block", color: "text.secondary", fontSize: "0.6875rem" }}>
+          Exports all filtered rows using your selected columns.
+        </Typography>
+      </Menu>
 
       {error && (
-        <div className="banner bannerError" role="alert" style={{ position: "absolute", top: "100%", right: 0, marginTop: "0.4rem", zIndex: 40, minWidth: "16rem" }}>
+        <Alert
+          severity="error"
+          onClose={() => setError(null)}
+          sx={{
+            position: "absolute",
+            top: "calc(100% + 0.5rem)",
+            right: 0,
+            zIndex: 40,
+            minWidth: "16rem",
+            fontSize: "0.8125rem",
+          }}
+        >
           {error}
-        </div>
+        </Alert>
       )}
     </div>
   );

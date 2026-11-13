@@ -5,6 +5,9 @@ import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
@@ -226,30 +229,44 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
             </span>
             {record.isSystemGenerated && <span className="badge badgeNeutral">Auto-posted</span>}
           </div>
-          <div className="docTopActions">
+          <div className="docTopActions" style={{ display: "flex", gap: "0.5rem" }}>
             {record.status === "POSTED" && !record.isSystemGenerated && (
-              <button type="button" className="button buttonDanger" onClick={() => setCancelOpen(true)}>
-                <IconTrash /> Cancel & reverse
-              </button>
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={() => setCancelOpen(true)}
+                startIcon={<IconTrash />}
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
+                Cancel & reverse
+              </Button>
             )}
-            <Link href="/account-vouchers" className="button buttonSecondary">
-              <IconClose /> Back
-            </Link>
+            <Button
+              component={Link}
+              href="/account-vouchers"
+              variant="outlined"
+              size="small"
+              startIcon={<IconClose />}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Back
+            </Button>
           </div>
         </div>
 
         {record.status === "CANCELLED" && (
-          <div className="banner bannerError" style={{ marginBottom: "0.9rem" }}>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
             Cancelled{record.cancellationReason ? `: ${record.cancellationReason}` : "."} A reversing entry was
             posted — the original is kept so past periods still reconcile.
-          </div>
+          </Alert>
         )}
 
         {record.isSystemGenerated && (
-          <div className="banner bannerLocked">
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
             This voucher was posted automatically by {record.sourceNumber ?? "a document"}. To reverse it,
             cancel that document — the ledger follows.
-          </div>
+          </Alert>
         )}
 
         <div className="docHeadGrid">
@@ -329,22 +346,36 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
     <form className="docForm" onSubmit={handleSubmit}>
       <div className="docTopBar">
         <div className="docTopTitle">New Journal Voucher</div>
-        <div className="docTopActions">
-          <button
+        <div className="docTopActions" style={{ display: "flex", gap: "0.5rem" }}>
+          <Button
             type="submit"
-            className="button buttonPrimary"
+            variant="contained"
+            size="small"
             disabled={submitting || !balanced}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <IconSave />}
             title={balanced ? "Save (Ctrl + S)" : "Debits and credits must be equal"}
+            sx={{ textTransform: "none", fontWeight: 600 }}
           >
-            <IconSave /> {submitting ? "Posting…" : "Post voucher"}
-          </button>
-          <Link href="/account-vouchers" className="button buttonSecondary">
-            <IconClose /> Cancel
-          </Link>
+            {submitting ? "Posting…" : "Post voucher"}
+          </Button>
+          <Button
+            component={Link}
+            href="/account-vouchers"
+            variant="outlined"
+            size="small"
+            startIcon={<IconClose />}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
         </div>
       </div>
 
-      {error && <div className="banner bannerError" style={{ marginBottom: "0.9rem" }}>{error}</div>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <div className="docHeadGrid">
         <div className="docHeadField">

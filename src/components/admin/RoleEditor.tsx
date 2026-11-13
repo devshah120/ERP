@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { PERMISSION_GROUPS } from "@/lib/auth/permissionCatalog";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
@@ -158,24 +161,30 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
         actions={
           isEdit &&
           !locked && (
-            <button type="button" className="button buttonSecondary" style={{ color: "var(--danger)" }} onClick={() => setConfirmDelete(true)}>
-              <IconTrash /> Delete
-            </button>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={() => setConfirmDelete(true)}
+              startIcon={<IconTrash />}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
+              Delete
+            </Button>
           )
         }
       />
 
       <div style={{ maxWidth: "70rem" }}>
         {locked && (
-          <div className="banner bannerLocked" style={{ marginBottom: "1rem" }}>
-            <span>This is a system role. It always has full access and cannot be changed.</span>
-          </div>
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+            This is a system role. It always has full access and cannot be changed.
+          </Alert>
         )}
         {error && (
-          <div className="banner bannerError" role="alert" style={{ marginBottom: "1rem" }}>
-            <IconAlertCircle />
-            <span>{error}</span>
-          </div>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+            {error}
+          </Alert>
         )}
 
         <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0 }}>
@@ -251,18 +260,31 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
         </fieldset>
 
         {!locked && (
-          <div className="formActionsBar">
-            <span className="formActionsNote">
+          <div className="formActionsBar" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span className="formActionsNote" style={{ marginRight: "auto" }}>
               {dirty ? "Unsaved changes" : isEdit ? "All changes saved" : "Name the role and pick its permissions"}
               <span className="hideMobile"> · Ctrl + S to save</span>
             </span>
-            <Link href="/user-roles" className="button buttonSecondary">
+            <Button
+              component={Link}
+              href="/user-roles"
+              variant="outlined"
+              size="small"
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
               {isEdit ? "Close" : "Cancel"}
-            </Link>
-            <button type="button" className="button buttonPrimary" onClick={save} disabled={saving || name.trim().length < 2}>
-              {saving && <span className="spinner" />}
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              size="small"
+              onClick={save}
+              disabled={saving || name.trim().length < 2}
+              startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
+              sx={{ textTransform: "none", fontWeight: 600 }}
+            >
               {saving ? "Saving…" : isEdit ? "Save role" : "Create role"}
-            </button>
+            </Button>
           </div>
         )}
       </div>

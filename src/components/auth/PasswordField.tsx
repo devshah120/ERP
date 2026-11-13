@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import IconButton from "@mui/material/IconButton";
 import { IconEye, IconEyeOff } from "@/components/icons";
 
 /** Mirrors the server rule in lib/auth/password.ts so the meter never disagrees with the API. */
@@ -80,16 +81,17 @@ export default function PasswordField({
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : showStrength ? `${id}-hint` : undefined}
         />
-        <button
+        <IconButton
           type="button"
           className="passwordToggle"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
           title={visible ? "Hide password" : "Show password"}
+          size="small"
         >
           {visible ? <IconEyeOff /> : <IconEye />}
-        </button>
+        </IconButton>
       </div>
       {showStrength && (
         <>

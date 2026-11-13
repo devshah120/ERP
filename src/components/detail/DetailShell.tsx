@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import Button from "@mui/material/Button";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
@@ -147,14 +148,20 @@ export default function DetailShell({
         }
         description={description?.(record)}
         actions={
-          <>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             {actions?.(record, load)}
             {canCancel && (
-              <button type="button" className="button buttonSecondary" style={{ color: "var(--danger)" }} onClick={() => setConfirming(true)}>
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={() => setConfirming(true)}
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
                 {cancel.label ?? "Cancel"}
-              </button>
+              </Button>
             )}
-          </>
+          </div>
         }
       />
       <div style={{ maxWidth: "72rem" }}>{children(record, load)}</div>

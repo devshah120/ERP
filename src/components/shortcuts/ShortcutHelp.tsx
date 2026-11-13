@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import { SHORTCUTS, displayKeys, isMacPlatform, type ShortcutScopeName } from "@/lib/shortcuts/registry";
+import { IconClose } from "@/components/icons";
 
 const SCOPE_ORDER: ShortcutScopeName[] = ["Global", "Listing", "Form", "Document", "POS", "Navigation"];
 
@@ -31,70 +38,102 @@ export default function ShortcutHelp() {
     setMac(isMacPlatform());
   }, []);
 
-  if (!helpOpen) return null;
-
   return (
-    <div className="modalBackdrop" onClick={closeHelp}>
-      <div className="modalCard shortcutModal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Keyboard shortcuts">
-        <div className="modalHeader">
-          <div>
-            <div className="modalTitle">Keyboard shortcuts</div>
-            <div className="modalSubtitle">
-              Press <kbd>{mac ? "⌘" : "Ctrl"}</kbd> + <kbd>/</kbd> at any time to open or close this list.
-              {mac ? " On this Mac, ⌘ replaces Ctrl and ⌥ replaces Alt." : ""}
-            </div>
-          </div>
-          <button type="button" className="button buttonSecondary" onClick={closeHelp}>
-            Close
-          </button>
-        </div>
+    <Dialog
+      open={helpOpen}
+      onClose={closeHelp}
+      maxWidth="md"
+      fullWidth
+      slotProps={{
+        paper: {
+          elevation: 6,
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+            maxHeight: "88vh",
+          },
+        },
+      }}
+      aria-label="Keyboard shortcuts"
+    >
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          p: 2.5,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box sx={{ minWidth: 0, pr: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.0625rem" }}>
+            Keyboard shortcuts
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8125rem", mt: 0.5 }}>
+            Press <kbd>{mac ? "⌘" : "Ctrl"}</kbd> + <kbd>/</kbd> at any time to open or close this list.
+            {mac ? " On this Mac, ⌘ replaces Ctrl and ⌥ replaces Alt." : ""}
+          </Typography>
+        </Box>
+        <IconButton
+          aria-label="Close"
+          onClick={closeHelp}
+          size="small"
+          sx={{ color: "text.secondary", mt: -0.5, mr: -0.5 }}
+        >
+          <IconClose />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="modalBody">
-          {SCOPE_ORDER.map((scope) => {
-            const rows = SHORTCUTS.filter((s) => s.scope === scope);
-            if (rows.length === 0) return null;
-            return (
-              <section key={scope} className="shortcutSection">
-                <h3>{scope}</h3>
-                <p className="shortcutBlurb">{SCOPE_BLURB[scope]}</p>
-                <table className="table shortcutTable">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "11rem" }}>Shortcut</th>
-                      <th>Action</th>
-                      <th style={{ width: "10rem" }}>Applies to</th>
+      <DialogContent sx={{ p: 2.5 }}>
+        {SCOPE_ORDER.map((scope) => {
+          const rows = SHORTCUTS.filter((s) => s.scope === scope);
+          if (rows.length === 0) return null;
+          return (
+            <section key={scope} className="shortcutSection" style={{ marginBottom: "1.5rem" }}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.25rem 0", color: "var(--text-strong)" }}>
+                {scope}
+              </h3>
+              <p className="shortcutBlurb" style={{ margin: "0 0 0.5rem 0", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+                {SCOPE_BLURB[scope]}
+              </p>
+              <table className="table shortcutTable">
+                <thead>
+                  <tr>
+                    <th style={{ width: "11rem" }}>Shortcut</th>
+                    <th>Action</th>
+                    <th style={{ width: "10rem" }}>Applies to</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        {displayKeys(s.keys, mac)
+                          .split(" + ")
+                          .map((part, i) => (
+                            <span key={part}>
+                              {i > 0 && <span className="kbdPlus">+</span>}
+                              <kbd>{part}</kbd>
+                            </span>
+                          ))}
+                      </td>
+                      <td>{s.description}</td>
+                      <td className="shortcutApplies">{s.appliesTo ?? "All modules"}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((s) => (
-                      <tr key={s.id}>
-                        <td>
-                          {displayKeys(s.keys, mac)
-                            .split(" + ")
-                            .map((part, i) => (
-                              <span key={part}>
-                                {i > 0 && <span className="kbdPlus">+</span>}
-                                <kbd>{part}</kbd>
-                              </span>
-                            ))}
-                        </td>
-                        <td>{s.description}</td>
-                        <td className="shortcutApplies">{s.appliesTo ?? "All modules"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            );
-          })}
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
 
-          <p className="shortcutFootnote">
-            Global shortcuts stay out of your way while you type: pressing N or E inside a field types the
-            letter. The exceptions are deliberate — Ctrl + S saves from inside a form, and Ctrl + / opens this
-            list from anywhere.
-          </p>
-        </div>
-      </div>
-    </div>
+        <p className="shortcutFootnote" style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+          Global shortcuts stay out of your way while you type: pressing N or E inside a field types the
+          letter. The exceptions are deliberate — Ctrl + S saves from inside a form, and Ctrl + / opens this
+          list from anywhere.
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }

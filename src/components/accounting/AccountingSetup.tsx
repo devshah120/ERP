@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useToast } from "@/components/ui/Toast";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { IconWarning, IconRefresh } from "@/components/icons";
@@ -60,8 +63,16 @@ export default function AccountingSetup({ onReady }: { onReady?: () => void }) {
 
   return (
     <>
-      {error && <div className="banner bannerError" style={{ marginBottom: "0.9rem" }}>{error}</div>}
-      {message && <div className="banner bannerSuccess" style={{ marginBottom: "0.9rem" }}>{message}</div>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {message && (
+        <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+          {message}
+        </Alert>
+      )}
 
       {!state.enabled ? (
         <div className="setupCard">
@@ -76,14 +87,16 @@ export default function AccountingSetup({ onReady }: { onReady?: () => void }) {
               and General Ledger will be empty.
             </p>
           </div>
-          <button
-            type="button"
-            className="button buttonPrimary"
+          <Button
+            variant="contained"
+            size="small"
             onClick={() => run("/api/accounting/setup", "setup")}
             disabled={busy !== null}
+            startIcon={busy === "setup" ? <CircularProgress size={16} color="inherit" /> : undefined}
+            sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
           >
             {busy === "setup" ? "Creating…" : "Create chart of accounts"}
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="setupCard setupCardReady">
@@ -95,23 +108,37 @@ export default function AccountingSetup({ onReady }: { onReady?: () => void }) {
               backfill — it is safe to run more than once.
             </p>
           </div>
-          <button
-            type="button"
-            className="button buttonSecondary"
-            onClick={() => run("/api/accounting/setup", "topup")}
-            disabled={busy !== null}
-            title="Adds any standard accounts that are missing"
-          >
-            {busy === "topup" ? "Checking…" : "Top up chart"}
-          </button>
-          <button
-            type="button"
-            className="button buttonDark"
-            onClick={() => run("/api/accounting/backfill", "backfill")}
-            disabled={busy !== null}
-          >
-            <IconRefresh /> {busy === "backfill" ? "Posting…" : "Backfill ledger"}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => run("/api/accounting/setup", "topup")}
+              disabled={busy !== null}
+              title="Adds any standard accounts that are missing"
+              startIcon={busy === "topup" ? <CircularProgress size={16} color="inherit" /> : undefined}
+              sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              {busy === "topup" ? "Checking…" : "Top up chart"}
+            </Button>
+            <Button
+              variant="contained"
+              color="inherit"
+              size="small"
+              onClick={() => run("/api/accounting/backfill", "backfill")}
+              disabled={busy !== null}
+              startIcon={busy === "backfill" ? <CircularProgress size={16} color="inherit" /> : <IconRefresh />}
+              sx={{
+                textTransform: "none",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                bgcolor: "text.primary",
+                color: "background.paper",
+                "&:hover": { bgcolor: "text.secondary" },
+              }}
+            >
+              {busy === "backfill" ? "Posting…" : "Backfill ledger"}
+            </Button>
+          </div>
         </div>
       )}
     </>

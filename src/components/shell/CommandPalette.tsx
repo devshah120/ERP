@@ -13,7 +13,8 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
-import { NAV_GROUPS, creatableModules } from "@/app/(app)/navigation";
+import { NAV_GROUPS, creatableModules, getRequiredPermission, getCreatePermission } from "@/app/(app)/navigation";
+import { useAuth } from "@/app/(app)/AuthProvider";
 import { apiFetch } from "@/lib/api/client";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import { humanizeStatus } from "@/components/ui/StatusBadge";
@@ -75,6 +76,7 @@ function score(item: PaletteItem, q: string): number {
  */
 export default function CommandPalette() {
   const router = useRouter();
+  const { hasPermission } = useAuth();
   const { paletteOpen, closePalette, openHelp } = useShortcuts();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -100,6 +102,8 @@ export default function CommandPalette() {
     const items: PaletteItem[] = [];
     for (const g of NAV_GROUPS) {
       if (g.href && !g.soon) {
+        const perm = getRequiredPermission(g.href);
+        if (perm && !hasPermission(perm)) continue;
         items.push({
           id: `nav:${g.href}`,
           group: "Go to",
@@ -111,6 +115,8 @@ export default function CommandPalette() {
       }
       for (const c of g.children ?? []) {
         if (!c.enabled) continue;
+        const perm = getRequiredPermission(c.href);
+        if (perm && !hasPermission(perm)) continue;
         items.push({
           id: `nav:${c.href}`,
           group: "Go to",
@@ -123,6 +129,8 @@ export default function CommandPalette() {
       }
     }
     for (const m of creatableModules()) {
+      const perm = getCreatePermission(m.href);
+      if (perm && !hasPermission(perm)) continue;
       items.push({
         id: `new:${m.href}`,
         group: "Create",
@@ -146,7 +154,7 @@ export default function CommandPalette() {
       },
     });
     return items;
-  }, [router, closePalette, openHelp]);
+  }, [router, closePalette, openHelp, hasPermission]);
 
   // Live record search, debounced. Sources the user can't see (403) are skipped.
   useEffect(() => {

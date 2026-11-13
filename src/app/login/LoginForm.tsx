@@ -28,7 +28,7 @@ export default function LoginForm() {
     setSubmitting(true);
 
     try {
-      await apiFetch("/api/auth/login", {
+      const res = await apiFetch<{ superAdmin?: boolean; redirectTo?: string }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
@@ -36,7 +36,11 @@ export default function LoginForm() {
           rememberMe,
         }),
       });
-      router.push(next);
+      if (res?.superAdmin && res.redirectTo) {
+        router.push(res.redirectTo);
+      } else {
+        router.push(next);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError

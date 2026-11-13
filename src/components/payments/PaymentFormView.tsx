@@ -11,6 +11,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import type { PaymentUi } from "@/lib/payments/ui";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
+import { useAuth } from "@/app/(app)/AuthProvider";
+import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { PAYMENT_MODES } from "@/lib/payments/types";
 import { formatMoney } from "@/lib/format/number";
 
@@ -81,7 +83,9 @@ export default function PaymentFormView({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const { hasPermission } = useAuth();
   const isView = Boolean(recordId);
+  const canAct = hasPermission("*") || (isView ? hasPermission(config.permissions.view) : hasPermission(config.permissions.create));
   /** ?partyId= pre-selects the party, e.g. from the dashboard's aging table. */
   const presetPartyId = useSearchParams().get("partyId");
 
@@ -234,6 +238,10 @@ export default function PaymentFormView({
   });
 
   /* ---------------------------------------------- render */
+
+  if (!canAct) {
+    return <AccessDenied detail={`Missing required permission: ${isView ? config.permissions.view : config.permissions.create}`} />;
+  }
 
   if (loading) {
     return <div className="cardBody">Loading…</div>;

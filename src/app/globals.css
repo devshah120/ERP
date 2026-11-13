@@ -10494,3 +10494,663 @@ a.rowRemoveBtn.stAction:hover {
     font-size: 1.625rem;
   }
 }
+
+/* ==================================================================
+   Super Admin Portal Styles
+   ================================================================== */
+.saRoot {
+  min-height: 100vh;
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-family: inherit;
+}
+
+.saPage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.saPageCenter {
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, #f1f5f9 0%, #e2e8f0 100%);
+  padding: 1.5rem;
+}
+
+.saLoginCard {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  border: 1px solid #e2e8f0;
+  padding: 2.25rem 2rem;
+}
+
+.saLoginBrand {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #0a7bbf;
+  display: inline-block;
+}
+
+.saLoginBadge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: #e0f2fe;
+  color: #0284c7;
+  border-radius: 9999px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+.saLoginTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 1.25rem 0 0.35rem 0;
+}
+
+.saLoginSub {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+}
+
+.saBanner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  margin-bottom: 1.25rem;
+}
+
+.saBannerError {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.saForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.saField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.saField label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.saInput {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.875rem;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.saInput:focus {
+  border-color: #0a7bbf;
+  box-shadow: 0 0 0 3px rgba(10, 123, 191, 0.15);
+}
+
+.saPasswordWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.saPasswordWrap .saInput {
+  padding-right: 2.5rem;
+}
+
+.saPasswordToggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+}
+
+.saPasswordToggle:hover {
+  color: #0f172a;
+}
+
+/* Header */
+.saHeader {
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.saHeaderBrand {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #0a7bbf;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.saHeaderTag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: #e0f2fe;
+  color: #0284c7;
+  padding: 0.125rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.saHeaderNav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.saNavLink {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.saNavLink:hover {
+  color: #0f172a;
+}
+
+.saNavLinkActive {
+  color: #0a7bbf;
+  font-weight: 600;
+}
+
+/* Main */
+.saMain {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  flex: 1;
+}
+
+.saPageHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+}
+
+.saPageTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.saPageSub {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+/* Buttons */
+.saBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.saBtnSm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.saBtnPrimary {
+  background: #0a7bbf;
+  color: #ffffff;
+}
+
+.saBtnPrimary:hover:not(:disabled) {
+  background: #0868a3;
+}
+
+.saBtnSecondary {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.saBtnSecondary:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.saBtnGhost {
+  background: transparent;
+  color: #64748b;
+}
+
+.saBtnGhost:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.saBtnDanger {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.saBtnDanger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.saBtnBlock {
+  width: 100%;
+}
+
+.saBtnIcon {
+  padding: 0.5rem;
+  height: 36px;
+  width: 36px;
+}
+
+/* Cards */
+.saCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.saCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.saCardIcon {
+  font-size: 1.25rem;
+  color: #64748b;
+  margin-bottom: 0.75rem;
+}
+
+.saCardValue {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.saCardLabel {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-top: 0.35rem;
+}
+
+.saCard--active {
+  border-left: 4px solid #10b981;
+}
+
+.saCard--active .saCardIcon {
+  color: #10b981;
+}
+
+.saCard--danger {
+  border-left: 4px solid #ef4444;
+}
+
+.saCard--danger .saCardIcon {
+  color: #ef4444;
+}
+
+.saCard--warn {
+  border-left: 4px solid #f59e0b;
+}
+
+.saCard--warn .saCardIcon {
+  color: #f59e0b;
+}
+
+/* Sections & Tables */
+.saSection {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.saSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.saSectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.saTextLink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #0a7bbf;
+  text-decoration: none;
+}
+
+.saTextLink:hover {
+  text-decoration: underline;
+}
+
+.saTableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.saTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.saTable th {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.saTable td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.saTable tr:last-child td {
+  border-bottom: none;
+}
+
+.saTable tr:hover td {
+  background-color: #f8fafc;
+}
+
+.saTableEmpty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #94a3b8;
+}
+
+.saCellPrimary {
+  display: block;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.saCellSub {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.saCellMono {
+  font-family: monospace;
+  font-size: 0.8125rem;
+  color: #334155;
+}
+
+.saCellMuted {
+  color: #64748b;
+}
+
+/* Badges */
+.saBadge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.saBadgeActive {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.saBadgeSuspended {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.saBadgePending {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+/* Toolbar & Filters */
+.saToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.saSearchInput {
+  max-width: 320px;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: #ffffff;
+  outline: none;
+}
+
+.saSearchInput:focus {
+  border-color: #0a7bbf;
+}
+
+.saFilterGroup {
+  display: flex;
+  gap: 0.35rem;
+  background: #e2e8f0;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.saFilterBtn {
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.saFilterBtnActive {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+
+/* Detail view */
+.saBreadcrumb {
+  margin-bottom: 1rem;
+}
+
+.saDetailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.saDetailHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.saDetailIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.saDetailHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.saDetailGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 840px) {
+  .saDetailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.saPanel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.saPanelHead {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.saPanelTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.saPanelBody {
+  padding: 1.25rem;
+}
+
+.saInfoList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.saInfoRow dt {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.2rem;
+}
+
+.saInfoRow dd {
+  font-size: 0.875rem;
+  color: #0f172a;
+  margin: 0;
+}
+
+.saActionList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.saActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.saActionLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.saActionDesc {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+}
+
+.saLoadingMsg {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #64748b;
+}
+

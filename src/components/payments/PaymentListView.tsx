@@ -17,6 +17,7 @@ import ColumnPicker from "@/components/table/ColumnPicker";
 import ExportButton, { type ExportButtonHandle } from "@/components/table/ExportButton";
 import RowActions, { type RowAction } from "@/components/table/RowActions";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
+import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { IconPlus, IconRefresh, IconFilter, IconEye, IconTrash, IconChart } from "@/components/icons";
 
 /** How payment modes read on screen; the stored codes stay unchanged. */
@@ -75,7 +76,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
   const [pageSize, setPageSize] = useState(15);
   const [result, setResult] = useState<ListResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PaymentRow | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -110,7 +111,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
       for (const [k, v] of Object.entries(applied)) if (v) params.set(k, v);
       setResult(await apiFetch<ListResult>(`${config.apiPath}?${params.toString()}`));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Failed to load ${config.title.toLowerCase()}`);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -175,6 +176,12 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
   const total = result?.total ?? 0;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const activeFilterCount = Object.entries(applied).filter(([k, v]) => k !== "query" && v).length;
+
+  if (error && isForbidden(error)) {
+    return <AccessDenied detail={error instanceof ApiError ? error.message : "You do not have permission to view this screen."} />;
+  }
+
+  const errorMessage = error ? (error instanceof ApiError ? error.message : `Failed to load ${config.title.toLowerCase()}`) : null;
 
   return (
     <>
@@ -313,7 +320,7 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
         </div>
       )}
 
-      {error && <div className="banner bannerError" style={{ marginBottom: "1rem" }}>{error}</div>}
+      {errorMessage && <div className="banner bannerError" style={{ marginBottom: "1rem" }}>{errorMessage}</div>}
       {notice && (
         <div className="banner bannerSuccess" style={{ marginBottom: "1rem" }}>
           {notice}

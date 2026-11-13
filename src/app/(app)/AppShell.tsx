@@ -10,7 +10,16 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { useAuth } from "./AuthProvider";
-import { NAV_SECTIONS, NAV_GROUPS, breadcrumbsFor, creatableModules, type NavGroup, type NavChild } from "./navigation";
+import {
+  NAV_SECTIONS,
+  NAV_GROUPS,
+  breadcrumbsFor,
+  creatableModules,
+  getRequiredPermission,
+  getCreatePermission,
+  type NavGroup,
+  type NavChild,
+} from "./navigation";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
@@ -40,7 +49,7 @@ function hit(text: string | undefined, q: string) {
 type Flyout = { key: string; top: number; kind: "tip" | "menu" } | null;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { me, loading } = useAuth();
+  const { me, loading, hasPermission } = useAuth();
   const { openPalette } = useShortcuts();
   const pathname = usePathname();
 
@@ -109,7 +118,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (flyoutTimer.current) clearTimeout(flyoutTimer.current);
   }
 
-  // What the sidebar shows after the menu filter.
+  // What the sidebar shows after the permission check and menu filter.
   const q = menuQuery.trim().toLowerCase();
   const visibleSections = useMemo(() => {
     return NAV_SECTIONS.map((section) => ({
@@ -118,10 +127,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .map((g) => {
           if (g.href) {
             if (g.soon) return null;
+            const perm = getRequiredPermission(g.href);
+            if (perm && !hasPermission(perm)) return null;
             if (q && !hit(g.label, q) && !hit(g.keywords, q)) return null;
             return { group: g, children: [] as NavChild[] };
           }
-          let kids = (g.children ?? []).filter((c) => c.enabled);
+          let kids = (g.children ?? []).filter((c) => {
+            if (!c.enabled) return false;
+            const perm = getRequiredPermission(c.href);
+            if (perm && !hasPermission(perm)) return false;
+            return true;
+          });
           if (q) {
             const groupHit = hit(g.label, q) || hit(g.keywords, q);
             if (!groupHit) kids = kids.filter((c) => hit(c.label, q) || hit(c.keywords, q));
@@ -130,7 +146,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         })
         .filter((x): x is { group: NavGroup; children: NavChild[] } => x !== null),
     })).filter((s) => s.groups.length > 0);
-  }, [q]);
+  }, [q, hasPermission]);
 
   if (loading || !me) {
     return (
@@ -143,7 +159,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const crumbs = breadcrumbsFor(pathname);
   const flyoutGroup = flyout ? NAV_GROUPS.find((g) => g.key === flyout.key) : undefined;
-  const flyoutChildren = flyoutGroup?.children?.filter((c) => c.enabled) ?? [];
+  const flyoutChildren = (flyoutGroup?.children ?? [])
+    .filter((c) => c.enabled)
+    .filter((c) => {
+      const perm = getRequiredPermission(c.href);
+      return !perm || hasPermission(perm);
+    });
   const filtering = q.length > 0;
 
   return (
@@ -390,10 +411,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 /** "+ New" — every creatable record type, grouped by module. */
 function QuickCreate() {
+  const { hasPermission } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
-  const modules = creatableModules();
-  const groups = [...new Set(modules.map((m) => m.group))];
+  const allModules = useMemo(() => creatableModules(), []);
+  const modules = useMemo(
+    () =>
+      allModules.filter((m) => {
+        const perm = getCreatePermission(m.href);
+        return !perm || hasPermission(perm);
+      }),
+    [allModules, hasPermission]
+  );
+  const groups = useMemo(() => [...new Set(modules.map((m) => m.group))], [modules]);
+
+  if (modules.length === 0) return null;
 
   const handleOpen = (e: MouseEvent<HTMLElement>) => {
     setAnchorEl(e.currentTarget);

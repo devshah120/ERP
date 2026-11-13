@@ -365,3 +365,156 @@ export function creatableModules(): { label: string; href: string; group: string
   );
 }
 
+/** Permission required to view a specific route in the sidebar / palette. */
+const ROUTE_PERMISSIONS: Record<string, string> = {
+  // Contacts
+  "/customers": "customers.view",
+  "/vendors": "vendors.view",
+  "/agents": "agents.view",
+  "/transporters": "transporters.view",
+
+  // Items & Stock
+  "/items": "items.view",
+  "/inventory": "items.view",
+  "/stock-adjustments": "stock-adjustments.view",
+  "/stock-ledger": "items.view",
+  "/categories": "categories.view",
+  "/brands": "brands.view",
+  "/units": "units.view",
+  "/departments": "departments.view",
+  "/category-variants": "category-variants.view",
+  "/combo-products": "combo-products.view",
+
+  // Sales
+  "/sales-quotations": "sales-quotations.view",
+  "/sales-orders": "sales-orders.view",
+  "/delivery-challans": "delivery-challans.view",
+  "/sales-invoices": "sales-invoices.view",
+  "/sales-returns": "sales-returns.view",
+  "/credit-notes": "credit-notes.view",
+  "/sales-terms": "sales-terms.view",
+
+  // Purchase
+  "/purchase-orders": "purchase-orders.view",
+  "/goods-receipts": "goods-receipts.view",
+  "/purchase-invoices": "purchase-invoices.view",
+  "/purchase-returns": "purchase-returns.view",
+  "/debit-notes": "debit-notes.view",
+  "/purchase-terms": "purchase-terms.view",
+
+  // POS
+  "/pos/register": "pos.view",
+  "/pos/orders": "pos.view",
+  "/pos/credit-notes": "pos.view",
+  "/pos/registers": "pos.manage-registers",
+
+  // CRM
+  "/coupons": "coupons.view",
+  "/memberships": "memberships.view",
+  "/discounts": "discounts.view",
+  "/loyalty-programs": "loyalty-programs.view",
+  "/feedback": "feedback.view",
+
+  // Finance
+  "/receipts": "receipts.view",
+  "/payments": "payments.view",
+  "/bank-accounts": "bank-accounts.view",
+  "/bank-transactions": "bank-accounts.view",
+  "/expenses": "expenses.view",
+  "/bank-reconciliation": "bank-reconciliation.view",
+  "/chart-of-accounts": "chart-of-accounts.view",
+  "/account-vouchers": "vouchers.view",
+  "/general-ledger": "chart-of-accounts.view",
+  "/reports/trial-balance": "chart-of-accounts.view",
+  "/reports/profit-and-loss": "chart-of-accounts.view",
+
+  // Reports
+  "/reports/sales-register": "sales-invoices.view",
+  "/reports/sales-detail": "sales-invoices.view",
+  "/reports/purchase-register": "purchase-invoices.view",
+  "/reports/purchase-detail": "purchase-invoices.view",
+  "/reports/gst-hsn-summary": "sales-invoices.view",
+  "/reports/stock-summary": "items.view",
+  "/reports/customer-report": "customers.view",
+  "/reports/vendor-report": "vendors.view",
+  "/reports/item-report": "items.view",
+
+  // Analytics
+  "/analysis/sales": "analytics.view",
+  "/analysis/purchase": "analytics.view",
+  "/analysis/inventory": "analytics.view",
+  "/analysis/customers": "analytics.view",
+  "/analysis/vendors": "analytics.view",
+  "/analysis/accounting": "analytics.view",
+
+  // Admin
+  "/users": "users.view",
+  "/user-roles": "roles.view",
+  "/barcode-labels": "items.view",
+  "/tally-export": "tally-export.view",
+  "/document-prefixes": "document-prefixes.view",
+  "/tax-rates": "tax-rates.view",
+  "/payment-terms": "payment-terms.view",
+  "/additional-charges": "additional-charges.view",
+  "/settings": "settings.view",
+  "/settings/financial-years": "financial-years.view",
+  "/settings/items": "settings.view",
+  "/settings/sales": "settings.view",
+  "/settings/purchase": "settings.view",
+  "/settings/pos": "settings.view",
+  "/settings/print-formats": "settings.view",
+  "/settings/notifications": "settings.view",
+  "/logs": "audit-logs.view",
+};
+
+export function getRequiredPermission(href: string): string | null {
+  return ROUTE_PERMISSIONS[href] ?? null;
+}
+
+/** Permission required to perform a "create" action for a module. */
+const CREATE_PERMISSIONS: Record<string, string> = {
+  "/customers/new": "customers.create",
+  "/vendors/new": "vendors.create",
+  "/agents/new": "agents.create",
+  "/transporters/new": "transporters.create",
+  "/items/new": "items.create",
+  "/stock-adjustments/new": "stock-adjustments.create",
+  "/categories/new": "categories.create",
+  "/brands/new": "brands.create",
+  "/units/new": "units.create",
+  "/departments/new": "departments.create",
+  "/category-variants/new": "category-variants.create",
+  "/combo-products/new": "combo-products.create",
+  "/sales-quotations/new": "sales-quotations.create",
+  "/sales-orders/new": "sales-orders.create",
+  "/delivery-challans/new": "delivery-challans.create",
+  "/sales-invoices/new": "sales-invoices.create",
+  "/sales-returns/new": "sales-returns.create",
+  "/credit-notes/new": "credit-notes.create",
+  "/sales-terms/new": "sales-terms.create",
+  "/purchase-orders/new": "purchase-orders.create",
+  "/goods-receipts/new": "goods-receipts.create",
+  "/purchase-invoices/new": "purchase-invoices.create",
+  "/purchase-returns/new": "purchase-returns.create",
+  "/debit-notes/new": "debit-notes.create",
+  "/purchase-terms/new": "purchase-terms.create",
+  "/coupons/new": "coupons.create",
+  "/memberships/new": "memberships.create",
+  "/discounts/new": "discounts.create",
+  "/loyalty-programs/new": "loyalty-programs.create",
+  "/feedback/new": "feedback.create",
+  "/receipts/new": "receipts.create",
+  "/payments/new": "payments.create",
+  "/bank-accounts/new": "bank-accounts.create",
+  "/expenses/new": "expenses.create",
+  "/account-vouchers/new": "vouchers.create",
+  "/tax-rates/new": "tax-rates.create",
+  "/payment-terms/new": "payment-terms.create",
+  "/additional-charges/new": "additional-charges.create",
+};
+
+export function getCreatePermission(createHref: string): string | null {
+  return CREATE_PERMISSIONS[createHref] ?? null;
+}
+
+

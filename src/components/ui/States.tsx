@@ -1,10 +1,17 @@
+"use client";
+
 import type { ReactNode } from "react";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Skeleton from "@mui/material/Skeleton";
 import { IconAlertCircle, IconInbox, IconSearch } from "@/components/icons";
 
 /**
- * Empty, error and loading placeholders. Every list and panel uses these so
- * "nothing here", "something broke" and "still loading" each look the same
- * everywhere — and each tells the user what to do next.
+ * Modernized Empty, Error and Loading placeholders built on Material UI.
+ * Provides consistent elevation, typography and responsive layout.
  */
 export function EmptyState({
   icon,
@@ -22,14 +29,53 @@ export function EmptyState({
   variant?: "empty" | "search";
 }) {
   return (
-    <div className={`emptyState ${compact ? "emptyStateCompact" : ""}`}>
-      <span className="emptyStateIcon" aria-hidden>
+    <Box
+      className={`emptyState ${compact ? "emptyStateCompact" : ""}`}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        p: compact ? 3 : 5,
+        bgcolor: "var(--surface, #ffffff)",
+        borderRadius: 2,
+        border: "1px dashed",
+        borderColor: "divider",
+      }}
+    >
+      <Box
+        className="emptyStateIcon"
+        aria-hidden
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          bgcolor: "var(--surface-muted, #f1f5f9)",
+          color: "text.secondary",
+          mb: 1.5,
+          "& svg": { width: 22, height: 22 },
+        }}
+      >
         {icon ?? (variant === "search" ? <IconSearch /> : <IconInbox />)}
-      </span>
-      <div className="emptyStateTitle">{title}</div>
-      {description && <div className="emptyStateText">{description}</div>}
-      {actions && <div className="emptyStateActions">{actions}</div>}
-    </div>
+      </Box>
+      <Typography variant="subtitle1" className="emptyStateTitle" sx={{ fontWeight: 600, color: "text.primary" }}>
+        {title}
+      </Typography>
+      {description && (
+        <Typography variant="body2" className="emptyStateText" sx={{ color: "text.secondary", maxWidth: 420, mt: 0.5, fontSize: "0.8125rem" }}>
+          {description}
+        </Typography>
+      )}
+      {actions && (
+        <Box className="emptyStateActions" sx={{ mt: 2, display: "flex", gap: 1 }}>
+          {actions}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -43,24 +89,30 @@ export function ErrorState({
   onRetry?: () => void;
 }) {
   return (
-    <div className="emptyState emptyStateCompact" role="alert">
-      <span className="emptyStateIcon danger" aria-hidden>
-        <IconAlertCircle />
-      </span>
-      <div className="emptyStateTitle">{title}</div>
-      <div className="emptyStateText">{message}</div>
-      {onRetry && (
-        <div className="emptyStateActions">
-          <button type="button" className="button buttonSecondary" onClick={onRetry}>
+    <Alert
+      severity="error"
+      icon={<IconAlertCircle />}
+      action={
+        onRetry ? (
+          <Button color="error" size="small" variant="outlined" onClick={onRetry} sx={{ borderRadius: 1 }}>
             Try again
-          </button>
-        </div>
-      )}
-    </div>
+          </Button>
+        ) : undefined
+      }
+      sx={{
+        borderRadius: 2,
+        my: 2,
+        alignItems: "center",
+      }}
+    >
+      <AlertTitle sx={{ fontWeight: 600, fontSize: "0.875rem", mb: 0.25 }}>{title}</AlertTitle>
+      <Typography variant="body2" sx={{ fontSize: "0.8125rem" }}>
+        {message}
+      </Typography>
+    </Alert>
   );
 }
 
-/** Varying widths so a skeleton reads as "rows of data", not a grey slab. */
 const WIDTHS = ["70%", "55%", "85%", "40%", "65%", "50%", "75%"];
 
 export function SkeletonRows({ rows = 6, columns }: { rows?: number; columns: number }) {
@@ -69,8 +121,12 @@ export function SkeletonRows({ rows = 6, columns }: { rows?: number; columns: nu
       {Array.from({ length: rows }, (_, r) => (
         <tr key={r} className="skeletonRow" aria-hidden>
           {Array.from({ length: columns }, (_, c) => (
-            <td key={c}>
-              <span className="skeleton" style={{ width: WIDTHS[(r + c) % WIDTHS.length] }} />
+            <td key={c} style={{ padding: "8px 12px" }}>
+              <Skeleton
+                variant="text"
+                animation="wave"
+                sx={{ width: WIDTHS[(r + c) % WIDTHS.length], height: 20 }}
+              />
             </td>
           ))}
         </tr>
@@ -81,15 +137,30 @@ export function SkeletonRows({ rows = 6, columns }: { rows?: number; columns: nu
 
 export function SkeletonBlock({ lines = 3, height }: { lines?: number; height?: string }) {
   return (
-    <div className="skeletonCard" aria-hidden>
-      <span className="skeleton" style={{ width: "35%", height: "0.7rem" }} />
+    <Box
+      className="skeletonCard"
+      aria-hidden
+      sx={{
+        p: 2.5,
+        bgcolor: "var(--surface, #ffffff)",
+        borderRadius: 2,
+        border: "1px solid",
+        borderColor: "divider",
+      }}
+    >
+      <Skeleton variant="text" animation="wave" sx={{ width: "35%", height: 20, mb: 1.5 }} />
       {height ? (
-        <span className="skeleton" style={{ width: "100%", height }} />
+        <Skeleton variant="rectangular" animation="wave" sx={{ width: "100%", height, borderRadius: 1 }} />
       ) : (
         Array.from({ length: lines }, (_, i) => (
-          <span key={i} className="skeleton" style={{ width: WIDTHS[i % WIDTHS.length] }} />
+          <Skeleton
+            key={i}
+            variant="text"
+            animation="wave"
+            sx={{ width: WIDTHS[i % WIDTHS.length], height: 18, my: 0.5 }}
+          />
         ))
       )}
-    </div>
+    </Box>
   );
 }

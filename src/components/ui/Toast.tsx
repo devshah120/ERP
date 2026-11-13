@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { IconAlertCircle, IconCheckCircle, IconClose, IconInfo } from "@/components/icons";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Typography from "@mui/material/Typography";
+import Stack from "@mui/material/Stack";
 
 type ToastTone = "success" | "error" | "info";
 
@@ -23,8 +27,8 @@ const ToastContext = createContext<ToastApi | null>(null);
 const DURATION: Record<ToastTone, number> = { success: 3500, info: 4000, error: 6500 };
 
 /**
- * Transient confirmations ("Customer saved") that don't need to sit in the
- * page. Errors stay longer and are announced assertively for screen readers.
+ * Modernized Toast system built on Material UI Snackbar & Alert.
+ * Provides accessible, stacked notifications with exact API compatibility.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
@@ -37,7 +41,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback(
     (tone: ToastTone, title: string, description?: string) => {
       const id = nextId.current++;
-      setItems((list) => [...list.slice(-3), { id, tone, title, description }]);
+      setItems((list) => [...list.slice(-2), { id, tone, title, description }]);
       setTimeout(() => dismiss(id), DURATION[tone]);
     },
     [dismiss]
@@ -55,22 +59,37 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="toastStack" aria-live="polite">
-        {items.map((t) => (
-          <div key={t.id} className={`toast toast-${t.tone}`} role={t.tone === "error" ? "alert" : "status"}>
-            <span className="toastIcon">
-              {t.tone === "success" ? <IconCheckCircle /> : t.tone === "error" ? <IconAlertCircle /> : <IconInfo />}
-            </span>
-            <div className="toastBody">
-              <strong>{t.title}</strong>
-              {t.description && <span>{t.description}</span>}
-            </div>
-            <button type="button" className="toastClose" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-              <IconClose />
-            </button>
-          </div>
-        ))}
-      </div>
+      <Snackbar
+        open={items.length > 0}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{ mb: 2, mr: 2, zIndex: 9999 }}
+      >
+        <Stack spacing={1.5} sx={{ width: "100%", maxWidth: 360 }}>
+          {items.map((t) => (
+            <Alert
+              key={t.id}
+              severity={t.tone}
+              variant="filled"
+              onClose={() => dismiss(t.id)}
+              sx={{
+                boxShadow: "0 10px 15px -3px rgba(15, 23, 42, 0.18), 0 4px 6px -4px rgba(15, 23, 42, 0.1)",
+                borderRadius: 2,
+                fontSize: "0.8125rem",
+                width: "100%",
+              }}
+            >
+              <AlertTitle sx={{ fontWeight: 700, fontSize: "0.875rem", mb: t.description ? 0.25 : 0 }}>
+                {t.title}
+              </AlertTitle>
+              {t.description && (
+                <Typography variant="body2" sx={{ fontSize: "0.75rem", opacity: 0.9 }}>
+                  {t.description}
+                </Typography>
+              )}
+            </Alert>
+          ))}
+        </Stack>
+      </Snackbar>
     </ToastContext.Provider>
   );
 }

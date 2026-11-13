@@ -1,25 +1,17 @@
 "use client";
 
-import { IconChevronLeft, IconChevronRight } from "@/components/icons";
+import Box from "@mui/material/Box";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Typography from "@mui/material/Typography";
+import MuiPagination from "@mui/material/Pagination";
 
 const PAGE_SIZES = [10, 15, 25, 50, 100];
 
-/** Page numbers to show: always first and last, a window around the current page, gaps as null. */
-function pageWindow(page: number, totalPages: number): (number | null)[] {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-  const pages = new Set([1, totalPages, page - 1, page, page + 1]);
-  if (page <= 3) [2, 3, 4].forEach((p) => pages.add(p));
-  if (page >= totalPages - 2) [totalPages - 3, totalPages - 2, totalPages - 1].forEach((p) => pages.add(p));
-  const sorted = [...pages].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b);
-  const out: (number | null)[] = [];
-  sorted.forEach((p, i) => {
-    if (i > 0 && p - sorted[i - 1] > 1) out.push(null);
-    out.push(p);
-  });
-  return out;
-}
-
-/** Table footer: rows-per-page, the visible range, and page navigation. */
+/**
+ * Modernized Pagination built on Material UI Pagination and Select.
+ * Preserves Indian number formatting, rows-per-page selection, and pagination windowing.
+ */
 export default function Pagination({
   page,
   pageSize,
@@ -38,69 +30,57 @@ export default function Pagination({
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="tableFooter">
-      <div className="pagerSize">
-        <label htmlFor="pager-size" className="hideMobile">
+    <Box
+      className="tableFooter"
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 1.5,
+        p: 1.5,
+        borderTop: "1px solid",
+        borderColor: "divider",
+        bgcolor: "var(--surface, #ffffff)",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Typography variant="body2" sx={{ color: "text.secondary", fontSize: "0.8125rem", display: { xs: "none", sm: "inline" } }}>
           Rows per page
-        </label>
-        <select
+        </Typography>
+        <Select
           id="pager-size"
+          size="small"
           value={pageSize}
           onChange={(e) => {
             onPageSize(Number(e.target.value));
             onPage(1);
           }}
+          sx={{ height: 28, fontSize: "0.8125rem", borderRadius: "4px" }}
         >
           {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>
+            <MenuItem key={n} value={n} sx={{ fontSize: "0.8125rem" }}>
               {n}
-            </option>
+            </MenuItem>
           ))}
-        </select>
-        <span className="tabular">
+        </Select>
+        <Typography variant="body2" sx={{ color: "text.secondary", fontSize: "0.8125rem" }}>
           {from.toLocaleString("en-IN")}–{to.toLocaleString("en-IN")} of {total.toLocaleString("en-IN")}
-        </span>
-      </div>
+        </Typography>
+      </Box>
 
       {totalPages > 1 && (
-        <nav className="pager" aria-label="Pagination">
-          <button
-            type="button"
-            className="pagerBtn"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            aria-label="Previous page"
-          >
-            <IconChevronLeft />
-          </button>
-          {pageWindow(page, totalPages).map((p, i) =>
-            p === null ? (
-              <span key={`gap-${i}`} className="pagerGap">
-                …
-              </span>
-            ) : (
-              <button
-                key={p}
-                type="button"
-                className="pagerBtn"
-                aria-current={p === page ? "page" : undefined}
-                onClick={() => onPage(p)}
-              >
-                {p}
-              </button>
-            )
-          )}
-          <button
-            type="button"
-            className="pagerBtn"
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-            aria-label="Next page"
-          >
-            <IconChevronRight />
-          </button>
-        </nav>
+        <MuiPagination
+          count={totalPages}
+          page={page}
+          onChange={(_, p) => onPage(p)}
+          size="small"
+          color="primary"
+          shape="rounded"
+          showFirstButton
+          showLastButton
+        />
       )}
-    </div>
+    </Box>
   );
 }

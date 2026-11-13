@@ -1,13 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Alert from "@mui/material/Alert";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useEscapeHandler } from "@/lib/shortcuts/ShortcutProvider";
 import { IconWarning } from "@/components/icons";
 
 /**
- * Confirmation for anything destructive. Destructive actions ask for a typed
- * reason where the server will record one, so the audit log says *why* a
- * document was cancelled rather than only that it was.
+ * Modernized Confirmation dialog built on Material UI Dialog.
+ * Preserves audit reason capture, keyboard shortcuts, and destructive confirmation styling.
  */
 export default function ConfirmDialog({
   title,
@@ -36,65 +45,88 @@ export default function ConfirmDialog({
   const blocked = requireReason && reason.trim().length === 0;
 
   return (
-    <div className="modalBackdrop" onClick={busy ? undefined : onCancel}>
-      <div
-        className="modalCard confirmCard"
-        onClick={(e) => e.stopPropagation()}
-        role="alertdialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <div className="modalHeader">
-          <div className="confirmHeading">
-            <span className={`confirmIcon confirmIcon-${tone}`}>
-              <IconWarning />
-            </span>
-            <div>
-              <div className="modalTitle">{title}</div>
-              <div className="modalSubtitle">{message}</div>
-            </div>
-          </div>
-        </div>
+    <Dialog
+      open
+      onClose={busy ? undefined : onCancel}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 2.5,
+            p: 0.5,
+          },
+        },
+      }}
+      role="alertdialog"
+      aria-label={title}
+    >
+      <DialogTitle sx={{ pb: 1, pt: 2.5, px: 2.5 }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              flexShrink: 0,
+              bgcolor: tone === "danger" ? "error.light" : "primary.light",
+              color: tone === "danger" ? "error.main" : "primary.main",
+            }}
+          >
+            <IconWarning />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700, fontSize: "1rem", color: "text.primary" }}>
+              {title}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5, fontSize: "0.8125rem" }}>
+              {message}
+            </Typography>
+          </Box>
+        </Box>
+      </DialogTitle>
 
+      <DialogContent sx={{ px: 2.5, pt: 1, pb: 1.5 }}>
         {requireReason && (
-          <div className="modalBody">
-            <div className="field">
-              <label htmlFor="confirm-reason">Reason (recorded in the audit log)</label>
-              <input
-                id="confirm-reason"
-                className="input"
-                autoFocus
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Raised against the wrong customer"
-              />
-            </div>
-          </div>
+          <Box sx={{ mt: 1.5 }}>
+            <TextField
+              id="confirm-reason"
+              label="Reason (recorded in audit log)"
+              autoFocus
+              fullWidth
+              size="small"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Raised against wrong customer"
+              disabled={busy}
+            />
+          </Box>
         )}
 
         {error && (
-          <div className="modalBody" style={{ paddingTop: 0 }}>
-            <div className="banner bannerError">{error}</div>
-          </div>
+          <Alert severity="error" sx={{ mt: 1.5, py: 0.5, fontSize: "0.8125rem" }}>
+            {error}
+          </Alert>
         )}
+      </DialogContent>
 
-        <div className="modalFooter">
-          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="button buttonSecondary" onClick={onCancel} disabled={busy}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={`button ${tone === "danger" ? "buttonDanger" : "buttonPrimary"}`}
-              onClick={() => onConfirm(requireReason ? reason.trim() : undefined)}
-              disabled={busy || blocked}
-            >
-              {busy && <span className="spinner" />}
-              {busy ? "Working…" : confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      <DialogActions sx={{ p: 2, px: 2.5, gap: 1 }}>
+        <Button variant="outlined" color="secondary" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          color={tone === "danger" ? "error" : "primary"}
+          onClick={() => onConfirm(requireReason ? reason.trim() : undefined)}
+          disabled={busy || blocked}
+          startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
+        >
+          {busy ? "Working…" : confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

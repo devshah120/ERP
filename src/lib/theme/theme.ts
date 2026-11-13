@@ -50,6 +50,13 @@ export const theme = createTheme({
       secondary: "#64748b",
     },
     divider: "#e5e7eb",
+    action: {
+      hoverOpacity: 0.06,
+      selectedOpacity: 0.08,
+      disabledOpacity: 0.38,
+      focusOpacity: 0.12,
+      activatedOpacity: 0.12,
+    },
   },
   typography: {
     fontFamily: 'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',

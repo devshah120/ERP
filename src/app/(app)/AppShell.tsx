@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
-import Chip from "@mui/material/Chip";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
@@ -178,20 +177,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <IconSearch />
             <span>Search screens, parties, items, document no…</span>
-            <Chip
-              label="Ctrl K"
-              size="small"
-              variant="outlined"
+            <Box
+              component="kbd"
               sx={{
+                display: "inline-flex",
+                alignItems: "center",
                 height: 20,
+                px: "6px",
                 fontSize: "0.6875rem",
                 fontFamily: "monospace",
-                borderRadius: 1,
-                bgcolor: "var(--surface, #fff)",
+                lineHeight: 1,
+                borderRadius: "4px",
+                border: "1px solid",
                 borderColor: "var(--border, #e2e8f0)",
+                bgcolor: "var(--surface, #fff)",
                 color: "var(--text, #1e293b)",
+                pointerEvents: "none",
+                userSelect: "none",
               }}
-            />
+            >
+              Ctrl K
+            </Box>
           </ButtonBase>
         </div>
 

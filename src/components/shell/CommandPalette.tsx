@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import Divider from "@mui/material/Divider";
+import InputBase from "@mui/material/InputBase";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Typography from "@mui/material/Typography";
 import { NAV_GROUPS, creatableModules } from "@/app/(app)/navigation";
 import { apiFetch } from "@/lib/api/client";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
@@ -60,9 +71,7 @@ function score(item: PaletteItem, q: string): number {
 
 /**
  * Ctrl + K: one box to reach any screen, create any record, or open a
- * specific customer, item or document by name or number. Record results come
- * from the same list APIs the screens use, so nothing here is a separate index
- * that could go stale.
+ * specific customer, item or document by name or number.
  */
 export default function CommandPalette() {
   const router = useRouter();
@@ -72,12 +81,11 @@ export default function CommandPalette() {
   const [records, setRecords] = useState<PaletteItem[]>([]);
   const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Reset each time it opens.
   useEffect(() => {
     if (!paletteOpen) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery("");
     setActive(0);
     setRecords([]);
@@ -145,7 +153,6 @@ export default function CommandPalette() {
     if (!paletteOpen) return;
     const q = query.trim();
     if (q.length < 2) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecords([]);
       setSearching(false);
       return;
@@ -229,8 +236,6 @@ export default function CommandPalette() {
     el?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  if (!paletteOpen) return null;
-
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -247,82 +252,206 @@ export default function CommandPalette() {
   let lastGroup = "";
 
   return (
-    <div
-      className="cmdkBackdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) closePalette();
+    <Dialog
+      open={paletteOpen}
+      onClose={closePalette}
+      fullWidth
+      maxWidth="sm"
+      slotProps={{
+        paper: {
+          elevation: 8,
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+            position: "fixed",
+            top: "12vh",
+            m: 2,
+            maxHeight: "75vh",
+            border: "1px solid",
+            borderColor: "divider",
+          },
+        },
       }}
     >
-      <div className="cmdk" role="dialog" aria-modal="true" aria-label="Command palette">
-        <div className="cmdkInputRow">
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          p: 2,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        <Box sx={{ color: "text.secondary", display: "flex", alignItems: "center" }}>
           <IconSearch />
-          <input
-            ref={inputRef}
-            className="cmdkInput"
-            placeholder="Search screens, customers, items, document numbers…"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActive(0);
-            }}
-            onKeyDown={onKeyDown}
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="cmdk-list"
-            aria-activedescendant={results[activeIndex] ? `cmdk-${activeIndex}` : undefined}
-          />
-          {searching && <span className="spinner" style={{ color: "var(--text-tertiary)" }} />}
-          <kbd>Esc</kbd>
-        </div>
+        </Box>
+        <InputBase
+          inputRef={inputRef}
+          placeholder="Search screens, customers, items, document numbers…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKeyDown}
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="cmdk-list"
+          aria-activedescendant={results[activeIndex] ? `cmdk-${activeIndex}` : undefined}
+          fullWidth
+          sx={{
+            fontSize: "0.9375rem",
+            "& input": { p: 0 },
+          }}
+        />
+        {searching && <CircularProgress size={16} sx={{ color: "text.secondary" }} />}
+        <Chip
+          label="Esc"
+          size="small"
+          variant="outlined"
+          sx={{ height: 20, fontSize: "0.6875rem", fontFamily: "monospace", borderRadius: 1 }}
+        />
+      </Box>
 
-        <div className="cmdkList" id="cmdk-list" role="listbox" ref={listRef}>
-          {results.length === 0 && !searching && (
-            <div className="cmdkEmpty">No matches for “{query}”. Try a document number, party or item name.</div>
-          )}
-          {results.map((item, index) => {
-            const header = item.group !== lastGroup ? item.group : null;
-            lastGroup = item.group;
-            return (
-              <div key={item.id}>
-                {header && <div className="cmdkGroup">{header}</div>}
-                <button
-                  type="button"
-                  id={`cmdk-${index}`}
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  data-index={index}
-                  data-active={index === activeIndex}
-                  className="cmdkItem"
-                  onMouseMove={() => setActive(index)}
-                  onClick={() => item.run()}
+      <List
+        ref={listRef}
+        id="cmdk-list"
+        role="listbox"
+        sx={{
+          py: 0.5,
+          px: 1,
+          maxHeight: "50vh",
+          overflowY: "auto",
+        }}
+      >
+        {results.length === 0 && !searching && (
+          <Box sx={{ p: 4, textAlign: "center", color: "text.secondary" }}>
+            <Typography variant="body2">
+              No matches for &ldquo;{query}&rdquo;. Try a document number, party or item name.
+            </Typography>
+          </Box>
+        )}
+        {results.map((item, index) => {
+          const header = item.group !== lastGroup ? item.group : null;
+          lastGroup = item.group;
+          const isSelected = index === activeIndex;
+
+          return (
+            <Box key={item.id}>
+              {header && (
+                <Typography
+                  variant="overline"
+                  sx={{
+                    px: 1.5,
+                    pt: 1.5,
+                    pb: 0.5,
+                    display: "block",
+                    fontWeight: 700,
+                    fontSize: "0.6875rem",
+                    color: "text.secondary",
+                  }}
                 >
-                  <span className="cmdkItemIcon">{item.icon}</span>
-                  <span className="cmdkItemText">
-                    <span>{item.label}</span>
-                    {item.hint && <small>{item.hint}</small>}
-                  </span>
-                  {item.meta && <span className="cmdkItemMeta">{item.meta}</span>}
-                  {index === activeIndex && <IconArrowRight style={{ color: "var(--accent)" }} />}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  {header}
+                </Typography>
+              )}
+              <ListItemButton
+                id={`cmdk-${index}`}
+                role="option"
+                aria-selected={isSelected}
+                data-index={index}
+                data-active={isSelected}
+                selected={isSelected}
+                onMouseMove={() => setActive(index)}
+                onClick={() => item.run()}
+                sx={{
+                  borderRadius: 1.5,
+                  py: 0.875,
+                  px: 1.5,
+                  mb: 0.25,
+                  transition: "background-color 0.1s ease",
+                  "&.Mui-selected": {
+                    bgcolor: "var(--accent-soft, #e7f3fb)",
+                    "&:hover": {
+                      bgcolor: "var(--accent-soft-strong, #cde6f6)",
+                    },
+                    "& .MuiListItemIcon-root": {
+                      color: "primary.main",
+                    },
+                  },
+                  "&:hover": {
+                    bgcolor: "var(--accent-soft, #e7f3fb)",
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32, color: isSelected ? "primary.main" : "text.secondary" }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Typography variant="body2" sx={{ fontWeight: isSelected ? 600 : 500, color: "text.primary" }}>
+                      {item.label}
+                    </Typography>
+                  }
+                  secondary={
+                    item.hint ? (
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                        {item.hint}
+                      </Typography>
+                    ) : undefined
+                  }
+                  sx={{ my: 0 }}
+                />
+                {item.meta && (
+                  <Chip
+                    label={item.meta}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: "0.6875rem",
+                      bgcolor: "action.selected",
+                      fontWeight: 600,
+                      mr: 1,
+                    }}
+                  />
+                )}
+                {isSelected && <IconArrowRight style={{ color: "var(--accent, #0a7bbf)" }} />}
+              </ListItemButton>
+            </Box>
+          );
+        })}
+      </List>
 
-        <div className="cmdkFoot">
-          <span>
-            <kbd>↑</kbd>
-            <kbd>↓</kbd> navigate
-          </span>
-          <span>
-            <kbd>Enter</kbd> open
-          </span>
-          <span style={{ marginLeft: "auto" }}>
-            <kbd>Ctrl</kbd>
-            <kbd>K</kbd> toggle
-          </span>
-        </div>
-      </div>
-    </div>
+      <Divider />
+
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          px: 2,
+          py: 1,
+          bgcolor: "var(--surface-subtle, #f8fbfd)",
+          fontSize: "0.75rem",
+          color: "text.secondary",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Chip label="↑" size="small" variant="outlined" sx={{ height: 18, minWidth: 18, px: 0, fontSize: "0.625rem" }} />
+          <Chip label="↓" size="small" variant="outlined" sx={{ height: 18, minWidth: 18, px: 0, fontSize: "0.625rem" }} />
+          <span>navigate</span>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Chip label="↵" size="small" variant="outlined" sx={{ height: 18, minWidth: 18, px: 0, fontSize: "0.625rem" }} />
+          <span>open</span>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: "auto" }}>
+          <Chip label="Ctrl" size="small" variant="outlined" sx={{ height: 18, minWidth: 24, px: 0.25, fontSize: "0.625rem" }} />
+          <Chip label="K" size="small" variant="outlined" sx={{ height: 18, minWidth: 18, px: 0, fontSize: "0.625rem" }} />
+          <span>toggle</span>
+        </Box>
+      </Box>
+    </Dialog>
   );
 }

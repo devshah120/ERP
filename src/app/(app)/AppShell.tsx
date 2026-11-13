@@ -1,16 +1,22 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
+import Chip from "@mui/material/Chip";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemText from "@mui/material/ListItemText";
+import Typography from "@mui/material/Typography";
 import { useAuth } from "./AuthProvider";
 import { NAV_SECTIONS, NAV_GROUPS, breadcrumbsFor, creatableModules, type NavGroup, type NavChild } from "./navigation";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
-import { usePopover } from "@/components/ui/usePopover";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
-import { FinancialYearMenu } from "@/components/shell/HeaderWidgets";
+import { FinancialYearMenu, CalculatorButton } from "@/components/shell/HeaderWidgets";
 import { IconSearch, IconChevronRight, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
 
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
@@ -52,7 +58,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Restore per-browser sidebar preferences after hydration.
   useEffect(() => {
     try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
     } catch {
       /* storage unavailable — keep defaults */
@@ -62,7 +67,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Navigating opens the group you landed in and closes the mobile drawer.
   useEffect(() => {
     const g = NAV_GROUPS.find((grp) => grp.children?.some((c) => isActive(pathname, c.href)));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (g) setOpenGroups((prev) => (prev.has(g.key) ? prev : new Set(prev).add(g.key)));
     setMobileOpen(false);
     setFlyout(null);
@@ -106,8 +110,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (flyoutTimer.current) clearTimeout(flyoutTimer.current);
   }
 
-  // What the sidebar shows after the menu filter. Modules flagged as not built
-  // yet (`enabled: false` / `soon` in navigation.ts) are simply left out.
+  // What the sidebar shows after the menu filter.
   const q = menuQuery.trim().toLowerCase();
   const visibleSections = useMemo(() => {
     return NAV_SECTIONS.map((section) => ({
@@ -161,15 +164,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <FinancialYearMenu />
 
         <div className="hdrCenter">
-          <button type="button" className="hdrSearch" onClick={openPalette} aria-label="Search (Ctrl + K)">
+          <ButtonBase
+            type="button"
+            className="hdrSearch"
+            onClick={openPalette}
+            aria-label="Search (Ctrl + K)"
+            sx={{
+              textAlign: "left",
+              fontFamily: "inherit",
+              fontSize: "inherit",
+              cursor: "pointer",
+            }}
+          >
             <IconSearch />
             <span>Search screens, parties, items, document no…</span>
-            <kbd>Ctrl K</kbd>
-          </button>
+            <Chip
+              label="Ctrl K"
+              size="small"
+              variant="outlined"
+              sx={{
+                height: 20,
+                fontSize: "0.6875rem",
+                fontFamily: "monospace",
+                borderRadius: 1,
+                bgcolor: "var(--surface, #fff)",
+                borderColor: "var(--border, #e2e8f0)",
+                color: "var(--text, #1e293b)",
+              }}
+            />
+          </ButtonBase>
         </div>
 
         <div className="hdrActions">
           <QuickCreate />
+          <CalculatorButton />
           <span className="hdrDivider hideMobile" aria-hidden />
           <Link
             href="/pos/register"
@@ -356,32 +384,92 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 /** "+ New" — every creatable record type, grouped by module. */
 function QuickCreate() {
-  const { open, toggle, close, ref } = usePopover<HTMLDivElement>();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
   const modules = creatableModules();
   const groups = [...new Set(modules.map((m) => m.group))];
 
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
   return (
-    <div className="menuWrap" ref={ref}>
-      <button type="button" className="hdrNew" onClick={toggle} aria-expanded={open} aria-haspopup="menu" title="Create a new record">
+    <div className="menuWrap">
+      <button
+        type="button"
+        className="hdrNew"
+        onClick={handleOpen}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title="Create a new record"
+      >
         <IconPlus />
         <span className="hideMobile">Create</span>
       </button>
-      {open && (
-        <div className="menu quickCreateMenu" role="menu">
-          {groups.map((g) => (
-            <div key={g}>
-              <div className="menuLabel">{g}</div>
-              {modules
-                .filter((m) => m.group === g)
-                .map((m) => (
-                  <Link key={m.href} href={m.href} className="menuItem" role="menuitem" onClick={close}>
-                    {m.label.replace(/ies$/, "y").replace(/s$/, "")}
-                  </Link>
-                ))}
-            </div>
-          ))}
-        </div>
-      )}
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        slotProps={{
+          paper: {
+            elevation: 4,
+            sx: {
+              width: 220,
+              maxHeight: "24rem",
+              borderRadius: 2.5,
+              border: "1px solid",
+              borderColor: "divider",
+              mt: 1,
+            },
+          },
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {groups.map((g) => (
+          <Box key={g}>
+            <Typography
+              variant="overline"
+              sx={{
+                px: 2,
+                pt: 1,
+                pb: 0.25,
+                display: "block",
+                fontWeight: 700,
+                fontSize: "0.6875rem",
+                color: "text.secondary",
+                letterSpacing: 0.5,
+              }}
+            >
+              {g}
+            </Typography>
+            {modules
+              .filter((m) => m.group === g)
+              .map((m) => (
+                <MenuItem
+                  key={m.href}
+                  component={Link}
+                  href={m.href}
+                  onClick={handleClose}
+                  sx={{ py: 0.75, px: 2, fontSize: "0.8125rem" }}
+                >
+                  <ListItemText
+                    primary={
+                      <Typography variant="body2" sx={{ fontSize: "0.8125rem", fontWeight: 500 }}>
+                        {m.label.replace(/ies$/, "y").replace(/s$/, "")}
+                      </Typography>
+                    }
+                  />
+                </MenuItem>
+              ))}
+          </Box>
+        ))}
+      </Menu>
     </div>
   );
 }

@@ -1,11 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import Decimal from "decimal.js";
+import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Popover from "@mui/material/Popover";
+import Typography from "@mui/material/Typography";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { apiFetch, ApiError } from "@/lib/api/client";
-import { usePopover } from "@/components/ui/usePopover";
 import { useToast } from "@/components/ui/Toast";
 import {
   IconCalculator,
@@ -44,7 +54,8 @@ interface FyOption {
 export function FinancialYearMenu() {
   const { me, hasPermission, refresh } = useAuth();
   const toast = useToast();
-  const { open, toggle, close, ref } = usePopover<HTMLDivElement>();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
   const [years, setYears] = useState<FyOption[] | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
   const canManage = hasPermission("financial-years.manage");
@@ -63,13 +74,21 @@ export function FinancialYearMenu() {
   const fy = me?.financialYear;
   if (!fy) return null;
 
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
   async function switchTo(year: FyOption) {
     setSwitching(year.id);
     try {
       await apiFetch(`/api/financial-years/${year.id}`, { method: "PATCH", body: JSON.stringify({ action: "set-current" }) });
       await refresh();
       toast.success(`Working year is now ${year.label}`);
-      close();
+      handleClose();
     } catch (err) {
       toast.error("Couldn't switch year", err instanceof ApiError ? err.message : undefined);
     } finally {
@@ -80,57 +99,108 @@ export function FinancialYearMenu() {
   const others = (years ?? []).filter((y) => !y.isCurrent);
 
   return (
-    <div className="menuWrap" ref={ref}>
-      <button type="button" className="hdrPill" onClick={toggle} aria-expanded={open} aria-haspopup="menu" title="Financial year">
+    <div className="menuWrap">
+      <button
+        type="button"
+        className="hdrPill"
+        onClick={handleOpen}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title="Financial year"
+      >
         <IconCalendar />
         <span>{fyShort(fy.startDate, fy.endDate)}</span>
         <IconChevronDown className="hdrPillChevron" />
       </button>
-      {open && (
-        <div className="menu menuLeft" role="menu" style={{ minWidth: "17rem" }}>
-          <div className="menuLabel">Financial year</div>
-          <div className="menuItem" role="menuitemradio" aria-checked="true" style={{ cursor: "default" }}>
-            <IconCheck style={{ color: "var(--accent)" }} />
-            <span className="menuItemText">
-              {fy.label}
-              <small>
-                {fmt(fy.startDate)} – {fmt(fy.endDate)}
-              </small>
-            </span>
-            <span className="badge badgeAccent badgePlain">Current</span>
-          </div>
-          {others.map((y) => (
-            <button
-              key={y.id}
-              type="button"
-              className="menuItem"
-              role="menuitemradio"
-              aria-checked="false"
-              disabled={!canManage || y.status !== "OPEN" || switching !== null}
-              title={!canManage ? "Switching years needs the Financial years · manage permission" : y.status !== "OPEN" ? "Closed — reopen it in Financial Years first" : `Switch to ${y.label}`}
-              onClick={() => switchTo(y)}
-            >
-              {switching === y.id ? <span className="spinner" /> : <IconCalendar />}
-              <span className="menuItemText">
-                {y.label}
-                <small>
-                  {fmt(y.startDate)} – {fmt(y.endDate)}
-                </small>
-              </span>
-              {y.status === "CLOSED" && <span className="badge badgeNeutral badgePlain">Closed</span>}
-            </button>
-          ))}
-          <div className="menuSep" />
-          <Link href="/settings/financial-years" className="menuItem" role="menuitem" onClick={close}>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        slotProps={{
+          paper: {
+            elevation: 4,
+            sx: {
+              minWidth: "17rem",
+              borderRadius: 2.5,
+              border: "1px solid",
+              borderColor: "divider",
+              mt: 1,
+            },
+          },
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+      >
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 700, fontSize: "0.6875rem" }}>
+            Financial year
+          </Typography>
+        </Box>
+
+        <MenuItem
+          selected
+          sx={{
+            cursor: "default",
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            py: 1,
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 24, color: "primary.main" }}>
+            <IconCheck />
+          </ListItemIcon>
+          <ListItemText
+            primary={<Typography variant="body2" sx={{ fontWeight: 600 }}>{fy.label}</Typography>}
+            secondary={<Typography variant="caption" color="text.secondary">{`${fmt(fy.startDate)} – ${fmt(fy.endDate)}`}</Typography>}
+          />
+          <Chip label="Current" size="small" color="primary" sx={{ height: 20, fontSize: "0.6875rem", fontWeight: 600 }} />
+        </MenuItem>
+
+        {others.map((y) => (
+          <MenuItem
+            key={y.id}
+            disabled={!canManage || y.status !== "OPEN" || switching !== null}
+            title={
+              !canManage
+                ? "Switching years needs the Financial years · manage permission"
+                : y.status !== "OPEN"
+                ? "Closed — reopen it in Financial Years first"
+                : `Switch to ${y.label}`
+            }
+            onClick={() => switchTo(y)}
+            sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1 }}
+          >
+            <ListItemIcon sx={{ minWidth: 24, color: "text.secondary" }}>
+              {switching === y.id ? <CircularProgress size={16} /> : <IconCalendar />}
+            </ListItemIcon>
+            <ListItemText
+              primary={<Typography variant="body2">{y.label}</Typography>}
+              secondary={<Typography variant="caption" color="text.secondary">{`${fmt(y.startDate)} – ${fmt(y.endDate)}`}</Typography>}
+            />
+            {y.status === "CLOSED" && (
+              <Chip label="Closed" size="small" variant="outlined" sx={{ height: 20, fontSize: "0.6875rem" }} />
+            )}
+          </MenuItem>
+        ))}
+
+        <Divider sx={{ my: 0.5 }} />
+
+        <MenuItem component={Link} href="/settings/financial-years" onClick={handleClose}>
+          <ListItemIcon sx={{ minWidth: 24 }}>
             <IconCalendar />
-            Manage financial years
-          </Link>
-          <Link href="/settings" className="menuItem" role="menuitem" onClick={close}>
+          </ListItemIcon>
+          <ListItemText primary={<Typography variant="body2">Manage financial years</Typography>} />
+        </MenuItem>
+
+        <MenuItem component={Link} href="/settings" onClick={handleClose}>
+          <ListItemIcon sx={{ minWidth: 24 }}>
             <IconSettings />
-            Workspace settings
-          </Link>
-        </div>
-      )}
+          </ListItemIcon>
+          <ListItemText primary={<Typography variant="body2">Workspace settings</Typography>} />
+        </MenuItem>
+      </Menu>
     </div>
   );
 }
@@ -162,12 +232,21 @@ function apply(a: string, b: string, op: Op): string {
  * discount percentages, splitting a receipt. Keyboard works while it's open.
  */
 export function CalculatorButton() {
-  const { open, toggle, ref } = usePopover<HTMLDivElement>();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
   const toast = useToast();
   const [display, setDisplay] = useState("0");
   const [acc, setAcc] = useState<string | null>(null);
   const [op, setOp] = useState<Op | null>(null);
   const [fresh, setFresh] = useState(true);
+
+  const handleOpen = (e: MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
 
   function digit(d: string) {
     if (display === "Error") {
@@ -218,7 +297,6 @@ export function CalculatorButton() {
 
   function percent() {
     if (display === "Error") return;
-    // With a pending op, "50 + 10%" means 10% of 50 — how tills work.
     const base = acc !== null && op ? new Decimal(acc) : new Decimal(1);
     setDisplay(base.times(new Decimal(display).div(100)).toString());
     setFresh(false);
@@ -279,32 +357,109 @@ export function CalculatorButton() {
   ];
 
   return (
-    <div className="menuWrap" ref={ref}>
-      <button type="button" className="hdrIconBtn calcToggle" onClick={toggle} aria-expanded={open} aria-label="Calculator" title="Calculator">
+    <div className="menuWrap">
+      <button
+        type="button"
+        className="hdrIconBtn calcToggle"
+        onClick={handleOpen}
+        aria-expanded={open}
+        aria-label="Calculator"
+        title="Calculator"
+      >
         <IconCalculator />
       </button>
-      {open && (
-        <div className="menu calc" role="dialog" aria-label="Calculator">
-          <div className="calcScreen" aria-live="polite">
-            <small>{acc !== null && op ? `${acc} ${op}` : " "}</small>
-            <span>{display}</span>
-          </div>
-          <div className="calcKeys">
-            {keys.map((k) => (
-              <button
+
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: {
+            elevation: 6,
+            sx: {
+              width: 250,
+              p: 1.5,
+              borderRadius: 2.5,
+              border: "1px solid",
+              borderColor: "divider",
+              mt: 1,
+            },
+          },
+        }}
+      >
+        <Box
+          className="calcScreen"
+          sx={{
+            bgcolor: "var(--surface-subtle, #f8fbfd)",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 1.5,
+            p: 1.5,
+            mb: 1.5,
+            textAlign: "right",
+          }}
+        >
+          <Typography variant="caption" sx={{ color: "text.secondary", minHeight: 16, display: "block", fontFamily: "monospace" }}>
+            {acc !== null && op ? `${acc} ${op}` : "\u00A0"}
+          </Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {display}
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 0.75,
+          }}
+        >
+          {keys.map((k) => {
+            const isOp = k.kind === "op";
+            const isEq = k.kind === "eq";
+            const isFn = k.kind === "fn";
+            const isActiveOp = isOp && op === k.label && fresh;
+
+            return (
+              <ButtonBase
                 key={k.label}
-                type="button"
-                className={`calcKey ${k.kind ? `calcKey-${k.kind}` : ""} ${k.kind === "op" && op === k.label && fresh ? "calcKeyActive" : ""}`}
                 onClick={k.onClick}
+                sx={{
+                  py: 1,
+                  borderRadius: 1.5,
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  fontFamily: "monospace",
+                  border: "1px solid",
+                  borderColor: isEq ? "primary.main" : "divider",
+                  bgcolor: isEq
+                    ? "primary.main"
+                    : isActiveOp
+                    ? "primary.light"
+                    : isOp
+                    ? "action.selected"
+                    : isFn
+                    ? "var(--surface-subtle, #f8fbfd)"
+                    : "background.paper",
+                  color: isEq ? "primary.contrastText" : isActiveOp ? "primary.main" : "text.primary",
+                  transition: "all 0.1s ease",
+                  "&:hover": {
+                    bgcolor: isEq ? "primary.dark" : "action.hover",
+                  },
+                }}
               >
                 {k.label}
-              </button>
-            ))}
-          </div>
-          <div className="calcHint">Type on your keyboard · Enter = · Esc closes</div>
-        </div>
-      )}
+              </ButtonBase>
+            );
+          })}
+        </Box>
+
+        <Typography variant="caption" sx={{ display: "block", textAlign: "center", color: "text.disabled", mt: 1.5, fontSize: "0.6875rem" }}>
+          Type on your keyboard · Enter = · Esc closes
+        </Typography>
+      </Popover>
     </div>
   );
 }
-

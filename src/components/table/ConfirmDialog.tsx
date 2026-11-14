@@ -23,6 +23,7 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
   tone = "danger",
   requireReason = false,
   busy = false,
@@ -33,6 +34,8 @@ export default function ConfirmDialog({
   title: string;
   message: string;
   confirmLabel?: string;
+  /** Label of the button that closes the dialog without acting. */
+  cancelLabel?: string;
   tone?: "danger" | "primary";
   requireReason?: boolean;
   busy?: boolean;
@@ -125,7 +128,7 @@ export default function ConfirmDialog({
 
       <DialogActions sx={{ p: 2, px: 2.5, gap: 1 }}>
         <Button variant="outlined" color="secondary" onClick={onCancel} disabled={busy}>
-          Cancel
+          {cancelLabel}
         </Button>
         <Button
           variant="contained"

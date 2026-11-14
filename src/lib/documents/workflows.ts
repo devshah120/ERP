@@ -38,18 +38,11 @@ export const SALES_QUOTATION_WORKFLOW: DocumentWorkflow = {
   terminalStatuses: ["CONVERTED", "CANCELLED", "EXPIRED", "REJECTED"],
   transitions: {
     DRAFT: [{ to: "SENT", label: "Send to customer", intent: "primary" }, CANCEL],
-    SENT: [
-      { to: "UNDER_NEGOTIATION", label: "Mark under negotiation", intent: "neutral" },
-      { to: "APPROVED", label: "Customer approved", intent: "primary" },
-      { to: "REJECTED", label: "Customer rejected", requiresReason: true, intent: "danger" },
-      { to: "EXPIRED", label: "Mark expired", intent: "neutral" },
-      CANCEL,
-    ],
-    UNDER_NEGOTIATION: [
-      { to: "APPROVED", label: "Customer approved", intent: "primary" },
-      { to: "REJECTED", label: "Customer rejected", requiresReason: true, intent: "danger" },
-      CANCEL,
-    ],
+    // A sent quote is converted straight into a sales order once the customer
+    // agrees; there is no separate negotiation / approval / rejection step.
+    SENT: [{ to: "EXPIRED", label: "Mark expired", intent: "neutral" }, CANCEL],
+    // Kept so quotes already in these older statuses can still be closed out.
+    UNDER_NEGOTIATION: [{ to: "EXPIRED", label: "Mark expired", intent: "neutral" }, CANCEL],
     APPROVED: [{ to: "EXPIRED", label: "Mark expired", intent: "neutral" }, CANCEL],
     // CONVERTED is set by the conversion flow, not by a manual transition.
     REJECTED: [],

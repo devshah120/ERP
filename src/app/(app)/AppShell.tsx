@@ -24,7 +24,7 @@ import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
-import { FinancialYearMenu, CalculatorButton } from "@/components/shell/HeaderWidgets";
+import { FinancialYearMenu } from "@/components/shell/HeaderWidgets";
 import {
   IconSearch,
   IconChevronRight,
@@ -250,7 +250,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="hdrActions">
           <QuickCreate />
-          <CalculatorButton />
           {(hasPermission("pos.view") || hasPermission("pos.sell")) && (
             <>
               <span className="hdrDivider hideMobile" aria-hidden />

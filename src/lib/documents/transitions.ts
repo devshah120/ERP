@@ -296,10 +296,12 @@ export async function convertDocument(
     );
   }
 
-  if (fromTypeKey === "sales-quotations" && source.status !== "APPROVED") {
+  // Converting a quote is the customer's acceptance, so it only has to have
+  // been sent. UNDER_NEGOTIATION / APPROVED are older statuses that still convert.
+  if (fromTypeKey === "sales-quotations" && !["SENT", "UNDER_NEGOTIATION", "APPROVED"].includes(source.status)) {
     throw AppError.conflict(
-      "Only an approved quotation can be converted into a sales order",
-      "QUOTATION_NOT_APPROVED"
+      "Send the quotation to the customer before converting it into a sales order",
+      "QUOTATION_NOT_SENT"
     );
   }
 

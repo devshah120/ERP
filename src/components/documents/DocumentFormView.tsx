@@ -13,6 +13,7 @@ import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import EmailDialog from "@/components/documents/EmailDialog";
 import MassDiscountDialog from "@/components/documents/MassDiscountDialog";
+import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { buildFormLayout, type FormTabKey } from "@/lib/documents/formLayout";
 import type { FieldConfig } from "@/lib/resources/ui/types";
 import {
@@ -119,6 +120,8 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [pendingTransition, setPendingTransition] = useState<TransitionRule | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showEmail, setShowEmail] = useState(false);
@@ -324,7 +327,6 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
   );
   const effectiveIntraState = record ? Boolean(record.intraState) : supply.intraState;
   const effectiveIsUt = record ? Boolean(record.isUnionTerritory) : supply.isUnionTerritory;
-  const placeOfSupply = record ? (record.placeOfSupplyName as string | undefined) : supply.placeOfSupplyName;
 
   // --- live totals (preview only; the server recomputes authoritatively)
   const computed = lines
@@ -545,25 +547,35 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
     onPrint: isEdit ? () => router.push(`${config.basePath}/${recordId}/print`) : undefined,
   });
 
-  async function handleTransition(rule: TransitionRule) {
-    let reason: string | undefined;
+  /** Transitions that need a reason (cancel, reject) open a dialog first. */
+  function handleTransition(rule: TransitionRule) {
     if (rule.requiresReason) {
-      reason = window.prompt(`Reason for "${rule.label}":`) ?? undefined;
-      if (!reason?.trim()) return;
+      setReasonError(null);
+      setPendingTransition(rule);
+      return;
     }
+    void runTransition(rule);
+  }
+
+  async function runTransition(rule: TransitionRule, reason?: string) {
     setBusyAction(rule.to);
     setError(null);
     setSuccess(null);
+    setReasonError(null);
     try {
       await apiFetch(`${config.apiPath}/${recordId}/transition`, {
         method: "POST",
         body: JSON.stringify({ toStatus: rule.to, reason }),
       });
+      setPendingTransition(null);
       setSuccess(`Moved to ${rule.to}`);
       toast.success(`${config.singular} ${humanizeStatus(rule.to).toLowerCase()}`);
       await loadRecord();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Transition failed");
+      const message = err instanceof ApiError ? err.message : "Transition failed";
+      // Keep the reason dialog open with the error so the typed reason isn't lost.
+      if (rule.requiresReason) setReasonError(message);
+      else setError(message);
     } finally {
       setBusyAction(null);
     }
@@ -970,26 +982,6 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
             <Link href={`${config.partyBasePath}/${selectedParty.id}`} className="docPartyInfoLink">
               Open full record
             </Link>
-          </div>
-        )}
-
-        {customerId && (
-          <div className={`gstBanner ${effectiveIntraState ? "gstBannerIntra" : "gstBannerInter"}`}>
-            <div>
-              <strong>{effectiveIntraState ? "Intra-state supply" : "Inter-state supply"}</strong>
-              {" — "}
-              {effectiveIntraState
-                ? `CGST + ${stateTaxLabel(effectiveIsUt)} will be charged`
-                : "IGST will be charged"}
-            </div>
-            {placeOfSupply && (
-              <div className="gstBannerMeta">
-                Place of supply: <strong>{placeOfSupply}</strong>
-                {(record?.placeOfSupplyCode || supply.placeOfSupplyCode) && (
-                  <> ({String(record?.placeOfSupplyCode ?? supply.placeOfSupplyCode)})</>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -1439,6 +1431,29 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
           lineCount={lines.length}
           onApply={applyMassDiscount}
           onClose={() => setShowMassDiscount(false)}
+        />
+      )}
+
+      {pendingTransition && (
+        <ConfirmDialog
+          title={
+            pendingTransition.to === "CANCELLED"
+              ? `Cancel this ${config.singular.toLowerCase()}?`
+              : `${pendingTransition.label}?`
+          }
+          message={
+            pendingTransition.to === "CANCELLED"
+              ? `${record?.documentNumber ?? `This ${config.singular.toLowerCase()}`} will be marked cancelled. This can't be undone.`
+              : `${record?.documentNumber ?? `This ${config.singular.toLowerCase()}`} will be marked ${humanizeStatus(pendingTransition.to).toLowerCase()}.`
+          }
+          confirmLabel={pendingTransition.to === "CANCELLED" ? `Cancel ${config.singular.toLowerCase()}` : pendingTransition.label}
+          cancelLabel="Go back"
+          tone={pendingTransition.intent === "danger" ? "danger" : "primary"}
+          requireReason
+          busy={busyAction === pendingTransition.to}
+          error={reasonError}
+          onConfirm={(reason) => void runTransition(pendingTransition, reason)}
+          onCancel={() => setPendingTransition(null)}
         />
       )}
 

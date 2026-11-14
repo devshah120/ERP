@@ -9,36 +9,83 @@ import type { OverviewResult } from "@/lib/analytics/overview";
 import { periodQuery, isPeriodReady, type PeriodState } from "@/components/analytics/PeriodPicker";
 import DocMiniList, { type MiniListState } from "@/components/analytics/DocMiniList";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
-import { ErrorState, EmptyState, SkeletonBlock } from "@/components/ui/States";
+import { ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
-import { formatMoney, formatCompact, formatQuantity } from "@/lib/format/number";
-import { COLORS } from "@/lib/analytics/types";
+import { formatCompact, formatCount, formatMoney, formatQuantity } from "@/lib/format/number";
+import { DateRangePill, fmtDay } from "@/components/dashboard/Widgets";
+import { AgingBars, AGE_BANDS, CategoryTreemap, InOutChart, ProductMap, Sparkline } from "@/components/pulse/PulseCharts";
 import {
-  DateRangePill,
-  Delta,
-  fmtDay,
-  OverviewTile,
-  Panel,
-  RangeTag,
-  TrendChart,
-  type TileSpec,
-} from "@/components/dashboard/Widgets";
-import {
-  AgingPanel,
-  CustomerInsightPanel,
-  ItemPerformancePanel,
-  PaymentModePanel,
-  SalesBreakdownPanel,
-} from "@/components/dashboard/Panels";
-import { IconRefresh, IconCheckCircle } from "@/components/icons";
+  AttentionFeed,
+  Card,
+  CustomerMix,
+  MeterList,
+  ModeSplit,
+  RankList,
+  RunningLow,
+  SpotlightTile,
+  Toggle,
+  type LowStockRow,
+  type MeterSpec,
+  type Severity,
+} from "@/components/pulse/PulseBlocks";
+import { IconRefresh, IconSales, IconWallet, IconPurchase, IconFile } from "@/components/icons";
 
-interface LowStockRow {
-  itemName?: string;
-  itemNameHref?: string;
-  variantSku?: string;
-  warehouse?: string;
-  quantity?: number;
-  reorderLevel?: number;
+function grade(value: number | null, ok: number, warn: number, lowerIsBetter = false): Severity {
+  if (value === null) return "none";
+  if (lowerIsBetter) return value <= ok ? "ok" : value <= warn ? "warn" : "bad";
+  return value >= ok ? "ok" : value >= warn ? "warn" : "bad";
+}
+
+const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : null);
+
+/** The four "Health check" ratios, each graded against its own threshold. */
+function healthMeters(dash: DashboardResult, ov: OverviewResult): MeterSpec[] {
+  const kpiValue = (key: string) => Number(dash.kpis.find((k) => k.key === key)?.value ?? 0);
+  const status = dash.charts.find((c) => c.key === "invoice-status")?.series[0]?.points ?? [];
+  const count = (label: string) => status.find((p) => p.label === label)?.value ?? 0;
+  const bills = count("Paid") + count("Partly paid") + count("Unpaid");
+  const paidShare = pct(count("Paid"), bills);
+  const collected = kpiValue("collection");
+  const billed = Number(ov.metrics.sales.current);
+  const returnRate = pct(Number(ov.metrics.salesReturns.current), billed);
+  const items = kpiValue("items");
+  const low = kpiValue("lowStock");
+  const stocked = pct(items - low, items);
+  const range = `fromDate=${ov.period.fromDate.slice(0, 10)}&toDate=${ov.period.toDate.slice(0, 10)}`;
+  return [
+    {
+      key: "collected",
+      label: "Billing turned into cash",
+      percent: billed > 0 ? collected : null,
+      severity: billed > 0 ? grade(collected, 80, 40) : "none",
+      note: "of this period's bills",
+      href: `/receipts?${range}`,
+    },
+    {
+      key: "paid",
+      label: "Bills settled in full",
+      percent: paidShare,
+      severity: grade(paidShare, 70, 40),
+      note: bills > 0 ? `${formatCount(count("Paid"))} of ${formatCount(bills)} bills` : "no bills yet",
+      href: `/sales-invoices?paymentStatus=PAID&${range}`,
+    },
+    {
+      key: "returns",
+      label: "Goods sent back",
+      percent: returnRate,
+      severity: grade(returnRate, 5, 15, true),
+      note: `₹${formatCompact(ov.metrics.salesReturns.current)} returned`,
+      href: `/sales-returns?${range}`,
+    },
+    {
+      key: "stocked",
+      label: "Shelves above reorder level",
+      percent: stocked,
+      severity: grade(stocked, 90, 70),
+      note: low > 0 ? `${formatCount(low)} item${low === 1 ? "" : "s"} running low` : "nothing running low",
+      href: "/reports/stock-summary?stockFilter=LOW",
+    },
+  ];
 }
 
 export default function DashboardPage() {
@@ -49,8 +96,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [invoices, setInvoices] = useState<MiniListState | null>(null);
-  const [pendingDelivery, setPendingDelivery] = useState<MiniListState | null>(null);
+  const [toShip, setToShip] = useState<MiniListState | null>(null);
   const [lowStock, setLowStock] = useState<{ rows: LowStockRow[]; total: number } | null>(null);
+  const [owedSide, setOwedSide] = useState<"receivable" | "payable">("receivable");
+  const [modeSource, setModeSource] = useState<"receipts" | "sales">("receipts");
 
   const load = useCallback(async () => {
     if (!isPeriodReady(period)) return;
@@ -71,7 +120,7 @@ export default function DashboardPage() {
     }
   }, [period]);
 
-  // "Right now" panels don't depend on the period.
+  // Lists that describe "right now" and ignore the selected period.
   const loadLive = useCallback(async () => {
     const q = (o: Record<string, string>) => new URLSearchParams({ page: "1", pageSize: "6", ...o }).toString();
     const [b, c, d] = await Promise.allSettled([
@@ -82,7 +131,7 @@ export default function DashboardPage() {
       ),
     ]);
     setInvoices(b.status === "fulfilled" ? b.value : { items: [], total: 0 });
-    setPendingDelivery(c.status === "fulfilled" ? c.value : { items: [], total: 0 });
+    setToShip(c.status === "fulfilled" ? c.value : { items: [], total: 0 });
     setLowStock(d.status === "fulfilled" ? d.value : { rows: [], total: 0 });
   }, []);
 
@@ -108,277 +157,327 @@ export default function DashboardPage() {
     return (key: string) => m.get(key);
   }, [dash]);
 
-  const tiles: TileSpec[] = useMemo(() => {
-    if (!dash || !ov) return [];
-    const m = ov.metrics;
-    const v = (key: string) => kpi(key)?.value ?? "0";
-    const h = (key: string) => kpi(key)?.href;
-    const range = `fromDate=${ov.period.fromDate.slice(0, 10)}&toDate=${ov.period.toDate.slice(0, 10)}`;
-    const list: (TileSpec | null)[] = [
-      // row 1
-      { key: "sales", label: "Total Sales", value: m.sales.current, previous: m.sales.previous, kind: "money", tint: "green", href: h("totalSales") },
-      { key: "inv", label: "Total Invoices", value: m.salesCount.current, previous: m.salesCount.previous, kind: "count", tint: "violet", href: h("invoiceCount") },
-      { key: "qty", label: "Sold Qty", value: m.soldQty.current, previous: m.soldQty.previous, kind: "quantity", tint: "amber", href: "/reports/sales-detail" },
-      { key: "cust", label: "Total Customers", value: v("customers"), kind: "count", tint: "rose", href: "/customers" },
-      { key: "sret", label: "Total Sales Return", value: m.salesReturns.current, previous: m.salesReturns.previous, kind: "money", tint: "blue", goodWhen: "down", href: `/sales-returns?${range}` },
-      // row 2
-      { key: "pur", label: "Total Purchase", value: m.purchase.current, previous: m.purchase.previous, kind: "money", tint: "green", goodWhen: "down", href: h("totalPurchase") },
-      { key: "bills", label: "Total Bills", value: m.purchaseCount.current, previous: m.purchaseCount.previous, kind: "count", tint: "violet", href: h("billCount") },
-      { key: "sup", label: "Total Suppliers", value: v("vendors"), kind: "count", tint: "amber", href: "/vendors" },
-      m.purchaseReturns
-        ? { key: "pret", label: "Total Purchase Return", value: m.purchaseReturns.current, previous: m.purchaseReturns.previous, kind: "money", tint: "rose", goodWhen: "down", href: `/purchase-returns?${range}` }
-        : null,
-      m.paidOut
-        ? { key: "paid", label: "Total Paid", value: m.paidOut.current, previous: m.paidOut.previous, kind: "money", tint: "blue", goodWhen: "down", href: `/payments?${range}` }
-        : null,
-      // row 3
-      { key: "rec", label: "Total Received", value: m.received.current, previous: m.received.previous, kind: "money", tint: "green", href: `/receipts?${range}` },
-      { key: "coll", label: "Collection Rate", value: v("collection"), kind: "percent", tint: "violet", hint: "Share of this period's invoiced value already collected" },
-      { key: "stockQty", label: "Stock Qty", value: v("stockQty"), kind: "quantity", tint: "amber", href: "/inventory" },
-      { key: "stockVal", label: "Stock Value", value: v("stockValue"), kind: "money", tint: "rose", href: "/inventory", hint: kpi("stockValue")?.hint },
-      { key: "ar", label: "To Receive", value: v("receivable"), kind: "money", tint: "blue", href: h("receivable"), hint: "All open invoices, not just this period" },
-      // row 4
-      { key: "avg", label: "Avg Invoice Value", value: m.avgInvoice.current, previous: m.avgInvoice.previous, kind: "money", tint: "green" },
-      { key: "pso", label: "Pending Sales Orders", value: v("pendingSo"), kind: "count", tint: "violet", href: h("pendingSo") },
-      { key: "items", label: "Total Products", value: v("items"), kind: "count", tint: "amber", href: "/items" },
-      { key: "low", label: "Low Stock Items", value: v("lowStock"), kind: "count", tint: "rose", href: h("lowStock") },
-      { key: "ap", label: "To Pay", value: v("payable"), kind: "money", tint: "blue", href: h("payable"), hint: "All open bills, not just this period" },
-    ];
-    return list.filter((t): t is TileSpec => t !== null);
-  }, [dash, ov, kpi]);
+  const chart = useCallback((key: string) => dash?.charts.find((c) => c.key === key), [dash]);
+
+  const meters: MeterSpec[] = dash && ov ? healthMeters(dash, ov) : [];
 
   if (!me) return null;
   if (isForbidden(error)) return <AccessDenied detail={(error as Error).message} />;
 
+  const business = me.business?.name ?? "Your business";
   const range = ov ? { fromDate: ov.period.fromDate, toDate: ov.period.toDate } : undefined;
-  const trend = dash?.charts.find((c) => c.key === "sales-vs-purchase");
   const synced = dash ? new Date(dash.generatedAt) : null;
+  const flow = chart("sales-vs-purchase");
+  const salesPts = flow?.series[0]?.points ?? [];
+  const purchasePts = flow?.series[1]?.points ?? [];
+  const topBuyers = chart("top-customers")?.series[0]?.points ?? [];
+  const m = ov?.metrics;
+  const owed = ov ? (owedSide === "payable" && ov.aging.payable ? ov.aging.payable : ov.aging.receivable) : null;
+  const dim = loading ? { opacity: 0.6, transition: "opacity 160ms" } : { transition: "opacity 160ms" };
 
-  // Greeting follows the sync time so server and client render the same text.
-  const hour = synced?.getHours();
-  const greeting = hour === undefined ? "Welcome back" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = (me.name || me.email).split(" ")[0];
-
-  // Headline cash figures for the hero band (replaces the old "Cash Position" card).
-  type HeroStat = { label: string; value: string; previous?: string; goodWhen?: "up" | "down"; note?: string; tone?: string };
-  let heroStats: HeroStat[] | null = null;
-  if (ov) {
-    const m = ov.metrics;
-    const net = m.paidOut ? Number(m.received.current) - Number(m.paidOut.current) : null;
-    heroStats = [
-      { label: "Sales", value: m.sales.current, previous: m.sales.previous },
-      { label: "Money in", value: m.received.current, previous: m.received.previous },
-      m.paidOut
-        ? { label: "Money out", value: m.paidOut.current, previous: m.paidOut.previous, goodWhen: "down" }
-        : { label: "To receive", value: kpi("receivable")?.value ?? "0", note: "All open invoices" },
-      net !== null
-        ? { label: "Net movement", value: String(net), note: net < 0 ? "More paid out than received" : "Received minus paid out", tone: net < 0 ? "#fca5a5" : "#86efac" }
-        : { label: "To pay", value: kpi("payable")?.value ?? "0", note: "All open bills" },
-    ];
-  }
+  const rightNow = [
+    { label: "Customers owe you", value: `₹${formatCompact(kpi("receivable")?.value ?? "0")}`, href: kpi("receivable")?.href },
+    { label: "You owe suppliers", value: `₹${formatCompact(kpi("payable")?.value ?? "0")}`, href: kpi("payable")?.href },
+    { label: "Stock on hand worth", value: `₹${formatCompact(kpi("stockValue")?.value ?? "0")}`, href: "/reports/stock-summary" },
+    { label: "Orders not yet billed", value: formatCount(kpi("pendingSo")?.value ?? "0"), href: kpi("pendingSo")?.href },
+  ];
 
   return (
-    <div className="dash">
+    <div className="pulse">
+      {/* ------------------------------------------------------- header */}
+      <header className="plHead">
+        <div className="plHeadText">
+          <p className="plEyebrow">
+            {business}
+            {synced && <> · {synced.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</>}
+          </p>
+          <h1>Business pulse</h1>
+          <p className="plSub">
+            {range
+              ? <>How things moved between {fmtDay(range.fromDate)} and {fmtDay(range.toDate)}, set against the same stretch of time just before it.</>
+              : "Pulling together your latest numbers…"}
+          </p>
+        </div>
+        <div className="plControls">
+          {synced && (
+            <span className="plSynced" title="When these figures were calculated">
+              Updated {synced.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          <DateRangePill value={period} onChange={setPeriod} range={range} />
+          <button type="button" className="plRefresh" onClick={refreshAll} disabled={loading} aria-label="Refresh figures" title="Refresh (Ctrl + R)">
+            {loading ? <span className="spinner" /> : <IconRefresh />}
+          </button>
+        </div>
+      </header>
+
       {error !== null && !dash && (
-        <div className="dPanel" style={{ marginBottom: "1rem" }}>
+        <div className="plCard" style={{ marginBottom: "1.25rem" }}>
           <ErrorState
-            title="The dashboard couldn't load"
+            title="We couldn't pull your numbers"
             message={error instanceof ApiError ? error.message : "Check your connection and try again."}
             onRetry={load}
           />
         </div>
       )}
 
-      {/* ------------------------------------------------------- hero */}
-      <section className="dHero" aria-label="Summary">
-        <div className="dHeroTop">
-          <div className="dHeroIntro">
-            <p className="dHeroEyebrow">{me.business?.name ?? "NEXORA"}</p>
-            <h1 className="dHeroTitle">
-              {greeting}, {firstName}
-            </h1>
-            <p className="dHeroSub">
-              {range ? (
-                <>
-                  Here&apos;s how the business moved from {fmtDay(range.fromDate)} to {fmtDay(range.toDate)}.
-                </>
-              ) : (
-                "Here's how the business is moving."
-              )}
-            </p>
-          </div>
-          <div className="dHeroControls">
-            {synced && (
-              <span className="dSynced" title="When these figures were calculated">
-                <small>Last synced</small>
-                {synced.toLocaleDateString("en-GB")}, {synced.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
-            <DateRangePill value={period} onChange={setPeriod} range={range} />
-            <button type="button" className="dRefresh" onClick={refreshAll} disabled={loading} aria-label="Refresh dashboard" title="Refresh (Ctrl + R)">
-              {loading ? <span className="spinner" /> : <IconRefresh />}
-            </button>
-          </div>
-        </div>
+      {/* ------------------------------------------------- right now */}
+      <nav className="plNow" aria-label="Right now">
+        <span className="plNowTag">Right now</span>
+        {rightNow.map((r) => (
+          <Link key={r.label} href={r.href ?? "#"} className="plNowItem">
+            <small>{r.label}</small>
+            <strong>{dash ? r.value : "—"}</strong>
+          </Link>
+        ))}
+      </nav>
 
-        <div className="dHeroStats">
-          {heroStats
-            ? heroStats.map((s) => (
-                <div key={s.label} className="dHeroStat">
-                  <span className="dHeroStatLabel">{s.label}</span>
-                  <strong className="dHeroStatValue" title={`₹${formatMoney(s.value)}`} style={s.tone ? { color: s.tone } : undefined}>
-                    {Number(s.value) < 0 ? `-₹${formatCompact(String(Math.abs(Number(s.value))))}` : `₹${formatCompact(s.value)}`}
-                  </strong>
-                  {s.previous !== undefined ? (
-                    <Delta current={s.value} previous={s.previous} goodWhen={s.goodWhen} />
-                  ) : (
-                    <span className="dHeroStatNote">{s.note}</span>
-                  )}
+      <div className="plGrid" style={dim}>
+        {/* ------------------------------------------- spotlight tiles */}
+        {m ? (
+          <>
+            <div className="plSpan3">
+              <SpotlightTile
+                icon={<IconSales />}
+                label="Revenue billed"
+                value={m.sales.current}
+                previous={m.sales.previous}
+                caption={`${formatCount(m.salesCount.current)} bills`}
+                href={kpi("totalSales")?.href}
+              >
+                <Sparkline points={salesPts} slot={0} name="Billed" />
+              </SpotlightTile>
+            </div>
+            <div className="plSpan3">
+              <SpotlightTile
+                icon={<IconWallet />}
+                label="Cash collected"
+                value={m.received.current}
+                previous={m.received.previous}
+                caption="from customers"
+                href={kpi("received")?.href}
+              >
+                <div className="plSpotMeter" title="Share of this period's billing already collected">
+                  <span className="plMeterTrack sev-ok">
+                    <span className="plMeterFill" style={{ width: `${Math.min(100, Number(kpi("collection")?.value ?? 0))}%` }} />
+                  </span>
+                  <small>{Number(kpi("collection")?.value ?? 0).toFixed(0)}% of billing collected</small>
                 </div>
-              ))
-            : Array.from({ length: 4 }, (_, i) => (
-                <div key={i} className="dHeroStat" aria-busy="true">
-                  <span className="dHeroStatLabel">&nbsp;</span>
-                  <span className="dHeroSkel" />
+              </SpotlightTile>
+            </div>
+            <div className="plSpan3">
+              <SpotlightTile
+                icon={<IconPurchase />}
+                label="Spend on stock"
+                value={m.purchase.current}
+                previous={m.purchase.previous}
+                goodWhen="down"
+                caption={`${formatCount(m.purchaseCount.current)} supplier bills`}
+                href={kpi("totalPurchase")?.href}
+              >
+                <Sparkline points={purchasePts} slot={1} name="Bought" />
+              </SpotlightTile>
+            </div>
+            <div className="plSpan3">
+              <SpotlightTile icon={<IconFile />} label="Average bill" value={m.avgInvoice.current} previous={m.avgInvoice.previous} caption="per sale">
+                <div className="plSpotPairs">
+                  <div>
+                    <small>Units sold</small>
+                    <strong>{formatQuantity(m.soldQty.current)}</strong>
+                  </div>
+                  <div>
+                    <small>Buying customers</small>
+                    <strong>{formatCount(ov?.segments.customers ?? 0)}</strong>
+                  </div>
                 </div>
-              ))}
-        </div>
-      </section>
+              </SpotlightTile>
+            </div>
+          </>
+        ) : (
+          Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="plSpan3">
+              <div className="plSpot" aria-busy="true">
+                <SkeletonBlock height="8.5rem" />
+              </div>
+            </div>
+          ))
+        )}
 
-      <div className="dashGrid">
-        {/* ---------------------------------------------------- overview */}
-        <Panel className="span12" title="Overview" actions={<RangeTag range={range} />}>
-          {tiles.length === 0 ? (
-            <div className="ovGrid" aria-busy="true">
-              {Array.from({ length: 20 }, (_, i) => (
-                <div key={i} className="ovTile ovTileSkeleton">
-                  <span className="skeleton" style={{ width: "55%", height: "1rem" }} />
-                  <span className="skeleton" style={{ width: "70%" }} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="ovGrid" style={{ opacity: loading ? 0.6 : 1 }}>
-              {tiles.map((t) => (
-                <OverviewTile key={t.key} t={t} />
-              ))}
-            </div>
-          )}
-          {ov && (
-            <p className="dFootnote">
-              Changes compare with {new Date(ov.previous.fromDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} –{" "}
-              {new Date(ov.previous.toDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}, the same
-              length of time just before. Stock, balances and counts of records are as of now.
-            </p>
-          )}
-        </Panel>
+        {/* ----------------------------------------- money in vs out */}
+        <Card
+          className="plSpan8"
+          title="Money in vs money out"
+          kicker="What you billed customers (above the line) against what you bought from suppliers (below it). The dark line is the gap between them."
+        >
+          {flow ? <InOutChart sales={salesPts} purchase={purchasePts} /> : <SkeletonBlock height="300px" />}
+        </Card>
 
-        {/* ------------------------------------------------------ trend */}
-        <Panel className="span7" title="Sales & Purchase Trend" actions={<RangeTag range={range} />}>
-          <div className="trendWrap">
-            <div className="trendMain">
-              {trend ? (
-                <TrendChart
-                  series={trend.series.map((s, i) => ({
-                    name: s.name,
-                    color: i === 0 ? COLORS.sales : COLORS.purchase,
-                    points: s.points,
-                  }))}
-                />
-              ) : (
-                <SkeletonBlock height="12rem" />
-              )}
-            </div>
-            {ov && (
-              <div className="trendStats">
-                {[
-                  { label: "Sales", c: ov.metrics.sales, good: "up" as const },
-                  { label: "Sales Return", c: ov.metrics.salesReturns, good: "down" as const },
-                  { label: "Purchase", c: ov.metrics.purchase, good: "down" as const },
-                  ...(ov.metrics.purchaseReturns ? [{ label: "Purchase Return", c: ov.metrics.purchaseReturns, good: "down" as const }] : []),
-                ].map((s) => (
-                  <div key={s.label} className="trendStat">
-                    <div>
-                      <strong title={`₹${formatMoney(s.c.current)}`}>₹{formatCompact(s.c.current)}</strong>
-                      <Delta current={s.c.current} previous={s.c.previous} goodWhen={s.good} />
-                    </div>
-                    <span>{s.label}</span>
+        <Card className="plSpan4" title="Health check" kicker="Four quick signals for this period">
+          {meters.length ? <MeterList meters={meters} /> : <SkeletonBlock lines={4} />}
+        </Card>
+
+        {/* ------------------------------------- attention + who owes */}
+        <Card className="plSpan4" title="Needs your attention" kicker="Most urgent first">
+          {dash ? <AttentionFeed insights={dash.insights} /> : <SkeletonBlock lines={4} />}
+        </Card>
+
+        <Card
+          className="plSpan8"
+          title={owedSide === "receivable" ? "Who owes you, and for how long" : "Who you owe, and for how long"}
+          kicker="As of today. The darker the blue, the older the debt."
+          actions={
+            ov?.aging.payable ? (
+              <Toggle
+                label="Whose balances to show"
+                value={owedSide}
+                onChange={setOwedSide}
+                options={[
+                  { key: "receivable", label: "Customers" },
+                  { key: "payable", label: "Suppliers" },
+                ]}
+              />
+            ) : undefined
+          }
+          footnote={
+            owed && owed.partyCount > 8
+              ? `Showing the 8 largest of ${owed.partyCount} ${owedSide === "receivable" ? "customers" : "suppliers"}. Click a bar to open those bills.`
+              : "Click a bar to open those bills."
+          }
+        >
+          {owed ? (
+            <>
+              <div className="plBands">
+                <div className="plBandTotal">
+                  <small>Total {owedSide === "receivable" ? "to collect" : "to pay"}</small>
+                  <strong title={`₹${formatMoney(owed.totals.total)}`}>₹{formatCompact(owed.totals.total)}</strong>
+                </div>
+                {AGE_BANDS.map((b) => (
+                  <div key={b.key} className="plBand">
+                    <span className="plSwatch" style={{ background: `var(--chart-ramp-${b.ramp + 1})` }} aria-hidden />
+                    <small>{b.label}</small>
+                    <strong title={`₹${formatMoney(owed.totals[b.key])}`}>₹{formatCompact(owed.totals[b.key])}</strong>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </Panel>
-
-        {ov ? <PaymentModePanel data={ov.paymentModes} range={range!} /> : <div className="span5"><SkeletonBlock height="16rem" /></div>}
-
-        {/* ---------------------------------------------------- aging */}
-        {ov && <AgingPanel aging={ov.aging} />}
-
-        {/* --------------------------------------- insight + breakdown */}
-        {ov && <CustomerInsightPanel segments={ov.segments} range={range!} />}
-        {ov && <SalesBreakdownPanel categories={ov.categories} range={range!} />}
-
-        {/* ----------------------------------------- items + low stock */}
-        {ov && <ItemPerformancePanel items={ov.items} range={range!} />}
-
-        <Panel
-          className="span5"
-          title={
-            <>
-              Low Stock
-              {lowStock && lowStock.total > 0 && <span className="dChip">{lowStock.total}</span>}
+              <AgingBars rows={owed.rows} side={owedSide} />
             </>
-          }
+          ) : (
+            <SkeletonBlock height="260px" />
+          )}
+        </Card>
+
+        {/* -------------------------------------- products + buyers */}
+        <Card
+          className="plSpan7"
+          title="Product map"
+          kicker="Each bubble is a product: further right sells more units, higher up earns more. Bigger bubbles appear on more bills."
           actions={
-            <Link href="/reports/stock-summary?stockFilter=LOW" className="dLink">
-              View all
+            <Link href="/reports/item-report" className="plLink">
+              Item report
             </Link>
           }
         >
-          {!lowStock ? (
-            <SkeletonBlock lines={3} />
-          ) : lowStock.rows.length === 0 ? (
-            <EmptyState compact icon={<IconCheckCircle style={{ color: "var(--success-solid)" }} />} title="Stock levels are healthy" description="No item with a reorder level has fallen to it." />
-          ) : (
-            <ul className="lowList">
-              {lowStock.rows.map((r, i) => {
-                const pct = r.reorderLevel ? Math.min(100, ((r.quantity ?? 0) / r.reorderLevel) * 100) : 0;
-                return (
-                  <li key={`${r.itemName}-${r.variantSku}-${i}`}>
-                    <div>
-                      {r.itemNameHref ? (
-                        <Link href={r.itemNameHref} className="cellLink">
-                          {r.itemName}
-                        </Link>
-                      ) : (
-                        r.itemName
-                      )}
-                      <small>
-                        {[r.variantSku && r.variantSku !== "—" ? r.variantSku : null, r.warehouse].filter(Boolean).join(" · ")}
-                      </small>
-                    </div>
-                    <span className="stockLevelTrack" style={{ width: "4.5rem", flex: "none" }}>
-                      <span className="stockLevelFill low" style={{ width: `${Math.max(4, pct)}%` }} />
-                    </span>
-                    <span className="lowQty">
-                      {formatQuantity(r.quantity ?? 0)} / {formatQuantity(r.reorderLevel ?? 0)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Panel>
+          {ov ? <ProductMap items={ov.items} /> : <SkeletonBlock height="300px" />}
+        </Card>
+
+        <Card
+          className="plSpan5"
+          title="Top buyers"
+          kicker="Customers who spent the most this period"
+          actions={
+            <Link href="/customers" className="plLink">
+              All customers
+            </Link>
+          }
+        >
+          {dash && m ? <RankList rows={topBuyers} total={Number(m.sales.current)} empty="No sales in this period yet" /> : <SkeletonBlock lines={5} />}
+        </Card>
+
+        {/* ----------------------------------- categories + mix + pay */}
+        <Card className="plSpan5" title="Where revenue comes from" kicker="Sales by category. Bigger tiles bring in more.">
+          {ov ? <CategoryTreemap categories={ov.categories} /> : <SkeletonBlock height="260px" />}
+        </Card>
+
+        <Card
+          className="plSpan7"
+          title="Your customer mix"
+          kicker="Buyers this period, grouped by how recently, how often and how much they bought"
+          actions={
+            <Link href="/analysis/customers" className="plLink">
+              Customer analysis
+            </Link>
+          }
+        >
+          {ov ? <CustomerMix segments={ov.segments} /> : <SkeletonBlock lines={5} />}
+        </Card>
+
+        <Card
+          className="plSpan5"
+          title="How you get paid"
+          kicker={modeSource === "receipts" ? "Money received, by payment method" : "Bills raised, by payment terms"}
+          actions={
+            <Toggle
+              label="What to split"
+              value={modeSource}
+              onChange={setModeSource}
+              options={[
+                { key: "receipts", label: "Received" },
+                { key: "sales", label: "Billed" },
+              ]}
+            />
+          }
+        >
+          {ov ? <ModeSplit rows={ov.paymentModes[modeSource]} /> : <SkeletonBlock lines={4} />}
+        </Card>
+
+        <Card
+          className="plSpan7"
+          title={
+            <>
+              Running low
+              {lowStock && lowStock.total > 0 && <span className="plCount">{lowStock.total}</span>}
+            </>
+          }
+          kicker="Items at or below their reorder level"
+          actions={
+            <Link href="/reports/stock-summary?stockFilter=LOW" className="plLink">
+              Full list
+            </Link>
+          }
+        >
+          {lowStock ? <RunningLow rows={lowStock.rows} /> : <SkeletonBlock lines={4} />}
+        </Card>
 
         {/* --------------------------------------------- live lists */}
-        <div className="span6">
-          <DocMiniList title="Pending deliveries" subtitle="Oldest orders first" basePath="/sales-orders" viewAllHref="/sales-orders?pendingDelivery=true" state={pendingDelivery} emptyText="Every confirmed order has been dispatched." />
+        <div className="plSpan6">
+          <DocMiniList
+            title="Waiting to ship"
+            subtitle="Confirmed orders not yet delivered, oldest first"
+            basePath="/sales-orders"
+            viewAllHref="/sales-orders?pendingDelivery=true"
+            state={toShip}
+            emptyText="Every confirmed order is on its way."
+          />
         </div>
-        <div className="span6">
-          <DocMiniList title="Recent invoices" subtitle="Newest first" basePath="/sales-invoices" viewAllHref="/sales-invoices" state={invoices} status="payment" emptyText="No invoices yet." />
+        <div className="plSpan6">
+          <DocMiniList
+            title="Latest bills"
+            subtitle="The most recent invoices you raised"
+            basePath="/sales-invoices"
+            viewAllHref="/sales-invoices"
+            state={invoices}
+            status="payment"
+            emptyText="No bills raised yet."
+          />
         </div>
       </div>
+
+      {ov && (
+        <p className="plFootnote">
+          Changes compare with {fmtDay(ov.previous.fromDate)} – {fmtDay(ov.previous.toDate)}. Balances, stock and order counts are as of now. Draft
+          and cancelled documents are never counted.
+        </p>
+      )}
     </div>
   );
 }

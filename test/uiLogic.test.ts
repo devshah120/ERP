@@ -19,27 +19,27 @@ describe("navigation registry", () => {
   });
 
   it("resolves the most specific entry for a path", () => {
-    expect(findNavMatch("/reports/sales-register")?.child?.label).toBe("Sales Register");
-    expect(findNavMatch("/reports/stock-summary")?.child?.label).toBe("Stock Summary");
-    expect(findNavMatch("/sales-orders/abc123")?.child?.label).toBe("Sales Orders");
-    expect(findNavMatch("/dashboard")?.group.label).toBe("Dashboard");
+    expect(findNavMatch("/reports/sales-register")?.child?.label).toBe("Sales Book");
+    expect(findNavMatch("/reports/stock-summary")?.child?.label).toBe("Stock Position");
+    expect(findNavMatch("/sales-orders/abc123")?.child?.label).toBe("Customer Orders");
+    expect(findNavMatch("/dashboard")?.group.label).toBe("Business Pulse");
     expect(findNavMatch("/not-a-module")).toBeNull();
   });
 
   it("builds breadcrumbs whose last crumb is never a link", () => {
-    expect(breadcrumbsFor("/sales-orders")).toEqual([{ label: "Sales" }, { label: "Sales Orders" }]);
+    expect(breadcrumbsFor("/sales-orders")).toEqual([{ label: "Selling" }, { label: "Customer Orders" }]);
     expect(breadcrumbsFor("/sales-orders/new")).toEqual([
-      { label: "Sales" },
-      { label: "Sales Orders", href: "/sales-orders" },
+      { label: "Selling" },
+      { label: "Customer Orders", href: "/sales-orders" },
       { label: "New" },
     ]);
     expect(breadcrumbsFor("/sales-invoices/x1/print")).toEqual([
-      { label: "Sales" },
-      { label: "Invoices", href: "/sales-invoices" },
+      { label: "Selling" },
+      { label: "Sales Bills", href: "/sales-invoices" },
       { label: "Details", href: "/sales-invoices/x1" },
       { label: "Print" },
     ]);
-    expect(breadcrumbsFor("/dashboard")).toEqual([{ label: "Dashboard" }]);
+    expect(breadcrumbsFor("/dashboard")).toEqual([{ label: "Business Pulse" }]);
   });
 
   it("never resolves a planned module as a page or breadcrumb", () => {
@@ -47,9 +47,9 @@ describe("navigation registry", () => {
     expect(findNavMatch("/apps")).toBeNull();
     expect(breadcrumbsFor("/apps")).toEqual([]);
     // ...while built screens, including ones that used to be planned, do resolve.
-    expect(findNavMatch("/coupons")?.child?.label).toBe("Coupons");
-    expect(findNavMatch("/logs")?.group.label).toBe("Activity Log");
-    expect(findNavMatch("/user-roles")?.child?.label).toBe("User Roles");
+    expect(findNavMatch("/coupons")?.child?.label).toBe("Promo Codes");
+    expect(findNavMatch("/logs")?.group.label).toBe("Audit Trail");
+    expect(findNavMatch("/user-roles")?.child?.label).toBe("Roles & Permissions");
   });
 
   it("never offers quick-create for a module that is switched off", () => {

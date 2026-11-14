@@ -25,7 +25,17 @@ import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
 import UserMenu from "@/components/shell/UserMenu";
 import { FinancialYearMenu, CalculatorButton } from "@/components/shell/HeaderWidgets";
-import { IconSearch, IconChevronRight, IconMenu, IconSidebar, IconPlus, IconHome, IconClose, IconStore } from "@/components/icons";
+import {
+  IconSearch,
+  IconChevronRight,
+  IconMenu,
+  IconSidebar,
+  IconPlus,
+  IconHome,
+  IconClose,
+  IconStore,
+  IconSettings,
+} from "@/components/icons";
 
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
 
@@ -166,6 +176,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return !perm || hasPermission(perm);
     });
   const filtering = q.length > 0;
+
+  const workspaceName = me.business?.name ?? "Workspace";
+  const workspaceInitial = workspaceName.trim().charAt(0).toUpperCase() || "N";
+  const settingsPerm = getRequiredPermission("/settings");
+  const canOpenSettings = !settingsPerm || hasPermission(settingsPerm);
+  const workspaceBody = (
+    <>
+      <span className="sbWorkspaceMark" aria-hidden>
+        {workspaceInitial}
+      </span>
+      <span className="sbWorkspaceText">
+        <strong>{workspaceName}</strong>
+        <small>{me.role?.name ?? me.email}</small>
+      </span>
+    </>
+  );
 
   return (
     <div className="appShell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
@@ -351,6 +377,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
+        <div className="sbFoot">
+          {canOpenSettings ? (
+            <Link href="/settings" className="sbWorkspace" title={`${workspaceName} — workspace settings`}>
+              {workspaceBody}
+              <IconSettings />
+            </Link>
+          ) : (
+            <div className="sbWorkspace" title={workspaceName}>
+              {workspaceBody}
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* Collapsed-rail tooltip / submenu, fixed so the scrolling nav can't clip it. */}
@@ -362,7 +400,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {flyout && flyoutGroup && flyout.kind === "menu" && (
         <div
           className="sbFlyout"
-          style={{ top: Math.max(8, Math.min(flyout.top, window.innerHeight - 48 - flyoutChildren.length * 31)) }}
+          style={{ top: Math.max(8, Math.min(flyout.top, window.innerHeight - 60 - flyoutChildren.length * 33)) }}
           onMouseEnter={keepFlyout}
           onMouseLeave={hideFlyoutSoon}
         >

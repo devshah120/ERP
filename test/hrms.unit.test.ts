@@ -269,3 +269,40 @@ describe("variable pay on the payslip", () => {
     expect(r.netPay.toFixed(2)).toBe("0.00");
   });
 });
+
+describe("payroll journal", () => {
+  it("balances the accrual and payment entries for a set of payslips", async () => {
+    const { accrualEntries, paymentEntries } = await import("@/lib/hr/payrollPosting");
+    const slips = [
+      {
+        grossEarnings: "18709.68",
+        reimbursements: "500.00",
+        netPay: "15825.68",
+        employee: { paymentMode: "BANK" },
+        deductions: [
+          { code: "PF", amount: "1684.00" },
+          { code: "PT", amount: "200.00" },
+          { code: "LOAN", amount: "1000.00" },
+          { code: "CANTEEN", amount: "500.00" },
+        ],
+        employerContributions: [{ code: "PF_ER", amount: "1684.00" }],
+      },
+      { grossEarnings: "12000.00", reimbursements: "0", netPay: "11910.00", employee: { paymentMode: "CASH" }, deductions: [{ code: "ESI", amount: "90.00" }], employerContributions: [{ code: "ESI_ER", amount: "390.00" }] },
+    ];
+    const total = (entries: { debit?: Decimal; credit?: Decimal }[], side: "debit" | "credit") => entries.reduce((t, e) => t.plus(e[side] ?? 0), new Decimal(0)).toFixed(2);
+    const accrual = accrualEntries(slips);
+    expect(total(accrual, "debit")).toBe(total(accrual, "credit"));
+    const by = (role: string) => accrual.find((e) => e.role === role)!;
+    expect(by("SALARY_EXPENSE").debit!.toFixed(2)).toBe("30709.68");
+    expect(by("EMPLOYER_CONTRIBUTION_EXPENSE").debit!.toFixed(2)).toBe("2074.00");
+    expect(by("PF_PAYABLE").credit!.toFixed(2)).toBe("3368.00");
+    expect(by("ESI_PAYABLE").credit!.toFixed(2)).toBe("480.00");
+    expect(by("SALARY_RECOVERIES").credit!.toFixed(2)).toBe("500.00");
+    expect(by("SALARY_PAYABLE").credit!.toFixed(2)).toBe("27735.68");
+
+    const payment = paymentEntries(slips);
+    expect(total(payment, "debit")).toBe(total(payment, "credit"));
+    expect(payment.find((e) => e.role === "BANK")!.credit!.toFixed(2)).toBe("15825.68");
+    expect(payment.find((e) => e.role === "CASH")!.credit!.toFixed(2)).toBe("11910.00");
+  });
+});

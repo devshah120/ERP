@@ -15,6 +15,7 @@ import { monthVariables, variableKey } from "./variables";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { applyDueChanges, salaryForMonth } from "./history";
+import { postPayrollAccrual, postPayrollPayment, reversePayrollAccrual } from "./payrollPosting";
 import type { PayslipPrintData } from "./payslipPdf";
 import { nextHrNumber, employeeLabels, selfEmployee, monthQuery, type AnyDoc } from "./common";
 
@@ -297,6 +298,8 @@ export async function approveRun(ctx: AuthContext, id: string, input: { payUnmar
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "APPROVED" }, { session });
       run.set({ status: "APPROVED", approvedByUserId: ctx.userId, approvedAt: new Date(), unmarkedDaysPaid: unmarkedDays, updatedBy: ctx.userId });
       await run.save({ session });
+      // ERP workspaces: the month's salary cost goes to the general ledger with the approval.
+      await postPayrollAccrual(ctx, run, slips, session);
     });
   } finally {
     await session.endSession();
@@ -366,6 +369,8 @@ export async function markRunPaid(ctx: AuthContext, id: string, input: z.infer<t
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "PAID" }, { session });
       run.set({ status: "PAID", paidAt, paymentReference: input.reference, updatedBy: ctx.userId });
       await run.save({ session });
+      const slips = await Payslip.find({ businessId: ctx.businessId, payrollRunId: run._id }).session(session).lean<AnyDoc[]>();
+      await postPayrollPayment(ctx, run, slips, session);
     });
   } finally {
     await session.endSession();
@@ -406,6 +411,7 @@ export async function cancelRun(ctx: AuthContext, id: string, reason: string) {
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "CANCELLED" }, { session });
       run.set({ status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason, updatedBy: ctx.userId });
       await run.save({ session });
+      await reversePayrollAccrual(ctx, run, reason, session);
     });
   } finally {
     await session.endSession();

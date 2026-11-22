@@ -45,6 +45,14 @@ export const DEFAULT_CHART: SeedAccount[] = [
     systemRole: "SUPPLIER_ADVANCES",
     description: "Payments made that are not yet matched to a supplier bill",
   },
+  {
+    code: "1170",
+    name: "Loans & Advances to Employees",
+    type: "ASSET",
+    parent: "1100",
+    systemRole: "EMPLOYEE_ADVANCES",
+    description: "Salary advances and staff loans; reduced by payroll recoveries",
+  },
   { code: "1200", name: "Fixed Assets", type: "ASSET", isGroup: true, parent: "1000" },
 
   // --- Liabilities --------------------------------------------------
@@ -69,6 +77,11 @@ export const DEFAULT_CHART: SeedAccount[] = [
     systemRole: "CUSTOMER_ADVANCES",
     description: "Money received that is not yet matched to an invoice",
   },
+  { code: "2140", name: "Salaries Payable", type: "LIABILITY", parent: "2100", systemRole: "SALARY_PAYABLE", description: "Net pay of approved payrolls not yet paid" },
+  { code: "2141", name: "PF Payable", type: "LIABILITY", parent: "2100", systemRole: "PF_PAYABLE", description: "Employee and employer provident fund due to EPFO" },
+  { code: "2142", name: "ESI Payable", type: "LIABILITY", parent: "2100", systemRole: "ESI_PAYABLE", description: "Employee and employer ESI due to ESIC" },
+  { code: "2143", name: "Professional Tax Payable", type: "LIABILITY", parent: "2100", systemRole: "PT_PAYABLE" },
+  { code: "2144", name: "TDS Payable - Salaries", type: "LIABILITY", parent: "2100", systemRole: "TDS_PAYABLE", description: "Income tax deducted from salaries (section 192)" },
 
   // --- Equity -------------------------------------------------------
   { code: "3000", name: "Equity", type: "EQUITY", isGroup: true },
@@ -96,6 +109,8 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: "Absorbs the rounding on document totals, either way",
   },
 
+  { code: "4050", name: "Recoveries from Employees", type: "INCOME", parent: "4000", systemRole: "SALARY_RECOVERIES", description: "Canteen and other recoveries deducted from pay" },
+
   // --- Expenses -----------------------------------------------------
   { code: "5000", name: "Expenses", type: "EXPENSE", isGroup: true },
   { code: "5010", name: "Purchases", type: "EXPENSE", parent: "5000", systemRole: "PURCHASES" },
@@ -118,7 +133,9 @@ export const DEFAULT_CHART: SeedAccount[] = [
     description: "Raw materials and consumables issued through Material Consumption",
   },
   { code: "5100", name: "Operating Expenses", type: "EXPENSE", isGroup: true, parent: "5000" },
-  { code: "5110", name: "Salaries & Wages", type: "EXPENSE", parent: "5100" },
+  { code: "5110", name: "Salaries & Wages", type: "EXPENSE", parent: "5100", systemRole: "SALARY_EXPENSE" },
+  { code: "5111", name: "Employer PF & ESI Contribution", type: "EXPENSE", parent: "5100", systemRole: "EMPLOYER_CONTRIBUTION_EXPENSE" },
+  { code: "5112", name: "Staff Expense Reimbursements", type: "EXPENSE", parent: "5100", systemRole: "STAFF_REIMBURSEMENT_EXPENSE" },
   { code: "5120", name: "Rent", type: "EXPENSE", parent: "5100" },
   { code: "5130", name: "Electricity & Utilities", type: "EXPENSE", parent: "5100" },
   { code: "5140", name: "Bank Charges", type: "EXPENSE", parent: "5100" },
@@ -171,6 +188,16 @@ export async function ensureChartOfAccounts(
     );
     idByCode.set(seed.code, docs[0]._id);
     created += 1;
+  }
+
+  // Roles added to the seed after a tenant was set up (e.g. 5110 Salaries & Wages
+  // becoming SALARY_EXPENSE) are given to the existing account with that code,
+  // unless that account already has another role or the role is taken.
+  const taken = new Set((await Account.find({ businessId, systemRole: { $ne: null } }, { systemRole: 1 }, { session }).lean()).map((a) => a.systemRole));
+  for (const seed of DEFAULT_CHART) {
+    if (!seed.systemRole || taken.has(seed.systemRole)) continue;
+    const res = await Account.updateOne({ businessId, code: seed.code, systemRole: null, type: seed.type }, { $set: { systemRole: seed.systemRole } }, session ? { session } : {});
+    if (res.modifiedCount > 0) taken.add(seed.systemRole);
   }
 
   return { created, total: idByCode.size };

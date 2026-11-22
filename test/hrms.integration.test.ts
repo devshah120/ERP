@@ -497,4 +497,55 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect((await variableSheet(ctx, { ...period })).rows.find((r) => r.name === "Ravi Kumar")!.amounts[comp("OT")]).toBe("1250.50");
     expect((await variableTemplate(ctx, 2026, 12)).length).toBeGreaterThan(1000);
   });
+
+  it("posts payroll to the ERP ledger on approval, records the payment and reverses on rollback", async () => {
+    const { createRun, approveRun, markRunPaid, cancelRun } = await import("@/lib/hr/payroll");
+    const { payrollVouchers, postMissingPayrollVouchers } = await import("@/lib/hr/payrollPosting");
+    const { ensureChartOfAccounts } = await import("@/lib/accounting/chartOfAccounts");
+    const { Voucher } = await import("@/models/Voucher");
+    const { Account } = await import("@/models/Account");
+    const bId = new Types.ObjectId(businessId);
+    // Collections and indexes exist before the first transactional write (as they do in a running database).
+    await Promise.all([Voucher.init(), Account.init()]);
+
+    // HRMS-only: nothing is posted, and the screen says why.
+    expect((await payrollVouchers(ctx)).enabled).toBe(false);
+
+    // The same workspace with ERP and a chart of accounts (an older chart: 5110 without its payroll role).
+    const erp = { ...ctx, products: ["ERP", "HRMS"] as typeof ctx.products };
+    await ensureChartOfAccounts(bId);
+    await Account.updateOne({ businessId: bId, code: "5110" }, { systemRole: null });
+    await ensureChartOfAccounts(bId);
+    expect((await Account.findOne({ businessId: bId, code: "5110" }).lean<{ systemRole: string }>())!.systemRole).toBe("SALARY_EXPENSE");
+
+    const jan = await createRun(erp, { month: 1, year: 2027, notes: "" });
+    await approveRun(erp, jan.id, { payUnmarkedAsPresent: true });
+    const accrual = await Voucher.findOne({ businessId: bId, sourceType: "PAYROLL_RUN", sourceId: jan.id }).lean<{ totalDebit: unknown; totalCredit: unknown; voucherDate: Date; status: string }>();
+    expect(accrual).toBeTruthy();
+    expect(String(accrual!.totalDebit)).toBe(String(accrual!.totalCredit));
+    expect(accrual!.voucherDate.toISOString().slice(0, 10)).toBe("2027-01-31");
+
+    await markRunPaid(erp, jan.id, { paidOn: "2027-02-01", reference: "UTR123" });
+    const payment = await Voucher.findOne({ businessId: bId, sourceType: "PAYROLL_PAYMENT", sourceId: jan.id }).lean<{ voucherType: string }>();
+    expect(payment?.voucherType).toBe("PAYMENT");
+    const listed = (await payrollVouchers(erp)).items.find((i) => i.id === jan.id)!;
+    expect(listed).toMatchObject({ missing: false });
+    expect(listed.accrual?.number).toBeTruthy();
+    expect(listed.payment?.number).toBeTruthy();
+
+    // An approved run that is rolled back gets a reversing entry.
+    const feb = await createRun(erp, { month: 2, year: 2027, notes: "" });
+    await approveRun(erp, feb.id, { payUnmarkedAsPresent: true });
+    await cancelRun(erp, feb.id, "Wrong salaries");
+    expect((await Voucher.findOne({ businessId: bId, sourceType: "PAYROLL_RUN", sourceId: feb.id }).lean<{ status: string }>())!.status).toBe("CANCELLED");
+    expect(await Voucher.exists({ businessId: bId, sourceType: "PAYROLL_RUN_REVERSAL", sourceId: feb.id })).toBeTruthy();
+
+    // A run approved while posting was off can be posted afterwards, once.
+    const mar = await createRun(ctx, { month: 3, year: 2027, notes: "" });
+    await approveRun(ctx, mar.id, { payUnmarkedAsPresent: true });
+    expect((await payrollVouchers(erp)).items.find((i) => i.id === mar.id)!.missing).toBe(true);
+    expect((await postMissingPayrollVouchers(erp, mar.id)).posted).toHaveLength(1);
+    expect((await postMissingPayrollVouchers(erp, mar.id)).posted).toHaveLength(0);
+    await expect(postMissingPayrollVouchers(ctx, mar.id)).rejects.toMatchObject({ code: "ACCOUNTING_OFF" });
+  });
 });

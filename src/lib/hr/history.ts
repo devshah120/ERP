@@ -5,6 +5,8 @@ import { AppError } from "@/lib/errors/AppError";
 import {
   Employee,
   EmploymentChange,
+  Payslip,
+  PayrollArrear,
   HrDepartment,
   Designation,
   EMPLOYMENT_CHANGE_TYPES,
@@ -22,6 +24,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, todayIn } from "./calendar";
 import { assertPayrollOpen } from "./attendance";
 import { findEmployee, businessTimeZone, objectId, type AnyDoc } from "./common";
+import { createIncrementArrears, cancelArrearsOfChange } from "./arrears";
 
 /*
  * Employment history: dated changes to an employee's placement and salary.
@@ -186,6 +189,8 @@ export const changeSchema = z.object({
 });
 
 const EXIT_STATUSES = ["RESIGNED", "TERMINATED", "RETIRED"];
+/** Fields a backdated revision into paid months may change (paid as arrears). */
+const ARREAR_FIELDS = ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance"] as const;
 
 /**
  * Records a dated change. Backdated changes are allowed up to the last
@@ -203,12 +208,27 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
   if (input.changes.reportingManagerId && String(input.changes.reportingManagerId) === String(emp._id)) {
     throw AppError.badRequest("An employee can't report to themselves.", "SELF_MANAGER");
   }
-  await assertPayrollOpen(ctx.businessId, [effective]);
+  // Months already paid at the old rate: only a salary increase of the earning
+  // components can reach back into them, and the difference is paid as arrears.
+  const paidAfter = await Payslip.exists({
+    businessId: ctx.businessId,
+    employeeId: emp._id,
+    status: { $in: ["APPROVED", "PAID"] },
+    $or: [{ year: { $gt: effective.getUTCFullYear() } }, { year: effective.getUTCFullYear(), month: { $gte: effective.getUTCMonth() + 1 } }],
+  });
+  if (paidAfter) {
+    const touched = Object.entries(input.changes).filter(([, v]) => v !== undefined).map(([k]) => k);
+    const earningsOnly = touched.length > 0 && touched.every((k) => (ARREAR_FIELDS as readonly string[]).includes(k));
+    if (input.changeType !== "SALARY_REVISION" || !earningsOnly) {
+      throw AppError.badRequest("Payroll from that date is already approved. Only a salary revision of the earning components can be backdated (paid as arrears); choose a later date for other changes.", "PAYROLL_LOCKED");
+    }
+  }
   const today = todayIn(await businessTimeZone(ctx.businessId));
 
   const session = await mongoose.startSession();
   let created: AnyDoc = null;
   let changed: string[] = [];
+  let arrears = 0;
   try {
     await session.withTransaction(async () => {
       await ensureBaseline(ctx.businessId, emp, ctx.userId, session);
@@ -222,6 +242,9 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
       }
       changed = TRACKED_FIELDS.filter((f) => norm(f, before[f]) !== norm(f, after[f]));
       if (changed.length === 0) throw AppError.badRequest("Nothing would change on that date.", "NOTHING_TO_CHANGE");
+      if (paidAfter && changed.some((f) => d(after[f as TrackedField]).lt(d(before[f as TrackedField])))) {
+        throw AppError.badRequest("A salary reduction can't be backdated into months already paid. Choose a date after the last approved payroll.", "PAYROLL_LOCKED");
+      }
 
       [created] = await EmploymentChange.create(
         [
@@ -244,6 +267,7 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
       const later = changes.filter((c) => toDay(c.effectiveDate) > effective);
       await propagate(ctx.businessId, later, changed, (f) => after[f as TrackedField], session);
       await syncEmployee(ctx.businessId, emp._id, today, session);
+      arrears = paidAfter ? await createIncrementArrears(ctx, emp, effective, created._id, session) : 0;
     });
   } finally {
     await session.endSession();
@@ -259,7 +283,7 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
     newValue: { employee: emp.employeeCode, changeType: input.changeType, effectiveDate: dayKey(effective), changed: Object.fromEntries(changed.map((f) => [f, (input.changes as AnyDoc)[f]])) },
     reason: input.reason || undefined,
   });
-  return { id: String(created._id), effectiveDate: dayKey(effective), changedFields: changed, scheduled: effective > today };
+  return { id: String(created._id), effectiveDate: dayKey(effective), changedFields: changed, scheduled: effective > today, arrears };
 }
 
 /**
@@ -273,7 +297,9 @@ export async function deleteChange(ctx: AuthContext, employeeId: string, changeI
   const target = await EmploymentChange.findOne({ _id: changeId, businessId: ctx.businessId, employeeId: emp._id }).lean<AnyDoc>();
   if (!target) throw AppError.notFound("Change not found");
   if (target.source === "BASELINE") throw AppError.badRequest("The joining record can't be removed.", "BASELINE");
-  await assertPayrollOpen(ctx.businessId, [toDay(target.effectiveDate)]);
+  // A backdated revision with arrears can go while its arrears are unpaid; anything else in a locked month stays.
+  const withArrears = await PayrollArrear.exists({ businessId: ctx.businessId, sourceChangeId: target._id });
+  if (!withArrears) await assertPayrollOpen(ctx.businessId, [toDay(target.effectiveDate)]);
   const today = todayIn(await businessTimeZone(ctx.businessId));
 
   const session = await mongoose.startSession();
@@ -284,6 +310,7 @@ export async function deleteChange(ctx: AuthContext, employeeId: string, changeI
       const prior = changes[idx - 1] ?? changes[0];
       const later = changes.slice(idx + 1);
       await propagate(ctx.businessId, later, target.changedFields ?? [], (f) => prior.values?.[f], session);
+      if (withArrears) await cancelArrearsOfChange(ctx.businessId, target._id, session);
       await EmploymentChange.deleteOne({ _id: target._id, businessId: ctx.businessId }, { session });
       await syncEmployee(ctx.businessId, emp._id, today, session);
     });

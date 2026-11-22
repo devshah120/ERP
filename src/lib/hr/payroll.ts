@@ -16,6 +16,7 @@ import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attenda
 import { computePayslip } from "./payrollMath";
 import { applyDueChanges, salaryForMonth } from "./history";
 import { postPayrollAccrual, postPayrollPayment, reversePayrollAccrual } from "./payrollPosting";
+import { pendingArrearLines, settleArrears, reopenArrears } from "./arrears";
 import type { PayslipPrintData } from "./payslipPdf";
 import { nextHrNumber, employeeLabels, selfEmployee, monthQuery, type AnyDoc } from "./common";
 
@@ -102,6 +103,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
     salaryForMonth(ctx.businessId, emps, start, end, session),
     monthVariables(ctx.businessId, run.year, run.month, ids, session),
   ]);
+  const arrears = await pendingArrearLines(ctx.businessId, ids, session);
 
   let totalGross = new Decimal(0);
   let totalReimb = new Decimal(0);
@@ -134,7 +136,8 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       lopDays: summary.lopDays,
       loans: myLoans.map((l) => ({ loanId: String(l._id), emi: d(l.emiAmount), outstanding: d(l.amount).minus(d(l.repaidAmount)) })),
       reimbursements: myClaims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0)),
-      variables: variables.get(key) ?? [],
+      // Variable pay for the month plus any arrears owed for approved months.
+      variables: [...(variables.get(key) ?? []), ...(arrears.get(key)?.lines ?? [])],
     });
     const employerTotal = result.employerContributions.reduce((t, l) => t.plus(l.amount), new Decimal(0));
     const label = labels.get(key);
@@ -174,7 +177,8 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       holidays: summary.holidays,
       weeklyOffs: summary.weeklyOffs,
       unmarkedDays: summary.unmarked,
-      variableKey: variableKey(variables.get(key)),
+      variableKey: variableKey([...(variables.get(key) ?? []), ...(arrears.get(key)?.lines ?? [])]),
+      arrearIds: arrears.get(key)?.ids ?? [],
       structure: {
         basic: dec128(salary.basic),
         hra: dec128(salary.hra),
@@ -296,6 +300,7 @@ export async function approveRun(ctx: AuthContext, id: string, input: { payUnmar
         }
       }
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "APPROVED" }, { session });
+      await settleArrears(ctx.businessId, slips.flatMap((s) => s.arrearIds ?? []), run._id, session);
       run.set({ status: "APPROVED", approvedByUserId: ctx.userId, approvedAt: new Date(), unmarkedDaysPaid: unmarkedDays, updatedBy: ctx.userId });
       await run.save({ session });
       // ERP workspaces: the month's salary cost goes to the general ledger with the approval.
@@ -337,10 +342,12 @@ async function assertAttendanceSettled(ctx: AuthContext, run: AnyDoc, slips: Any
   }
   for (const s of slips) if (!live.has(String(s.employeeId))) changed.push(s.employee?.name ?? "an employee");
   // Variable pay entered or edited after the draft was calculated.
-  const vars = await monthVariables(ctx.businessId, run.year, run.month, [...live.values()].map((v) => v.emp._id));
+  const liveIds = [...live.values()].map((v) => v.emp._id);
+  const [vars, arrears] = await Promise.all([monthVariables(ctx.businessId, run.year, run.month, liveIds), pendingArrearLines(ctx.businessId, liveIds)]);
   for (const [key, { emp }] of live) {
     const slip = slipBy.get(key);
-    if (slip && slip.variableKey !== undefined && slip.variableKey !== variableKey(vars.get(key)) && !changed.includes(emp.name)) changed.push(emp.name);
+    const nowKey = variableKey([...(vars.get(key) ?? []), ...(arrears.get(key)?.lines ?? [])]);
+    if (slip && slip.variableKey !== undefined && slip.variableKey !== nowKey && !changed.includes(emp.name)) changed.push(emp.name);
   }
   if (changed.length > 0) {
     const names = `${changed.slice(0, 5).join(", ")}${changed.length > 5 ? "…" : ""}`;
@@ -412,6 +419,7 @@ export async function cancelRun(ctx: AuthContext, id: string, reason: string) {
       run.set({ status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason, updatedBy: ctx.userId });
       await run.save({ session });
       await reversePayrollAccrual(ctx, run, reason, session);
+      await reopenArrears(ctx.businessId, run._id, session);
     });
   } finally {
     await session.endSession();

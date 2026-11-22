@@ -246,6 +246,45 @@ export const PayrollHold = defineHrModel(
   ).index({ businessId: 1, year: 1, month: 1, employeeId: 1 }, { unique: true })
 );
 
+export const ARREAR_KINDS = ["INCREMENT", "DAY", "DA"] as const;
+
+/** Pay owed for months whose payroll is already approved; paid as an earning in the next payroll. */
+export const PayrollArrear = defineHrModel(
+  "PayrollArrear",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      kind: { type: String, enum: ARREAR_KINDS, required: true },
+      /** The month (or range of months) the arrear is for. */
+      fromYear: { type: Number, required: true },
+      fromMonth: { type: Number, required: true },
+      toYear: { type: Number, required: true },
+      toMonth: { type: Number, required: true },
+      amount: { type: Schema.Types.Decimal128, required: true },
+      breakdown: {
+        type: [new Schema({ code: String, label: String, amount: Schema.Types.Decimal128 }, { _id: false })],
+        default: [],
+      },
+      /** DAY: loss-of-pay days paid back. */
+      days: { type: Number, default: null },
+      /** DA: percentage of basic. */
+      percent: { type: Number, default: null },
+      reason: { type: String, trim: true, default: "" },
+      /** INCREMENT: the backdated salary revision that caused it. */
+      sourceChangeId: { type: Schema.Types.ObjectId, ref: "EmploymentChange", default: null },
+      status: { type: String, enum: ["PENDING", "INCLUDED", "CANCELLED"], default: "PENDING" },
+      /** The payroll run that paid it. */
+      payrollRunId: { type: Schema.Types.ObjectId, ref: "PayrollRun", default: null },
+      createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  )
+    .index({ businessId: 1, status: 1, employeeId: 1 })
+    .index({ businessId: 1, sourceChangeId: 1 })
+    .index({ businessId: 1, payrollRunId: 1 })
+);
+
 /* ------------------------------------------------------------------ */
 /* Employment history                                                  */
 /* ------------------------------------------------------------------ */
@@ -599,6 +638,8 @@ const payslipSchema = new Schema(
     weeklyOffs: { type: Number, default: 0 },
     /** Working days with no attendance recorded; paid as present and included in presentDays. */
     unmarkedDays: { type: Number, default: 0 },
+    /** Arrears paid with this payslip. */
+    arrearIds: { type: [Schema.Types.ObjectId], ref: "PayrollArrear", default: [] },
     /** Variable pay included, as "CODE:amount|…" — approval compares it with what is entered now. */
     variableKey: { type: String, default: "" },
     /** The monthly salary structure this payslip was calculated from (day-weighted when it changed mid-month). */

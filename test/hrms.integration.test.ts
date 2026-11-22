@@ -390,8 +390,9 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(history.items[0].changes).toEqual([{ field: "basic", label: "Basic", from: "15000.00", to: "18000.00", money: true }]);
 
     await expect(recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-11-20", reason: "", changes: { basic: "18000" } })).rejects.toMatchObject({ code: "NOTHING_TO_CHANGE" });
-    // October's payroll is approved: no changes inside it.
-    await expect(recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-20", reason: "", changes: { basic: "16000" } })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+    // October's payroll is approved: other changes and salary cuts can't reach back into it.
+    await expect(recordChange(ctx, String(emp.asha), { changeType: "TRANSFER", effectiveDate: "2026-10-20", reason: "", changes: { workLocation: "Pune" } })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+    await expect(recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-20", reason: "", changes: { basic: "14000" } })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
 
     // November payroll: 15 days at 15,000 and 15 at 18,000 → basic 16,500 for the month.
     const nov = await createRun(ctx, { month: 11, year: 2026, notes: "" });
@@ -547,5 +548,57 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect((await postMissingPayrollVouchers(erp, mar.id)).posted).toHaveLength(1);
     expect((await postMissingPayrollVouchers(erp, mar.id)).posted).toHaveLength(0);
     await expect(postMissingPayrollVouchers(ctx, mar.id)).rejects.toMatchObject({ code: "ACCOUNTING_OFF" });
+  });
+
+  it("pays increment, day and DA arrears for approved months with the next payroll", async () => {
+    const { recordChange, deleteChange } = await import("@/lib/hr/history");
+    const { createDayArrear, createDaArrears, listArrears, cancelArrear } = await import("@/lib/hr/arrears");
+    const { createRun, getRun, approveRun, cancelRun } = await import("@/lib/hr/payroll");
+    const { PayrollArrear } = await import("@/models/hr");
+
+    // Increment: Ravi's raise backdated to 1 October (October is approved at 12,000).
+    // His later correction (13,000 from 22 November) still applies afterwards, so only October is owed.
+    const raise = await recordChange(ctx, String(emp.ravi), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-01", reason: "Appraisal", changes: { basic: "14000" } });
+    expect(raise.arrears).toBe(1);
+    let inc = await listArrears(ctx, { kind: "INCREMENT" });
+    expect(inc.items.map((a) => [a.employeeName, `${a.from.month}/${a.from.year}`, a.amount])).toEqual([["Ravi Kumar", "10/2026", "2000.00"]]);
+
+    // Day: Asha lost 2 days in October; pay one back at October's daily rate (20,000 / 31).
+    expect((await createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 10, days: 1, reason: "Leave approved late" })).amount).toBe("645.16");
+    await expect(createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 10, days: 2, reason: "Again" })).rejects.toMatchObject({ code: "TOO_MANY_DAYS" });
+    await expect(createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 9, days: 1, reason: "No payroll" })).rejects.toMatchObject({ code: "NO_LOCKED_PAYSLIP" });
+
+    // DA: 10% of the basic paid in October, previewed then created; a second run skips them.
+    const daInput = { percent: 10, fromYear: 2026, fromMonth: 10, toYear: 2026, toMonth: 10, reason: "DA revised", commit: false };
+    const preview = await createDaArrears(ctx, daInput);
+    expect(preview.rows.map((r) => [r.name, r.basic, r.amount])).toEqual([
+      ["Asha Rao", "14032.26", "1403.23"],
+      ["Ravi Kumar", "12000.00", "1200.00"],
+    ]);
+    expect(await PayrollArrear.countDocuments({ businessId, kind: "DA" })).toBe(0);
+    expect((await createDaArrears(ctx, { ...daInput, commit: true })).committed).toBe(true);
+    expect((await createDaArrears(ctx, daInput)).rows.every((r) => r.skipped)).toBe(true);
+
+    // The next payroll (April 2027) pays them; approval marks them paid, rollback makes them pending again.
+    const apr = await createRun(ctx, { month: 4, year: 2027, notes: "" });
+    const slips = (await getRun(ctx, apr.id)).payslips;
+    const line = (name: string, code: string) => slips.find((s) => s.employee.name === name)!.earnings.find((l) => l.code === code)?.amount;
+    expect(line("Ravi Kumar", "ARR_INC")).toBe("2000.00");
+    expect(line("Ravi Kumar", "ARR_DA")).toBe("1200.00");
+    expect(line("Asha Rao", "ARR_DAY")).toBe("645.16");
+    expect(line("Asha Rao", "ARR_DA")).toBe("1403.23");
+    await approveRun(ctx, apr.id, { payUnmarkedAsPresent: true });
+    expect((await listArrears(ctx, { status: "PENDING" })).pendingCount).toBe(0);
+    expect(await PayrollArrear.countDocuments({ businessId, status: "INCLUDED", payrollRunId: apr.id })).toBe(4);
+    await cancelRun(ctx, apr.id, "Recheck arrears");
+    expect((await listArrears(ctx, { status: "PENDING" })).pendingCount).toBe(4);
+
+    // Day and DA arrears can be cancelled while pending; increment arrears go with their revision.
+    const day = (await listArrears(ctx, { kind: "DAY" })).items[0];
+    await cancelArrear(ctx, day.id);
+    inc = await listArrears(ctx, { kind: "INCREMENT" });
+    await expect(cancelArrear(ctx, inc.items[0].id)).rejects.toMatchObject({ code: "USE_HISTORY" });
+    await deleteChange(ctx, String(emp.ravi), raise.id);
+    expect((await listArrears(ctx, { kind: "INCREMENT" })).items[0].status).toBe("CANCELLED");
   });
 });

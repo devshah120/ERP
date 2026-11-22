@@ -224,11 +224,11 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
       changes[f.key] = f.kind === "ref" ? (v ? v : null) : v;
     }
     try {
-      const r = await apiFetch<{ scheduled: boolean; effectiveDate: string }>(`/api/hr/employees/${employeeId}/history`, {
+      const r = await apiFetch<{ scheduled: boolean; effectiveDate: string; arrears: number }>(`/api/hr/employees/${employeeId}/history`, {
         method: "POST",
         body: JSON.stringify({ changeType, effectiveDate, reason, changes }),
       });
-      onDone(r.scheduled ? `Scheduled from ${fmtDate(r.effectiveDate)}` : "Change recorded");
+      onDone(r.scheduled ? `Scheduled from ${fmtDate(r.effectiveDate)}` : r.arrears > 0 ? `Change recorded; arrears for ${r.arrears} paid month(s) go into the next payroll` : "Change recorded");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
       setBusy(false);
@@ -238,7 +238,7 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
   return (
     <Modal
       title="Record a change"
-      subtitle="Only the fields you change are recorded. A future date is applied automatically when it arrives."
+      subtitle="Only the fields you change are recorded. A future date is applied automatically when it arrives. A salary increase dated into months already paid creates arrears for the next payroll."
       onClose={onClose}
       busy={busy}
       width="44rem"

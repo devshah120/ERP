@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
 import { Attendance, LeaveApplication, LeaveAllocation, LeaveType, Employee } from "@/models/hr";
 import { recordAudit } from "@/lib/services/auditService";
-import type { AuthContext } from "@/lib/auth/context";
+import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
 import { assertPayrollOpen } from "./attendance";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
@@ -154,11 +154,23 @@ async function ownEmployeeId(ctx: AuthContext): Promise<string | null> {
   return me ? String(me._id) : null;
 }
 
-/** Refuses a decision (approve, reject, HR cancel) on one's own leave, except for the Owner. */
+/** HR: may decide anyone's leave (the Owner always may). */
+const decidesAnyone = (ctx: AuthContext) => hasPermission(ctx, "hr-leaves.approve-all");
+
+/**
+ * Who may approve, reject or cancel a leave request: the employee's reporting
+ * manager or HR, never the employee themselves (the Owner excepted).
+ */
 async function assertNotOwnLeave(ctx: AuthContext, app: AnyDoc) {
   if (actsForOthers(ctx)) return;
-  if ((await ownEmployeeId(ctx)) === String(app.employeeId)) {
+  const mine = await ownEmployeeId(ctx);
+  if (mine === String(app.employeeId)) {
     throw AppError.forbidden("You can't approve, reject or cancel your own leave. Ask your manager or HR.", "OWN_LEAVE_DECISION");
+  }
+  if (decidesAnyone(ctx)) return;
+  const emp = await Employee.findOne({ _id: app.employeeId, businessId: ctx.businessId }, { name: 1, reportingManagerId: 1 }).lean<AnyDoc>();
+  if (!mine || String(emp?.reportingManagerId ?? "") !== mine) {
+    throw AppError.forbidden(`Only ${emp?.name ?? "the employee"}'s reporting manager or HR can decide this leave.`, "NOT_REPORTING_MANAGER");
   }
 }
 
@@ -368,6 +380,13 @@ export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveL
   ]);
   const labels = await employeeLabels(ctx.businessId, rows.map((r) => r.employeeId));
   const typeMap = new Map(types.map((t) => [String(t._id), t]));
+  // Which rows this user may decide: the Owner any, HR any but their own, a manager their direct reports.
+  const mine = await ownEmployeeId(ctx);
+  const managers = new Map(
+    (await Employee.find({ businessId: ctx.businessId, _id: { $in: rows.map((r) => r.employeeId) } }, { reportingManagerId: 1 }).lean<AnyDoc[]>()).map((e) => [String(e._id), String(e.reportingManagerId ?? "")])
+  );
+  const decidable = (employeeId: string) =>
+    actsForOthers(ctx) || (employeeId !== mine && (decidesAnyone(ctx) || (Boolean(mine) && managers.get(employeeId) === mine)));
   const pending = await LeaveApplication.countDocuments({ businessId: ctx.businessId, status: "PENDING", ...scope });
 
   return {
@@ -392,6 +411,7 @@ export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveL
         decisionNote: r.decisionNote,
         decidedAt: r.decidedAt,
         decidedAs: r.decidedAs ?? "",
+        decidable: decidable(String(r.employeeId)),
         createdAt: r.createdAt,
       };
     }),

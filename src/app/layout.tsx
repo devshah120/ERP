@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "NEXORA",
-  description: "Multi-tenant ERP for garment manufacturers and traders",
+  description: "ERP and HRMS for growing businesses: sales, stock, accounts, people and payroll in one workspace",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

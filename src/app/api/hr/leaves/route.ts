@@ -4,10 +4,12 @@ import { ok, created } from "@/lib/http/response";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { listLeaves, leaveListSchema, applyLeave, applyLeaveSchema } from "@/lib/hr/leave";
+import { upgradeHrRoles } from "@/lib/hr/setup";
 
 export const GET = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-leaves.view");
+  await upgradeHrRoles(ctx.businessId);
   return ok(await listLeaves(ctx, leaveListSchema.parse(Object.fromEntries(req.nextUrl.searchParams))));
 });
 

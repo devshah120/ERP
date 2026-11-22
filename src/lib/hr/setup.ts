@@ -65,6 +65,18 @@ export async function seedHrDefaults(businessId: Types.ObjectId, session?: Clien
   await ensureRole(businessId, SELF_SERVICE_ROLE, "Employee portal: own attendance, leave, payslips and claims.", HR_SELF_SERVICE_PERMISSIONS, true, session);
 }
 
+/**
+ * Brings HR Manager roles created before a permission existed up to date:
+ * HR could always decide anyone's leave, which is now its own permission.
+ * Cheap and idempotent; tokens pick it up at their next refresh.
+ */
+export async function upgradeHrRoles(businessId: Types.ObjectId): Promise<void> {
+  await Role.updateOne(
+    { businessId, name: HR_MANAGER_ROLE, permissions: { $all: ["hr-leaves.approve"], $nin: ["hr-leaves.approve-all"] } },
+    { $addToSet: { permissions: "hr-leaves.approve-all" } }
+  );
+}
+
 /** HR Manager stays editable (a normal custom role); the self-service role is fixed because portal access relies on it. */
 async function ensureRole(businessId: Types.ObjectId, name: string, description: string, permissions: string[], isSystemRole: boolean, session?: ClientSession) {
   const opts = session ? { session } : {};

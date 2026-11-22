@@ -733,4 +733,45 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await expect(applyLeave(unlinked, leave(emp.asha, "2027-05-04"), { self: false })).rejects.toMatchObject({ code: "NO_EMPLOYEE_PROFILE" });
     expect((await applyLeave(ctx, leave(emp.asha, "2027-05-04"), { self: false })).days).toBe(1);
   });
+
+  it("lets only the reporting manager or HR decide a leave request", async () => {
+    const { applyLeave, approveLeave, rejectLeave, listLeaves } = await import("@/lib/hr/leave");
+    const { upgradeHrRoles } = await import("@/lib/hr/setup");
+    const { Employee, LeaveType } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const { Role } = await import("@/models/Role");
+    const lop = await LeaveType.findOne({ businessId, code: "LOP" }).lean<{ _id: Types.ObjectId }>();
+    const meera = await Employee.findOne({ businessId, name: "Meera Iyer" }).lean<{ _id: Types.ObjectId }>();
+    const ashaUser = await User.findOne({ businessId, email: "asha@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const kiranUser = await User.findOne({ businessId, email: "kiran@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    // Asha: a manager role (approve, not approve-all). Kiran: HR (approve-all).
+    const manager = { ...ctx, userId: ashaUser!._id, roleId: ashaUser!.roleId, permissions: ["hr-leaves.view", "hr-leaves.approve"] };
+    const hr = { ...ctx, userId: kiranUser!._id, roleId: kiranUser!.roleId, permissions: ["hr-leaves.view", "hr-leaves.approve", "hr-leaves.approve-all"] };
+    const file = (date: string) => applyLeave(ctx, { employeeId: String(meera!._id), leaveTypeId: String(lop!._id), fromDate: date, toDate: date, halfDay: false, reason: "" }, { self: false });
+
+    // Meera reports to nobody yet: the manager can't decide her leave, and the list says so.
+    const first = await file("2027-05-10");
+    await expect(approveLeave(manager, first.id, "")).rejects.toMatchObject({ code: "NOT_REPORTING_MANAGER", statusCode: 403 });
+    await expect(rejectLeave(manager, first.id, "No")).rejects.toMatchObject({ code: "NOT_REPORTING_MANAGER" });
+    const row = async (who: typeof manager, id: string) => (await listLeaves(who, { page: 1, pageSize: 50 } as never)).items.find((i) => i.id === id)!;
+    expect((await row(manager, first.id)).decidable).toBe(false);
+    expect((await row(hr, first.id)).decidable).toBe(true);
+
+    // Once Meera reports to Asha, Asha decides; HR can decide anyone's.
+    await Employee.updateOne({ _id: meera!._id }, { reportingManagerId: emp.asha });
+    expect((await row(manager, first.id)).decidable).toBe(true);
+    await approveLeave(manager, first.id, "");
+    const second = await file("2027-05-11");
+    await Employee.updateOne({ _id: meera!._id }, { reportingManagerId: null });
+    await rejectLeave(hr, second.id, "Peak season");
+
+    // HR Manager roles from before get the new permission once.
+    const hrRole = await Role.findOne({ businessId, name: "HR Manager" });
+    hrRole!.permissions = hrRole!.permissions.filter((p: string) => p !== "hr-leaves.approve-all");
+    await hrRole!.save();
+    await upgradeHrRoles(new Types.ObjectId(businessId));
+    await upgradeHrRoles(new Types.ObjectId(businessId));
+    const upgraded = (await Role.findById(hrRole!._id).lean<{ permissions: string[] }>())!.permissions;
+    expect(upgraded.filter((p) => p === "hr-leaves.approve-all")).toHaveLength(1);
+  });
 });

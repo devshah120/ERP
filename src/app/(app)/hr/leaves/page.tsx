@@ -33,6 +33,8 @@ interface Row {
   status: string;
   decisionNote: string;
   decidedAs?: string;
+  /** The server says this user may decide it (reporting manager or HR, not their own). */
+  decidable?: boolean;
   createdAt: string;
 }
 
@@ -49,7 +51,7 @@ export default function LeaveRequestsPage() {
 function LeaveRequests() {
   const router = useRouter();
   const params = useSearchParams();
-  const { hasPermission, me } = useAuth();
+  const { hasPermission } = useAuth();
   const toast = useToast();
   const [status, setStatus] = useState(params.get("status") ?? "");
   const employeeId = params.get("employeeId") ?? "";
@@ -97,8 +99,8 @@ function LeaveRequests() {
 
   const canCreate = hasPermission("hr-leaves.create");
   const canDecide = hasPermission("hr-leaves.approve");
-  // Nobody but the Owner decides their own leave.
-  const decidable = (r: Row) => canDecide && (Boolean(me?.permissions.includes("*")) || r.employeeId !== me?.employeeId);
+  // Only the employee's reporting manager or HR decides, and never their own leave (the server works it out per row).
+  const decidable = (r: Row) => canDecide && Boolean(r.decidable);
   useShortcutScope({ onNew: canCreate ? () => router.push("/hr/leaves/new") : undefined, onSearch: () => searchRef.current?.focus(), onRefresh: load });
 
   async function act(reason?: string) {

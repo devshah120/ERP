@@ -126,7 +126,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       m("hr-attendance", "Attendance", ["view", "edit"]),
       m("hr-leave-types", "Leave types"),
-      m("hr-leaves", "Leave requests", ["view", "create", "approve", "allocate"]),
+      // approve: leave of people who report to you; approve-all: anyone's leave (HR).
+      m("hr-leaves", "Leave requests", ["view", "create", "approve", "approve-all", "allocate"]),
     ],
   },
   {

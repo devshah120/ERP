@@ -15,7 +15,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { IconArrowLeft, IconAlertCircle, IconTrash } from "@/components/icons";
+import { IconArrowLeft, IconTrash } from "@/components/icons";
 
 interface RoleRow {
   id: string;
@@ -39,6 +39,8 @@ const ACTION_LABELS: Record<string, string> = {
   refund: "Refund",
   upload: "Upload",
   "manage-registers": "Open/close registers",
+  "approve-all": "Approve anyone's (HR)",
+  allocate: "Allocate",
 };
 
 /**

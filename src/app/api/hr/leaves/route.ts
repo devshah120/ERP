@@ -11,7 +11,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
   return ok(await listLeaves(ctx, leaveListSchema.parse(Object.fromEntries(req.nextUrl.searchParams))));
 });
 
-/** HR files a leave request on an employee's behalf. */
+/** Files a leave request: one's own, or (Owner only) on an employee's behalf. */
 export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-leaves.create");

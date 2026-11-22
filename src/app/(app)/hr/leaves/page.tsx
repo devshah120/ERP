@@ -49,7 +49,7 @@ export default function LeaveRequestsPage() {
 function LeaveRequests() {
   const router = useRouter();
   const params = useSearchParams();
-  const { hasPermission } = useAuth();
+  const { hasPermission, me } = useAuth();
   const toast = useToast();
   const [status, setStatus] = useState(params.get("status") ?? "");
   const employeeId = params.get("employeeId") ?? "";
@@ -97,6 +97,8 @@ function LeaveRequests() {
 
   const canCreate = hasPermission("hr-leaves.create");
   const canDecide = hasPermission("hr-leaves.approve");
+  // Nobody but the Owner decides their own leave.
+  const decidable = (r: Row) => canDecide && (Boolean(me?.permissions.includes("*")) || r.employeeId !== me?.employeeId);
   useShortcutScope({ onNew: canCreate ? () => router.push("/hr/leaves/new") : undefined, onSearch: () => searchRef.current?.focus(), onRefresh: load });
 
   async function act(reason?: string) {
@@ -216,7 +218,7 @@ function LeaveRequests() {
                   {r.decidedAs === "MANAGER" && <div className="hrMuted">by manager</div>}
                 </td>
                 <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
-                  {canDecide && r.status === "PENDING" && (
+                  {decidable(r) && r.status === "PENDING" && (
                     <>
                       <button type="button" className="button buttonSecondary buttonSm" onClick={() => (setActionError(null), setPending({ row: r, action: "approve" }))}>
                         <IconCheck /> Approve
@@ -226,7 +228,7 @@ function LeaveRequests() {
                       </button>
                     </>
                   )}
-                  {canDecide && r.status === "APPROVED" && (
+                  {decidable(r) && r.status === "APPROVED" && (
                     <button type="button" className="button buttonGhost buttonSm" onClick={() => (setActionError(null), setPending({ row: r, action: "cancel" }))}>
                       Cancel
                     </button>

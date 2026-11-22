@@ -707,4 +707,30 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await create({ ...base, name: "Meera Iyer", employeeCode: "EMP-000103" });
     expect((await Employee.findOne({ businessId, name: "Meera Iyer" }).lean<{ userId: unknown }>())!.userId).toBeNull();
   });
+
+  it("lets people file and decide only leave that is not their own (except the Owner)", async () => {
+    const { applyLeave, approveLeave, rejectLeave, cancelLeave } = await import("@/lib/hr/leave");
+    const { LeaveType } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const lop = await LeaveType.findOne({ businessId, code: "LOP" }).lean<{ _id: Types.ObjectId }>();
+    const ashaUser = await User.findOne({ businessId, email: "asha@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    // A manager-style login (file + approve rights, not the Owner) linked to Asha.
+    const asha = { ...ctx, userId: ashaUser!._id, roleId: ashaUser!.roleId, permissions: ["hr-leaves.view", "hr-leaves.create", "hr-leaves.approve"] };
+    const leave = (employeeId: Types.ObjectId, date: string) => ({ employeeId: String(employeeId), leaveTypeId: String(lop!._id), fromDate: date, toDate: date, halfDay: false, reason: "" });
+
+    // Mon 3 May 2027: someone else's leave is refused, her own goes through.
+    await expect(applyLeave(asha, leave(emp.ravi, "2027-05-03"), { self: false })).rejects.toMatchObject({ code: "OWN_LEAVE_ONLY", statusCode: 403 });
+    const own = await applyLeave(asha, leave(emp.asha, "2027-05-03"), { self: false });
+
+    // She can't decide her own request; the Owner can.
+    await expect(approveLeave(asha, own.id, "")).rejects.toMatchObject({ code: "OWN_LEAVE_DECISION" });
+    await expect(rejectLeave(asha, own.id, "No")).rejects.toMatchObject({ code: "OWN_LEAVE_DECISION" });
+    await approveLeave(ctx, own.id, "");
+    await expect(cancelLeave(asha, own.id, { self: false, note: "Changed plans" })).rejects.toMatchObject({ code: "OWN_LEAVE_DECISION" });
+
+    // A login with no employee record has nothing to file; the Owner may still file for anyone.
+    const unlinked = { ...asha, userId: new Types.ObjectId() };
+    await expect(applyLeave(unlinked, leave(emp.asha, "2027-05-04"), { self: false })).rejects.toMatchObject({ code: "NO_EMPLOYEE_PROFILE" });
+    expect((await applyLeave(ctx, leave(emp.asha, "2027-05-04"), { self: false })).days).toBe(1);
+  });
 });

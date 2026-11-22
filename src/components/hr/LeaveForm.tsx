@@ -29,6 +29,7 @@ export interface LeaveBalance {
 export default function LeaveForm({
   employees,
   initialEmployeeId,
+  employeeLocked,
   selfBalances,
   submitUrl,
   onDone,
@@ -36,6 +37,8 @@ export default function LeaveForm({
 }: {
   employees?: Option[] | null;
   initialEmployeeId?: string;
+  /** The employee is fixed (people file only their own leave). */
+  employeeLocked?: boolean;
   selfBalances?: LeaveBalance[];
   submitUrl: string;
   onDone: (result: { leaveNumber: string; days: number }) => void;
@@ -127,7 +130,7 @@ export default function LeaveForm({
             <label htmlFor="lv-emp">
               Employee<span className="req">*</span>
             </label>
-            <select id="lv-emp" className="select" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
+            <select id="lv-emp" className="select" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required disabled={employeeLocked}>
               <option value="">— choose —</option>
               {employees?.map((o) => (
                 <option key={o.id} value={o.id}>

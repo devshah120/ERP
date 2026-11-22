@@ -145,12 +145,34 @@ export async function previewLeave(ctx: AuthContext, input: { employeeId: string
   return { days: count };
 }
 
+/** Full access (the Owner) may act on anyone's leave; everyone else only files their own and never decides it. */
+const actsForOthers = (ctx: AuthContext) => ctx.permissions.includes("*");
+
+/** The employee record linked to the signed-in login, if any. */
+async function ownEmployeeId(ctx: AuthContext): Promise<string | null> {
+  const me = await Employee.findOne({ businessId: ctx.businessId, userId: ctx.userId, deletedAt: null }, { _id: 1 }).lean<AnyDoc>();
+  return me ? String(me._id) : null;
+}
+
+/** Refuses a decision (approve, reject, HR cancel) on one's own leave, except for the Owner. */
+async function assertNotOwnLeave(ctx: AuthContext, app: AnyDoc) {
+  if (actsForOthers(ctx)) return;
+  if ((await ownEmployeeId(ctx)) === String(app.employeeId)) {
+    throw AppError.forbidden("You can't approve, reject or cancel your own leave. Ask your manager or HR.", "OWN_LEAVE_DECISION");
+  }
+}
+
 /**
- * Files a leave request. HR may file for anyone; through self-service the
- * employee is always the signed-in person's own profile.
+ * Files a leave request for the signed-in person's own employee record. Only
+ * the Owner may file for someone else (e.g. staff without a sign-in).
  */
 export async function applyLeave(ctx: AuthContext, input: z.infer<typeof applyLeaveSchema>, opts: { self: boolean }) {
   const emp = opts.self ? await selfEmployee(ctx) : await findEmployee(ctx.businessId, input.employeeId ?? "");
+  if (!opts.self && !actsForOthers(ctx)) {
+    const mine = await ownEmployeeId(ctx);
+    if (!mine) throw AppError.forbidden("Your login isn't linked to an employee record, so there is no leave to file. Ask HR to link it.", "NO_EMPLOYEE_PROFILE");
+    if (mine !== String(emp._id)) throw AppError.forbidden("You can only file leave for yourself.", "OWN_LEAVE_ONLY");
+  }
   const type = await LeaveType.findOne({ _id: input.leaveTypeId, businessId: ctx.businessId, deletedAt: null, status: "ACTIVE" }).lean<AnyDoc>();
   if (!type) throw AppError.badRequest("Choose an active leave type", "LEAVE_TYPE_NOT_FOUND");
   if (input.halfDay && type.allowHalfDay === false) throw AppError.badRequest(`${type.name} cannot be taken as a half day`, "NO_HALF_DAY");
@@ -217,6 +239,7 @@ async function loadApp(ctx: AuthContext, id: string) {
  */
 export async function approveLeave(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const app = await loadApp(ctx, id);
+  await assertNotOwnLeave(ctx, app);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
 
   const emp = await findEmployee(ctx.businessId, app.employeeId);
@@ -266,6 +289,7 @@ export async function approveLeave(ctx: AuthContext, id: string, note: string, o
 
 export async function rejectLeave(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const app = await loadApp(ctx, id);
+  await assertNotOwnLeave(ctx, app);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
   app.set({ status: "REJECTED", decidedByUserId: ctx.userId, decidedAt: new Date(), decidedAs: opts.asManager ? "MANAGER" : "HR", decisionNote: note, updatedBy: ctx.userId });
   await app.save();
@@ -284,6 +308,8 @@ export async function cancelLeave(ctx: AuthContext, id: string, opts: { self: bo
     const emp = await selfEmployee(ctx);
     if (String(app.employeeId) !== String(emp._id)) throw AppError.notFound("Leave request not found");
     if (app.status !== "PENDING") throw AppError.badRequest("Only a pending request can be withdrawn. Ask HR to cancel an approved leave.", "LEAVE_NOT_PENDING");
+  } else {
+    await assertNotOwnLeave(ctx, app);
   }
   if (app.status !== "PENDING" && app.status !== "APPROVED") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_CANCELLABLE");
 

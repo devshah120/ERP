@@ -278,7 +278,7 @@ const audit = {
 
 export const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "HALF_DAY", "LEAVE", "HOLIDAY", "WEEKLY_OFF", "ON_DUTY"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
-export const ATTENDANCE_SOURCES = ["MANUAL", "SELF", "LEAVE"] as const;
+export const ATTENDANCE_SOURCES = ["MANUAL", "SELF", "LEAVE", "REQUEST"] as const;
 
 /** One row per employee per day. `date` is stored as UTC midnight of the calendar day. */
 const attendanceSchema = new Schema(
@@ -353,6 +353,45 @@ const leaveAllocationSchema = new Schema(
 );
 leaveAllocationSchema.index({ businessId: 1, employeeId: 1, leaveTypeId: 1, year: 1 }, { unique: true });
 export const LeaveAllocation = defineModel("LeaveAllocation", leaveAllocationSchema);
+
+/** What an employee can ask a day to be corrected to. Absence and leave go through HR or a leave request. */
+export const CORRECTION_STATUSES = ["PRESENT", "HALF_DAY", "ON_DUTY"] as const;
+export const ATTENDANCE_REQUEST_STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
+
+/** An employee's request to correct one day's attendance (a missed punch, on-duty work, wrong times). */
+const attendanceRequestSchema = new Schema(
+  {
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+    requestNumber: { type: String, required: true },
+    employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+    /** UTC midnight of the day being corrected. */
+    date: { type: Date, required: true },
+    requestedStatus: { type: String, enum: CORRECTION_STATUSES, required: true },
+    checkIn: { type: String, default: "" },
+    checkOut: { type: String, default: "" },
+    reason: { type: String, trim: true, required: true },
+    /** The day as it stood when the request was raised, for the approver and the audit trail. */
+    previous: {
+      status: { type: String, default: "" },
+      checkIn: { type: String, default: "" },
+      checkOut: { type: String, default: "" },
+    },
+    status: { type: String, enum: ATTENDANCE_REQUEST_STATUSES, default: "PENDING" },
+    appliedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    decidedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    decidedAt: { type: Date, default: null },
+    decidedAs: { type: String, enum: ["", "HR", "MANAGER"], default: "" },
+    decisionNote: { type: String, trim: true, default: "" },
+    ...audit,
+  },
+  { timestamps: true }
+);
+attendanceRequestSchema.index({ businessId: 1, requestNumber: 1 }, { unique: true });
+attendanceRequestSchema.index({ businessId: 1, employeeId: 1, date: -1 });
+attendanceRequestSchema.index({ businessId: 1, status: 1, createdAt: -1 });
+// One open request per employee per day.
+attendanceRequestSchema.index({ businessId: 1, employeeId: 1, date: 1 }, { unique: true, partialFilterExpression: { status: "PENDING" } });
+export const AttendanceRequest = defineModel("AttendanceRequest", attendanceRequestSchema);
 
 export const PAYROLL_STATUSES = ["DRAFT", "APPROVED", "PAID", "CANCELLED"] as const;
 export type PayrollStatus = (typeof PAYROLL_STATUSES)[number];

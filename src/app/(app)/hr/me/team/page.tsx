@@ -5,6 +5,7 @@ import { apiFetch, ApiError } from "@/lib/api/client";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
+import CorrectionRequests, { type CorrectionSummary } from "@/components/hr/CorrectionRequests";
 import SearchBox from "@/components/ui/SearchBox";
 import Pagination from "@/components/ui/Pagination";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -34,9 +35,49 @@ interface Row {
 
 type Pending = { row: Row; action: "approve" | "reject" } | null;
 
-/** A reporting manager's view of their direct reports' leave, with approve and reject. */
-export default function TeamLeavePage() {
+type Tab = "leave" | "attendance";
+const decideCorrection = (id: string) => `/api/hr/self/team/attendance-requests/${id}`;
+
+/** A reporting manager's approvals for their direct reports: leave and attendance corrections. */
+export default function TeamApprovalsPage() {
   const { me } = useAuth();
+  const [tab, setTab] = useState<Tab>("leave");
+  const [leaveSummary, setLeaveSummary] = useState<CorrectionSummary | null>(null);
+  const [correctionSummary, setCorrectionSummary] = useState<CorrectionSummary | null>(null);
+  const onLeaveSummary = useCallback((s: CorrectionSummary) => setLeaveSummary(s), []);
+  const onCorrectionSummary = useCallback((s: CorrectionSummary) => setCorrectionSummary(s), []);
+  const teamSize = leaveSummary?.teamSize ?? correctionSummary?.teamSize;
+  const label = (text: string, s: CorrectionSummary | null) => (s && s.pending > 0 ? `${text} (${s.pending})` : text);
+
+  return (
+    <>
+      <PageHeader
+        title="Team approvals"
+        description={
+          teamSize
+            ? `Requests from your ${teamSize} direct report(s). Your decision is final; HR sees every request too.`
+            : `Leave and attendance correction requests from people who report to ${me?.name ?? "you"}.`
+        }
+      />
+      <div className="tabBar" role="tablist" aria-label="Request type">
+        <button type="button" role="tab" className="tabBarItem" aria-selected={tab === "leave"} onClick={() => setTab("leave")}>
+          {label("Leave", leaveSummary)}
+        </button>
+        <button type="button" role="tab" className="tabBarItem" aria-selected={tab === "attendance"} onClick={() => setTab("attendance")}>
+          {label("Attendance corrections", correctionSummary)}
+        </button>
+      </div>
+      {tab === "leave" ? (
+        <TeamLeave onSummary={onLeaveSummary} />
+      ) : (
+        <CorrectionRequests listUrl="/api/hr/self/team/attendance-requests" decideUrl={decideCorrection} canDecide onSummary={onCorrectionSummary} />
+      )}
+    </>
+  );
+}
+
+/** Direct reports' leave requests, with approve and reject. */
+function TeamLeave({ onSummary }: { onSummary: (s: CorrectionSummary) => void }) {
   const toast = useToast();
   const [status, setStatus] = useState("PENDING");
   const [query, setQuery] = useState("");
@@ -66,13 +107,15 @@ export default function TeamLeavePage() {
       const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (status) p.set("status", status);
       if (applied) p.set("query", applied);
-      setResult(await apiFetch(`/api/hr/self/team/leaves?${p.toString()}`));
+      const r = await apiFetch<{ items: Row[]; total: number; pending: number; teamSize: number }>(`/api/hr/self/team/leaves?${p.toString()}`);
+      setResult(r);
+      onSummary({ total: r.total, pending: r.pending, teamSize: r.teamSize });
     } catch (err) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, status, applied]);
+  }, [page, pageSize, status, applied, onSummary]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -101,16 +144,6 @@ export default function TeamLeavePage() {
 
   return (
     <>
-      <PageHeader
-        title="Team leave"
-        count={result?.total ?? null}
-        description={
-          result
-            ? `${result.pending} waiting for your decision from ${result.teamSize} direct report(s). Approving marks the days as leave on the attendance sheet.`
-            : `Leave requests from people who report to ${me?.name ?? "you"}.`
-        }
-      />
-
       <div className="toolbar">
         <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search name or request no…" width="18rem" />
         <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">

@@ -278,4 +278,58 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(await Attendance.countDocuments({ businessId, employeeId: emp.asha, leaveApplicationId: new Types.ObjectId(req.id) })).toBe(2);
     await expect(decideTeamLeave(raviSelf, req.id, "reject", "Changed my mind")).rejects.toMatchObject({ code: "LEAVE_NOT_PENDING" });
   });
+
+  it("routes attendance correction requests to the reporting manager or HR", async () => {
+    const { grantPortalAccess } = await import("@/lib/hr/people");
+    const { applyLeave, approveLeave } = await import("@/lib/hr/leave");
+    const { requestCorrection, listTeamCorrections, decideTeamCorrection, rejectCorrection, withdrawCorrection, listMyCorrections } = await import("@/lib/hr/corrections");
+    const { Attendance, AttendanceRequest, LeaveType } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+
+    // Asha (who reports to Ravi since the previous test) gets a login of her own.
+    await grantPortalAccess(ctx, String(emp.asha), { email: "asha@peoplefirst.test", password: "Welc0me!2026" });
+    const ashaUser = await User.findOne({ businessId, email: "asha@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const raviUser = await User.findOne({ businessId, email: "ravi@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const asha = { ...ctx, userId: ashaUser!._id, roleId: ashaUser!.roleId, permissions: ["hr-self.view"] };
+    const ravi = { ...ctx, userId: raviUser!._id, roleId: raviUser!.roleId, permissions: ["hr-self.view"] };
+    const base = { status: "PRESENT" as const, checkIn: "09:30", checkOut: "18:30", reason: "Forgot to punch" };
+
+    await expect(requestCorrection(asha, { ...base, date: "2099-01-05" })).rejects.toMatchObject({ code: "FUTURE_DATE" });
+    // October's payroll is approved, so its attendance is locked.
+    await expect(requestCorrection(asha, { ...base, date: "2026-10-20" })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+    // Approved leave is changed by cancelling the leave, not by a correction.
+    const cl = await LeaveType.findOne({ businessId, code: "CL" }).lean<{ _id: Types.ObjectId }>();
+    const leave = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(cl!._id), fromDate: "2026-11-16", toDate: "2026-11-16", halfDay: false, reason: "" }, { self: false });
+    await approveLeave(ctx, leave.id, "");
+    await expect(requestCorrection(asha, { ...base, date: "2026-11-16" })).rejects.toMatchObject({ code: "ON_LEAVE" });
+
+    // Tue 17 November: a forgotten punch, approved by her manager.
+    const first = await requestCorrection(asha, { ...base, date: "2026-11-17" });
+    await expect(requestCorrection(asha, { ...base, date: "2026-11-17", reason: "Again" })).rejects.toMatchObject({ code: "CORRECTION_PENDING" });
+
+    const team = await listTeamCorrections(ravi, { status: "PENDING", page: 1, pageSize: 25 });
+    expect(team.items.map((r) => r.requestNumber)).toEqual([first.requestNumber]);
+    expect(team.items[0].previous.status).toBe("");
+    await expect(decideTeamCorrection(ravi, first.id, "reject", "")).rejects.toMatchObject({ code: "REASON_REQUIRED" });
+    await decideTeamCorrection(ravi, first.id, "approve", "");
+
+    const day = await Attendance.findOne({ businessId, employeeId: emp.asha, date: new Date("2026-11-17T00:00:00Z") }).lean<{ status: string; source: string; workedMinutes: number; checkIn: string }>();
+    expect(day).toMatchObject({ status: "PRESENT", source: "REQUEST", checkIn: "09:30", workedMinutes: 540 });
+    expect((await AttendanceRequest.findById(first.id).lean<{ status: string; decidedAs: string }>())).toMatchObject({ status: "APPROVED", decidedAs: "MANAGER" });
+    await expect(decideTeamCorrection(ravi, first.id, "approve", "")).rejects.toMatchObject({ code: "CORRECTION_NOT_PENDING" });
+
+    // HR can decide any request; a rejection needs a reason.
+    const second = await requestCorrection(asha, { ...base, status: "ON_DUTY", checkIn: "", checkOut: "", date: "2026-11-18", reason: "Client site visit" });
+    await rejectCorrection(ctx, second.id, "No visit report");
+    expect((await AttendanceRequest.findById(second.id).lean<{ status: string; decidedAs: string }>())).toMatchObject({ status: "REJECTED", decidedAs: "HR" });
+
+    // Only the employee can withdraw their own pending request, and a manager outside the team sees nothing.
+    const third = await requestCorrection(asha, { ...base, date: "2026-11-19" });
+    await expect(withdrawCorrection(ravi, third.id)).rejects.toMatchObject({ statusCode: 404 });
+    await withdrawCorrection(asha, third.id);
+    await expect(listTeamCorrections(asha, { page: 1, pageSize: 25 })).rejects.toMatchObject({ code: "NOT_A_MANAGER" });
+
+    const mine = await listMyCorrections(asha, { page: 1, pageSize: 25 });
+    expect(mine.items.map((r) => r.status).sort()).toEqual(["APPROVED", "CANCELLED", "REJECTED"]);
+  });
 });

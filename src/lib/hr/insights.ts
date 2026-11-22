@@ -5,6 +5,7 @@ import {
   Attendance,
   LeaveApplication,
   ExpenseClaim,
+  AttendanceRequest,
   PayrollRun,
   Payslip,
   Holiday,
@@ -117,6 +118,7 @@ export async function hrDashboard(ctx: AuthContext) {
     },
     onLeaveToday: onLeaveRows.map((l) => leaveLabels.get(String(l.employeeId))?.name ?? "—"),
     pendingClaims: { count: pendingClaims.length, amount: pendingClaims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0)).toFixed(2) },
+    pendingCorrections: await AttendanceRequest.countDocuments({ businessId: ctx.businessId, status: "PENDING" }),
     latestPayroll: latest
       ? { id: String(latest._id), runNumber: latest.runNumber, period: monthLabel(latest.month, latest.year), status: latest.status, totalNet: d(latest.totalNet).toFixed(2), totalGross: d(latest.totalGross).toFixed(2), employeeCount: latest.employeeCount }
       : null,

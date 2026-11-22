@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import LeaveForm, { type LeaveBalance } from "@/components/hr/LeaveForm";
 import ClaimForm from "@/components/hr/ClaimForm";
+import { dayLabel, type CorrectionRow } from "@/components/hr/CorrectionRequests";
 import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconClock } from "@/components/icons";
@@ -67,6 +68,9 @@ export default function MyWorkspace({ section }: { section: MySection }) {
   const now = new Date();
   const [period, setPeriod] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [punching, setPunching] = useState(false);
+  /** Date the correction form is open for (null = closed). */
+  const [correcting, setCorrecting] = useState<string | null>(null);
+  const [correctionsKey, setCorrectionsKey] = useState(0);
 
   const loadMe = useCallback(async () => {
     setError(null);
@@ -259,6 +263,11 @@ export default function MyWorkspace({ section }: { section: MySection }) {
         <>
           <div className="toolbar">
             <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />
+            <div className="toolbarRight">
+              <button type="button" className="button buttonSecondary" onClick={() => setCorrecting(att?.today.date ?? "")} disabled={!att}>
+                <IconPlus /> Request correction
+              </button>
+            </div>
           </div>
           <AttLegend />
           {!att ? (
@@ -291,6 +300,16 @@ export default function MyWorkspace({ section }: { section: MySection }) {
               </div>
             </section>
           )}
+          <MyCorrections
+            reloadKey={correctionsKey}
+            correcting={correcting}
+            maxDate={att?.today.date ?? ""}
+            onClose={() => setCorrecting(null)}
+            onChanged={() => {
+              setCorrectionsKey((k) => k + 1);
+              loadAtt();
+            }}
+          />
         </>
       )}
 
@@ -576,5 +595,193 @@ function MyClaims() {
         </Modal>
       )}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+const CORRECTION_OPTIONS: { value: string; label: string }[] = [
+  { value: "PRESENT", label: "Present (I worked, but the punch is missing or wrong)" },
+  { value: "HALF_DAY", label: "Half day" },
+  { value: "ON_DUTY", label: "On duty (working away from the office)" },
+];
+
+/** The employee's correction requests, and the form to raise one. */
+function MyCorrections({
+  reloadKey,
+  correcting,
+  maxDate,
+  onClose,
+  onChanged,
+}: {
+  reloadKey: number;
+  correcting: string | null;
+  maxDate: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [rows, setRows] = useState<CorrectionRow[] | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await apiFetch<{ items: CorrectionRow[] }>("/api/hr/self/attendance-requests?pageSize=20");
+      setRows(r.items);
+    } catch {
+      setRows([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load, reloadKey]);
+
+  async function withdraw(id: string) {
+    try {
+      await apiFetch(`/api/hr/self/attendance-requests/${id}`, { method: "DELETE" });
+      toast.success("Request withdrawn");
+      onChanged();
+    } catch (err) {
+      toast.error("Could not withdraw", err instanceof ApiError ? err.message : undefined);
+    }
+  }
+
+  return (
+    <>
+      <Card title="Correction requests">
+        {rows && rows.length === 0 ? (
+          <EmptyState compact title="No correction requests" description="Missed a punch or worked on duty? Use “Request correction” and your manager or HR will review it." />
+        ) : (
+          <div className="tableWrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Request</th>
+                  <th>Day</th>
+                  <th>Change</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows?.map((r) => (
+                  <tr key={r.id}>
+                    <td className="cellMono">{r.requestNumber}</td>
+                    <td>{fmtDate(r.date)}</td>
+                    <td>
+                      <span className="cellMuted">{dayLabel(r.previous.status, r.previous.checkIn, r.previous.checkOut)}</span>
+                      <div>→ {dayLabel(r.requestedStatus, r.checkIn, r.checkOut)}</div>
+                      {r.decisionNote && (
+                        <div className="hrMuted">
+                          {r.decidedAs === "MANAGER" ? "Manager" : "HR"}: {r.decisionNote}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {r.status === "PENDING" && (
+                        <button type="button" className="button buttonGhost buttonSm" onClick={() => withdraw(r.id)}>
+                          Withdraw
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      {correcting !== null && (
+        <CorrectionForm
+          initialDate={correcting}
+          maxDate={maxDate}
+          onClose={onClose}
+          onDone={(number) => {
+            toast.success(`${number} sent for approval`);
+            onClose();
+            onChanged();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate: string; maxDate: string; onClose: () => void; onDone: (requestNumber: string) => void }) {
+  const [form, setForm] = useState({ date: initialDate, status: "PRESENT", checkIn: "", checkOut: "", reason: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const canSubmit = Boolean(form.date) && form.reason.trim().length >= 3 && !busy;
+
+  async function submit() {
+    if (!canSubmit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await apiFetch<{ requestNumber: string }>("/api/hr/self/attendance-requests", { method: "POST", body: JSON.stringify(form) });
+      onDone(r.requestNumber);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Request an attendance correction"
+      subtitle="Your reporting manager or HR reviews it. Approved changes update your attendance and payroll."
+      onClose={onClose}
+      busy={busy}
+      width="36rem"
+      footer={
+        <>
+          <button type="button" className="button buttonSecondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="button" className="button buttonPrimary" onClick={submit} disabled={!canSubmit}>
+            {busy && <span className="spinner" />} Send request
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="formGrid">
+        <div className="field">
+          <label htmlFor="corr-date">Day</label>
+          <input id="corr-date" type="date" className="input" value={form.date} max={maxDate || undefined} onChange={(e) => set({ date: e.target.value })} />
+        </div>
+        <div className="field">
+          <label htmlFor="corr-status">Should be</label>
+          <select id="corr-status" className="select" value={form.status} onChange={(e) => set({ status: e.target.value })}>
+            {CORRECTION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="corr-in">Check-in (optional)</label>
+          <input id="corr-in" type="time" className="input" value={form.checkIn} onChange={(e) => set({ checkIn: e.target.value })} />
+        </div>
+        <div className="field">
+          <label htmlFor="corr-out">Check-out (optional)</label>
+          <input id="corr-out" type="time" className="input" value={form.checkOut} onChange={(e) => set({ checkOut: e.target.value })} />
+        </div>
+      </div>
+      <div className="field" style={{ marginTop: "0.75rem" }}>
+        <label htmlFor="corr-reason">Reason</label>
+        <textarea id="corr-reason" className="input" rows={3} value={form.reason} onChange={(e) => set({ reason: e.target.value })} placeholder="e.g. Forgot to check out; left at 18:30 after the client call" />
+      </div>
+    </Modal>
   );
 }

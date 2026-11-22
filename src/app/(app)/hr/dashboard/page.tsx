@@ -26,6 +26,7 @@ interface Dashboard {
   pendingLeaves: { count: number; items: { id: string; leaveNumber: string; employeeName: string; leaveType: string; fromDate: string; toDate: string; days: number }[] };
   onLeaveToday: string[];
   pendingClaims: { count: number; amount: string };
+  pendingCorrections?: number;
   latestPayroll: { id: string; runNumber: string; period: string; status: string; totalNet: string; totalGross: string; employeeCount: number } | null;
   payrollTrend: { period: string; gross: string; net: string }[];
   departments: { name: string; count: number }[];
@@ -109,6 +110,9 @@ export default function HrDashboardPage() {
             <Kpi label="On leave today" value={data.attendanceToday.onLeave} sub={data.onLeaveToday.slice(0, 2).join(", ") || "Nobody"} href="/hr/leaves?status=APPROVED" />
             <Kpi label="Leave requests waiting" value={data.pendingLeaves.count} sub="Need approval" href="/hr/leaves?status=PENDING" />
             <Kpi label="Claims waiting" value={data.pendingClaims.count} sub={formatMoney(data.pendingClaims.amount)} href="/hr/claims?status=PENDING" />
+            {(data.pendingCorrections ?? 0) > 0 && (
+              <Kpi label="Attendance corrections" value={data.pendingCorrections ?? 0} sub="Need approval" href="/hr/attendance/requests" />
+            )}
             <Kpi
               label="Last payroll"
               value={data.latestPayroll ? formatMoney(data.latestPayroll.totalNet) : "—"}

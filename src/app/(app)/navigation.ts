@@ -84,7 +84,7 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr/me/leave", label: "My Leave", enabled: true, keywords: "apply leave time off my leave balance" },
           { href: "/hr/me/payslips", label: "My Payslips", enabled: true, keywords: "salary slip payslip download" },
           { href: "/hr/me/claims", label: "My Claims", enabled: true, keywords: "expense claim reimbursement bills" },
-          { href: "/hr/me/team", label: "Team Leave", enabled: true, keywords: "approve team leave manager direct reports" },
+          { href: "/hr/me/team", label: "Team Approvals", enabled: true, keywords: "approve team leave attendance correction manager direct reports" },
         ],
       },
       {
@@ -109,6 +109,7 @@ export const NAV_SECTIONS: NavSection[] = [
         children: [
           { href: "/hr/attendance", label: "Daily Attendance", enabled: true, keywords: "mark attendance present absent check in muster" },
           { href: "/hr/attendance/register", label: "Attendance Register", enabled: true, keywords: "monthly muster roll attendance sheet" },
+          { href: "/hr/attendance/requests", label: "Attendance Corrections", enabled: true, keywords: "regularization regularisation missed punch correction request approve" },
           { href: "/hr/leaves", label: "Leave Requests", enabled: true, createHref: "/hr/leaves/new", keywords: "leave application approve reject time off" },
           { href: "/hr/leaves/balances", label: "Leave Balances", enabled: true, keywords: "leave allocation quota entitlement" },
           { href: "/hr-leave-types", label: "Leave Types", enabled: true, createHref: "/hr-leave-types/new", keywords: "casual sick earned leave policy" },
@@ -573,6 +574,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-announcements": "hr-announcements.view",
   "/hr/attendance": "hr-attendance.view",
   "/hr/attendance/register": "hr-attendance.view",
+  "/hr/attendance/requests": "hr-attendance.view",
   "/hr/leaves": "hr-leaves.view",
   "/hr/leaves/balances": "hr-leaves.view",
   "/hr-leave-types": "hr-leave-types.view",

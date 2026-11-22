@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { verifyAccessToken } from "@/lib/auth/tokens";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/cookies";
 import type { AuthContext } from "@/lib/auth/context";
+import { normalizeProducts } from "@/lib/products";
 
 /**
  * Same auth context as `getAuthContext`, but read from the request cookies
@@ -25,6 +26,7 @@ export async function getServerAuthContext(): Promise<AuthContext | null> {
       permissions: payload.permissions,
       branchIds: payload.branchIds.map((id) => new Types.ObjectId(id)),
       warehouseIds: payload.warehouseIds.map((id) => new Types.ObjectId(id)),
+      products: normalizeProducts(payload.products),
     };
   } catch {
     return null;

@@ -109,6 +109,48 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    label: "HR · People",
+    modules: [
+      m("hr-dashboard", "HR dashboard", ["view"]),
+      m("hr-employees", "Employees"),
+      m("hr-departments", "HR departments"),
+      m("hr-designations", "Designations"),
+      m("hr-shifts", "Shifts"),
+      m("hr-holidays", "Holidays"),
+      m("hr-announcements", "Announcements"),
+      m("hr-assets", "Employee assets"),
+    ],
+  },
+  {
+    label: "HR · Time & leave",
+    modules: [
+      m("hr-attendance", "Attendance", ["view", "edit"]),
+      m("hr-leave-types", "Leave types"),
+      m("hr-leaves", "Leave requests", ["view", "create", "approve", "allocate"]),
+    ],
+  },
+  {
+    label: "HR · Payroll",
+    modules: [
+      m("hr-payroll", "Payroll runs & payslips", ["view", "process", "approve"]),
+      m("hr-loans", "Loans & advances", MONEY),
+      m("hr-claims", "Expense claims", ["view", "create", "approve"]),
+      m("hr-reports", "HR reports", ["view"]),
+    ],
+  },
+  {
+    label: "HR · Talent",
+    modules: [
+      m("hr-job-openings", "Job openings"),
+      m("hr-candidates", "Candidates"),
+      m("hr-appraisals", "Appraisals"),
+    ],
+  },
+  {
+    label: "HR · Employee self-service",
+    modules: [m("hr-self", "My workspace (own attendance, leave, payslips, claims)", ["view"])],
+  },
+  {
     label: "Administration",
     modules: [
       m("users", "Employees", ["view", "create", "edit", "disable"]),
@@ -132,3 +174,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
 export const ALL_PERMISSION_KEYS: ReadonlySet<string> = new Set(
   PERMISSION_GROUPS.flatMap((g) => g.modules.flatMap((mod) => mod.actions.map((a) => `${mod.key}.${a}`)))
 );
+
+/** Every HRMS permission key — the HR Manager role is seeded with these. */
+export const HR_PERMISSION_KEYS: string[] = PERMISSION_GROUPS.filter((g) => g.label.startsWith("HR"))
+  .flatMap((g) => g.modules.flatMap((mod) => mod.actions.map((a) => `${mod.key}.${a}`)))
+  .filter((k) => !k.startsWith("hr-self."));
+
+/** What an employee's own portal login can do. */
+export const HR_SELF_SERVICE_PERMISSIONS: string[] = ["hr-self.view"];

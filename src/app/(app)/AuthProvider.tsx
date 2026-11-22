@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch, ApiError, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
+import { grants, homePathFor, normalizeProducts, productForHref, type Product } from "@/lib/products";
 
 export interface Me {
   id: string;
@@ -11,14 +12,34 @@ export interface Me {
   businessId: string;
   role: { id: string; name: string } | null;
   permissions: string[];
-  business: { name: string; currency: string; state?: string; gstin?: string; phone?: string; email?: string; city?: string; address?: string } | null;
+  /** Products the workspace has bought (ERP, HRMS). */
+  products: Product[];
+  business: {
+    name: string;
+    currency: string;
+    state?: string;
+    gstin?: string;
+    phone?: string;
+    email?: string;
+    city?: string;
+    address?: string;
+    plan?: string | null;
+    maxEmployees?: number | null;
+    subscriptionEndsAt?: string | null;
+  } | null;
   financialYear: { label: string; startDate: string; endDate: string } | null;
 }
 
 interface AuthContextValue {
   me: Me | null;
   loading: boolean;
+  /** Role grants the permission and the workspace's products include its module. */
   hasPermission: (permission: string) => boolean;
+  hasProduct: (product: Product) => boolean;
+  /** Whether a screen's product is part of this workspace (core screens always are). */
+  canReach: (href: string) => boolean;
+  /** Where this person's home screen is (ERP dashboard, HR dashboard or their own workspace). */
+  homePath: string;
   refresh: () => Promise<void>;
 }
 
@@ -40,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiFetch<Me>("/api/auth/me");
       signedIn.current = true;
-      setMe(data);
+      setMe({ ...data, products: normalizeProducts(data.products) });
     } catch (err) {
       // First load with no session → sign-in, remembering where they were going.
       if (err instanceof ApiError && !signedIn.current) {
@@ -71,12 +92,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const hasPermission = useCallback(
-    (permission: string) => !!me && (me.permissions.includes("*") || me.permissions.includes(permission)),
+    (permission: string) => !!me && grants(me.permissions, me.products, permission),
     [me]
   );
+  const hasProduct = useCallback((product: Product) => !!me && me.products.includes(product), [me]);
+  const canReach = useCallback(
+    (href: string) => {
+      if (!me) return false;
+      const product = productForHref(href);
+      return product === null || me.products.includes(product);
+    },
+    [me]
+  );
+  const homePath = me ? homePathFor(me.permissions, me.products) : "/dashboard";
 
   return (
-    <AuthContext.Provider value={{ me, loading, hasPermission, refresh: load }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ me, loading, hasPermission, hasProduct, canReach, homePath, refresh: load }}>{children}</AuthContext.Provider>
   );
 }
 

@@ -18,6 +18,10 @@ import {
   IconGlobe,
   IconPlug,
   IconList,
+  IconUser,
+  IconClock,
+  IconWallet,
+  IconTrendUp,
 } from "@/components/icons";
 
 export interface NavChild {
@@ -63,6 +67,66 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     key: "home",
     groups: [{ key: "dashboard", label: "Business Pulse", icon: IconDashboard, href: "/dashboard", keywords: "dashboard" }],
+  },
+  {
+    key: "hr",
+    label: "People & Payroll",
+    groups: [
+      { key: "hr-dashboard", label: "HR Dashboard", icon: IconDashboard, href: "/hr/dashboard", keywords: "hrms people overview headcount" },
+      { key: "hr-me", label: "My Workspace", icon: IconUser, href: "/hr/me", keywords: "self service my attendance my leave my payslip punch in check in ess" },
+      {
+        key: "hr-people",
+        label: "Employees",
+        keywords: "hr people staff",
+        icon: IconUsers,
+        children: [
+          { href: "/hr/employees", label: "Employee Directory", enabled: true, createHref: "/hr-employees/new", keywords: "employee staff people profile directory onboarding" },
+          { href: "/hr-employees", label: "Employee Records", enabled: true, keywords: "employee master bulk import export excel salary structure" },
+          { href: "/hr-departments", label: "Departments", enabled: true, createHref: "/hr-departments/new", keywords: "hr department team division" },
+          { href: "/hr-designations", label: "Designations", enabled: true, createHref: "/hr-designations/new", keywords: "job title grade designation role" },
+          { href: "/hr-assets", label: "Assets Issued", enabled: true, createHref: "/hr-assets/new", keywords: "laptop phone asset allocation" },
+          { href: "/hr-announcements", label: "Announcements", enabled: true, createHref: "/hr-announcements/new", keywords: "notice circular news" },
+        ],
+      },
+      {
+        key: "hr-time",
+        label: "Time & Leave",
+        keywords: "attendance leave",
+        icon: IconClock,
+        children: [
+          { href: "/hr/attendance", label: "Daily Attendance", enabled: true, keywords: "mark attendance present absent check in muster" },
+          { href: "/hr/attendance/register", label: "Attendance Register", enabled: true, keywords: "monthly muster roll attendance sheet" },
+          { href: "/hr/leaves", label: "Leave Requests", enabled: true, createHref: "/hr/leaves/new", keywords: "leave application approve reject time off" },
+          { href: "/hr/leaves/balances", label: "Leave Balances", enabled: true, keywords: "leave allocation quota entitlement" },
+          { href: "/hr-leave-types", label: "Leave Types", enabled: true, createHref: "/hr-leave-types/new", keywords: "casual sick earned leave policy" },
+          { href: "/hr-shifts", label: "Shifts", enabled: true, createHref: "/hr-shifts/new", keywords: "shift timing weekly off roster" },
+          { href: "/hr-holidays", label: "Holiday Calendar", enabled: true, createHref: "/hr-holidays/new", keywords: "holiday festival public holiday list" },
+        ],
+      },
+      {
+        key: "hr-payroll",
+        label: "Payroll",
+        keywords: "salary payroll",
+        icon: IconWallet,
+        children: [
+          { href: "/hr/payroll", label: "Payroll Runs", enabled: true, keywords: "salary process payslip pf esi pt tds monthly payroll" },
+          { href: "/hr/loans", label: "Loans & Advances", enabled: true, createHref: "/hr/loans/new", keywords: "salary advance loan emi recovery" },
+          { href: "/hr/claims", label: "Expense Claims", enabled: true, createHref: "/hr/claims/new", keywords: "reimbursement claim travel bills" },
+        ],
+      },
+      {
+        key: "hr-talent",
+        label: "Talent",
+        keywords: "recruitment performance",
+        icon: IconTrendUp,
+        children: [
+          { href: "/hr-job-openings", label: "Job Openings", enabled: true, createHref: "/hr-job-openings/new", keywords: "vacancy hiring requisition recruitment" },
+          { href: "/hr-candidates", label: "Candidates", enabled: true, createHref: "/hr-candidates/new", keywords: "applicant interview hiring pipeline resume" },
+          { href: "/hr-appraisals", label: "Appraisals", enabled: true, createHref: "/hr-appraisals/new", keywords: "performance review rating increment kra" },
+        ],
+      },
+      { key: "hr-reports", label: "HR Reports", icon: IconClipboard, href: "/hr/reports", keywords: "salary register pf esi statement headcount attendance report bank transfer" },
+    ],
   },
   {
     key: "business",
@@ -479,6 +543,30 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/settings/print-formats": "settings.view",
   "/settings/notifications": "settings.view",
   "/logs": "audit-logs.view",
+
+  // HRMS
+  "/hr/dashboard": "hr-dashboard.view",
+  "/hr/me": "hr-self.view",
+  "/hr/employees": "hr-employees.view",
+  "/hr-employees": "hr-employees.view",
+  "/hr-departments": "hr-departments.view",
+  "/hr-designations": "hr-designations.view",
+  "/hr-assets": "hr-assets.view",
+  "/hr-announcements": "hr-announcements.view",
+  "/hr/attendance": "hr-attendance.view",
+  "/hr/attendance/register": "hr-attendance.view",
+  "/hr/leaves": "hr-leaves.view",
+  "/hr/leaves/balances": "hr-leaves.view",
+  "/hr-leave-types": "hr-leave-types.view",
+  "/hr-shifts": "hr-shifts.view",
+  "/hr-holidays": "hr-holidays.view",
+  "/hr/payroll": "hr-payroll.view",
+  "/hr/loans": "hr-loans.view",
+  "/hr/claims": "hr-claims.view",
+  "/hr-job-openings": "hr-job-openings.view",
+  "/hr-candidates": "hr-candidates.view",
+  "/hr-appraisals": "hr-appraisals.view",
+  "/hr/reports": "hr-reports.view",
 };
 
 export function getRequiredPermission(href: string): string | null {
@@ -525,6 +613,20 @@ const CREATE_PERMISSIONS: Record<string, string> = {
   "/tax-rates/new": "tax-rates.create",
   "/payment-terms/new": "payment-terms.create",
   "/additional-charges/new": "additional-charges.create",
+  "/hr-employees/new": "hr-employees.create",
+  "/hr-departments/new": "hr-departments.create",
+  "/hr-designations/new": "hr-designations.create",
+  "/hr-assets/new": "hr-assets.create",
+  "/hr-announcements/new": "hr-announcements.create",
+  "/hr/leaves/new": "hr-leaves.create",
+  "/hr-leave-types/new": "hr-leave-types.create",
+  "/hr-shifts/new": "hr-shifts.create",
+  "/hr-holidays/new": "hr-holidays.create",
+  "/hr/loans/new": "hr-loans.create",
+  "/hr/claims/new": "hr-claims.create",
+  "/hr-job-openings/new": "hr-job-openings.create",
+  "/hr-candidates/new": "hr-candidates.create",
+  "/hr-appraisals/new": "hr-appraisals.create",
 };
 
 export function getCreatePermission(createHref: string): string | null {

@@ -10,6 +10,8 @@ export interface AccessTokenPayload {
   permissions: string[];
   branchIds: string[];
   warehouseIds: string[];
+  /** Products the workspace has bought. Absent on tokens issued before products existed (= ERP). */
+  products?: string[];
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

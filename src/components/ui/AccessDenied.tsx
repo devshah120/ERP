@@ -6,12 +6,14 @@ import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { IconLock } from "@/components/icons";
+import { useAuth } from "@/app/(app)/AuthProvider";
 
 /**
  * Shown in place of a screen the signed-in user's role can't open. States the
  * missing permission so an owner knows exactly what to grant.
  */
 export default function AccessDenied({ detail }: { detail?: string }) {
+  const { homePath } = useAuth();
   return (
     <Box
       className="statusPage"
@@ -95,11 +97,11 @@ export default function AccessDenied({ detail }: { detail?: string }) {
           <Button
             variant="contained"
             component={Link}
-            href="/dashboard"
+            href={homePath}
             size="medium"
             disableElevation
           >
-            Go to dashboard
+            Go to home
           </Button>
         </Box>
       </Paper>

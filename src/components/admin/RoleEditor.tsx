@@ -7,7 +7,9 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
-import { PERMISSION_GROUPS } from "@/lib/auth/permissionCatalog";
+import { PERMISSION_GROUPS as ALL_PERMISSION_GROUPS } from "@/lib/auth/permissionCatalog";
+import { useAuth } from "@/app/(app)/AuthProvider";
+import { permissionInProducts } from "@/lib/products";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
@@ -47,6 +49,17 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
   const router = useRouter();
   const toast = useToast();
   const isEdit = Boolean(roleId);
+  const { me } = useAuth();
+  const productKey = (me?.products ?? ["ERP"]).join(",");
+
+  // Only the modules this workspace has bought: an HRMS-only customer never sees sales or stock permissions.
+  const PERMISSION_GROUPS = useMemo(() => {
+    const products = productKey.split(",") as ("ERP" | "HRMS")[];
+    return ALL_PERMISSION_GROUPS.map((g) => ({
+      ...g,
+      modules: g.modules.filter((mod) => permissionInProducts(`${mod.key}.${mod.actions[0]}`, products)),
+    })).filter((g) => g.modules.length > 0);
+  }, [productKey]);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -107,7 +120,7 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
     setDirty(true);
   }
 
-  const total = useMemo(() => PERMISSION_GROUPS.reduce((n, g) => n + g.modules.reduce((m, mod) => m + mod.actions.length, 0), 0), []);
+  const total = useMemo(() => PERMISSION_GROUPS.reduce((n, g) => n + g.modules.reduce((m, mod) => m + mod.actions.length, 0), 0), [PERMISSION_GROUPS]);
 
   async function save() {
     if (locked) return;

@@ -358,6 +358,8 @@ export async function commitImport(
     return { resource, imported: 0, skippedDuplicates: preview.rows.length };
   }
 
+  if (resourceDef.beforeCreate) await resourceDef.beforeCreate(ctx.businessId, toInsert.length);
+
   const session = await mongoose.startSession();
   let imported = 0;
 

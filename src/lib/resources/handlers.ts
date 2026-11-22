@@ -140,6 +140,7 @@ export function createHandler(def: ResourceDefinition) {
     const body = await req.json();
     const input = def.createSchema.parse(body) as Record<string, unknown>;
     const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
+    if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
 
     if (def.autoCode) {
       const existing = payload[def.autoCode.field];

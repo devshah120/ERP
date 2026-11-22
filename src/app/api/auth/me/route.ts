@@ -33,6 +33,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
     businessId: ctx.businessId.toString(),
     role: role ? { id: role._id.toString(), name: role.name } : null,
     permissions: ctx.permissions,
+    products: ctx.products,
     business: business
       ? {
           name: business.tradeName,
@@ -45,6 +46,9 @@ export const GET = withApiHandler(async (req: NextRequest) => {
           email: business.email,
           city: business.city,
           address: business.address,
+          plan: business.plan ?? null,
+          maxEmployees: business.maxEmployees ?? null,
+          subscriptionEndsAt: business.subscriptionEndsAt ? new Date(business.subscriptionEndsAt).toISOString() : null,
         }
       : null,
     financialYear: financialYear

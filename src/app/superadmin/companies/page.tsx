@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { IconRefresh, IconAlertCircle, IconBuilding } from "@/components/icons";
+import { IconRefresh, IconAlertCircle, IconBuilding, IconPlus } from "@/components/icons";
+import SAHeader, { ProductTags, fmtDate } from "../SAHeader";
 
 interface CompanyRow {
   id: string;
@@ -13,7 +14,13 @@ interface CompanyRow {
   email: string;
   status: string;
   userCount: number;
+  employeeCount: number;
   country: string;
+  products: string[];
+  plan: string | null;
+  maxEmployees: number | null;
+  subscriptionEndsAt: string | null;
+  expired: boolean;
   createdAt: string;
 }
 
@@ -36,6 +43,7 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [productFilter, setProductFilter] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,28 +67,17 @@ export default function CompaniesPage() {
     if (!companies) return [];
     let list = companies;
     if (statusFilter !== "All") list = list.filter((c) => c.status === statusFilter);
+    if (productFilter) list = list.filter((c) => c.products.includes(productFilter));
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter((c) => [c.legalName, c.tradeName, c.domain, c.email].some((v) => v.toLowerCase().includes(q)));
     }
     return list;
-  }, [companies, statusFilter, query]);
-
-  async function signOut() {
-    await fetch("/api/superadmin/logout", { method: "POST" });
-    router.replace("/superadmin/login");
-  }
+  }, [companies, statusFilter, productFilter, query]);
 
   return (
     <div className="saPage">
-      <header className="saHeader">
-        <div className="saHeaderBrand">NEXORA <span className="saHeaderTag">Admin Portal</span></div>
-        <nav className="saHeaderNav">
-          <Link href="/superadmin/dashboard" className="saNavLink">Dashboard</Link>
-          <Link href="/superadmin/companies" className="saNavLink saNavLinkActive">Companies</Link>
-        </nav>
-        <button type="button" className="saBtn saBtnGhost saBtnSm" onClick={signOut}>Sign out</button>
-      </header>
+      <SAHeader />
 
       <main className="saMain">
         <div className="saPageHead">
@@ -90,9 +87,14 @@ export default function CompaniesPage() {
               {companies ? `${companies.length} companies registered` : "Loading…"}
             </p>
           </div>
-          <button type="button" className="saBtn saBtnSecondary saBtnIcon" onClick={load} disabled={loading} aria-label="Refresh">
-            {loading ? <span className="spinner" /> : <IconRefresh />}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="saBtn saBtnSecondary saBtnIcon" onClick={load} disabled={loading} aria-label="Refresh">
+              {loading ? <span className="spinner" /> : <IconRefresh />}
+            </button>
+            <Link href="/superadmin/companies/new" className="saBtn saBtnPrimary">
+              <IconPlus /> New account
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -106,10 +108,15 @@ export default function CompaniesPage() {
           <input
             className="saSearchInput"
             type="search"
-            placeholder="Search by name, domain or email…"
+            placeholder="Search by name, workspace ID or email…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <select className="saInput" style={{ width: "auto" }} value={productFilter} onChange={(e) => setProductFilter(e.target.value)} aria-label="Product">
+            <option value="">All products</option>
+            <option value="ERP">ERP</option>
+            <option value="HRMS">HRMS</option>
+          </select>
           <div className="saFilterGroup">
             {STATUS_FILTERS.map((s) => (
               <button
@@ -129,20 +136,21 @@ export default function CompaniesPage() {
             <thead>
               <tr>
                 <th>Company</th>
-                <th>Domain</th>
+                <th>Products</th>
+                <th>Plan</th>
                 <th>Owner Email</th>
                 <th>Users</th>
-                <th>Country</th>
-                <th>Registered</th>
+                <th>Employees</th>
+                <th>Valid until</th>
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} className="saTableEmpty">Loading…</td></tr>}
+              {loading && <tr><td colSpan={9} className="saTableEmpty">Loading…</td></tr>}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="saTableEmpty">
+                  <td colSpan={9} className="saTableEmpty">
                     <IconBuilding style={{ opacity: 0.3, fontSize: "2rem" }} />
                     <p>No companies found.</p>
                   </td>
@@ -154,12 +162,16 @@ export default function CompaniesPage() {
                     <span className="saCellPrimary">{c.legalName}</span>
                     {c.tradeName !== c.legalName && <span className="saCellSub">{c.tradeName}</span>}
                   </td>
-                  <td className="saCellMono">{c.domain}</td>
+                  <td><ProductTags products={c.products} /></td>
+                  <td className="saCellMuted">{c.plan ?? "—"}</td>
                   <td className="saCellMuted">{c.email}</td>
                   <td className="saCellMuted">{c.userCount}</td>
-                  <td className="saCellMuted">{c.country}</td>
                   <td className="saCellMuted">
-                    {new Date(c.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    {c.products.includes("HRMS") ? `${c.employeeCount}${c.maxEmployees ? ` / ${c.maxEmployees}` : ""}` : "—"}
+                  </td>
+                  <td className="saCellMuted">
+                    {fmtDate(c.subscriptionEndsAt)}
+                    {c.expired && <span className="saBadge saBadgeSuspended" style={{ marginLeft: "0.35rem" }}>Expired</span>}
                   </td>
                   <td><StatusBadge status={c.status} /></td>
                   <td>

@@ -12288,3 +12288,619 @@ a.plLowName:hover {
     gap: 0.375rem;
   }
 }
+
+/* ==================================================================
+   Super admin: account provisioning & subscriptions
+   ================================================================== */
+
+.saFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+}
+
+.saFormGrid .saFieldFull {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .saFormGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.saHint {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.saFieldError {
+  font-size: 0.75rem;
+  color: #b91c1c;
+}
+
+.saProductChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.saProductChoice {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  padding: 0.875rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.saProductChoice[data-checked="true"] {
+  border-color: #0a7bbf;
+  box-shadow: 0 0 0 3px rgba(10, 123, 191, 0.12);
+}
+
+.saProductChoice input {
+  margin-top: 0.2rem;
+}
+
+.saProductChoice strong {
+  display: block;
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.saProductChoice span {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.saTag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  margin-right: 0.25rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.saTagERP {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.saTagHRMS {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+.saCredentials {
+  background: #f8fafc;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.saCredentials code {
+  font-family: var(--font-mono);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+.saFormActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+/* ==================================================================
+   HRMS
+   ================================================================== */
+
+.hrKpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.hrKpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.hrKpi:hover {
+  border-color: var(--border-strong);
+}
+
+.hrKpiLabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.hrKpiValue {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hrKpiSub {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.hrGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.hrList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hrList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.8125rem;
+}
+
+.hrList li:last-child {
+  border-bottom: 0;
+}
+
+.hrMuted {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.hrBarRow {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0;
+}
+
+.hrBarTrack {
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.hrBarFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--chart-1);
+}
+
+.hrTabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.hrTab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.625rem 0.875rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hrTab[aria-selected="true"] {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+}
+
+.hrDl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.875rem 1.25rem;
+  margin: 0;
+}
+
+.hrDl dt {
+  font-size: 0.71875rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hrDl dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.hrAvatar {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 700;
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+/* Attendance status pills (sheet, register, calendar) */
+.attCode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.375rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.attCode[data-code="P"],
+.attCode[data-code="OD"] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.attCode[data-code="A"],
+.attCode[data-code="LOP"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.attCode[data-code="HD"] {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.attCode[data-code="L"] {
+  background: var(--tint-violet-bg);
+  color: var(--tint-violet-fg);
+}
+
+.attCode[data-code="H"],
+.attCode[data-code="WO"] {
+  background: var(--tint-blue-bg);
+  color: var(--tint-blue-fg);
+}
+
+.attStatusSelect {
+  min-width: 8.5rem;
+}
+
+.attTime {
+  width: 6.5rem;
+}
+
+.regWrap {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.regTable {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.75rem;
+  width: max-content;
+  min-width: 100%;
+}
+
+.regTable th,
+.regTable td {
+  padding: 0.3rem 0.25rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.regTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-subtle);
+  z-index: 2;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.regTable .regName {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  text-align: left;
+  min-width: 12rem;
+  padding-left: 0.75rem;
+  z-index: 1;
+  border-right: 1px solid var(--border);
+}
+
+.regTable thead .regName {
+  z-index: 3;
+  background: var(--surface-subtle);
+}
+
+.regTable th.regWeekend {
+  color: var(--tint-blue-fg);
+}
+
+.regTable .regTotal {
+  font-weight: 600;
+  background: var(--surface-subtle);
+}
+
+.hrLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0 1rem;
+}
+
+.hrLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Self-service */
+.punchCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.punchTimes {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.punchTimes strong {
+  display: block;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.punchButton {
+  min-width: 9rem;
+  min-height: 2.75rem;
+  font-size: 0.9375rem;
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.375rem;
+}
+
+.calHead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.calDay {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem;
+  min-height: 3.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.6875rem;
+  background: var(--surface);
+}
+
+.calDay[data-today="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.calDayNum {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.balanceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.balanceTile {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: var(--surface-subtle);
+}
+
+.balanceTile strong {
+  display: block;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.announcement {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.announcement:last-child {
+  border-bottom: 0;
+}
+
+.announcement h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+.announcement p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: pre-line;
+}
+
+/* Payslip (screen + print) */
+.payslip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  max-width: 52rem;
+  margin: 0 auto;
+  color: var(--text);
+}
+
+.payslipHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 2px solid var(--text);
+  padding-bottom: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.payslipHead h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.payslipMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 2rem;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+.payslipMeta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px dotted var(--border);
+  padding: 0.2rem 0;
+}
+
+.payslipMeta span:first-child {
+  color: var(--text-secondary);
+}
+
+.payslipCols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.payslipTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.payslipTable th,
+.payslipTable td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.payslipTable td:last-child,
+.payslipTable th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.payslipTable tfoot td {
+  font-weight: 700;
+  border-top: 1px solid var(--text);
+}
+
+.payslipNet {
+  margin-top: 1.25rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.payslipNet strong {
+  font-size: 1.25rem;
+}
+
+@media print {
+  .appHeader,
+  .sidebar,
+  .crumbBar,
+  .sbBackdrop,
+  .noPrint {
+    display: none !important;
+  }
+
+  .appShell,
+  .mainColumn,
+  .mainArea {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .payslip {
+    border: 0;
+    padding: 0;
+    max-width: none;
+  }
+}

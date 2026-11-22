@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { IconAlertCircle, IconUsers, IconBuilding, IconRefresh } from "@/components/icons";
+import SAHeader, { ProductTags, PLAN_OPTIONS, fmtDate } from "../../SAHeader";
+import { PRODUCTS, PRODUCT_LABELS, type Product } from "@/lib/products";
 
 interface CompanyDetail {
   id: string;
@@ -21,6 +23,12 @@ interface CompanyDetail {
   registrationNumber: string | null;
   currency: string;
   financialYearStartMonth: number;
+  products: Product[];
+  plan: string | null;
+  maxEmployees: number | null;
+  subscriptionEndsAt: string | null;
+  provisionedBy: string;
+  employeeCount: number;
   createdAt: string;
 }
 
@@ -57,6 +65,12 @@ export default function CompanyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [sub, setSub] = useState<{ products: Product[]; plan: string; maxEmployees: string; subscriptionEndsAt: string } | null>(null);
+  const [subBusy, setSubBusy] = useState(false);
+  const [subMsg, setSubMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,6 +84,12 @@ export default function CompanyDetailPage() {
       const [cJson, uJson] = await Promise.all([cRes.json(), uRes.json()]);
       if (!cRes.ok) throw new Error(cJson.message ?? "Failed to load company");
       setCompany(cJson.data);
+      setSub({
+        products: cJson.data.products,
+        plan: cJson.data.plan ?? "STARTER",
+        maxEmployees: cJson.data.maxEmployees ? String(cJson.data.maxEmployees) : "",
+        subscriptionEndsAt: cJson.data.subscriptionEndsAt ? String(cJson.data.subscriptionEndsAt).slice(0, 10) : "",
+      });
       setUsers(uJson.data?.items ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load.");
@@ -99,21 +119,62 @@ export default function CompanyDetailPage() {
     }
   }
 
-  async function signOut() {
-    await fetch("/api/superadmin/logout", { method: "POST" });
-    router.replace("/superadmin/login");
+  async function saveSubscription() {
+    if (!sub) return;
+    setSubBusy(true);
+    setSubMsg(null);
+    try {
+      const res = await fetch(`/api/superadmin/companies/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          products: sub.products,
+          plan: sub.plan,
+          maxEmployees: sub.maxEmployees ? Number(sub.maxEmployees) : null,
+          subscriptionEndsAt: sub.subscriptionEndsAt || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? "Failed to save");
+      setCompany(json.data);
+      setSubMsg({ tone: "ok", text: "Subscription saved. Signed-in users see the change within 15 minutes." });
+    } catch (err) {
+      setSubMsg({ tone: "error", text: err instanceof Error ? err.message : "Failed to save" });
+    } finally {
+      setSubBusy(false);
+    }
+  }
+
+  async function resetOwnerPassword() {
+    setPwBusy(true);
+    setPwMsg(null);
+    try {
+      const res = await fetch(`/api/superadmin/companies/${id}/owner-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const detail = Array.isArray(json.errors) && json.errors[0]?.message ? `: ${json.errors[0].message}` : "";
+        throw new Error((json.message ?? "Failed to reset") + detail);
+      }
+      setPwMsg({ tone: "ok", text: `Password reset for ${json.data.email}. They have been signed out everywhere.` });
+      setNewPassword("");
+    } catch (err) {
+      setPwMsg({ tone: "error", text: err instanceof Error ? err.message : "Failed to reset" });
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
+  function toggleProduct(p: Product) {
+    setSub((s) => (s ? { ...s, products: s.products.includes(p) ? s.products.filter((x) => x !== p) : [...s.products, p] } : s));
   }
 
   return (
     <div className="saPage">
-      <header className="saHeader">
-        <div className="saHeaderBrand">NEXORA <span className="saHeaderTag">Admin Portal</span></div>
-        <nav className="saHeaderNav">
-          <Link href="/superadmin/dashboard" className="saNavLink">Dashboard</Link>
-          <Link href="/superadmin/companies" className="saNavLink saNavLinkActive">Companies</Link>
-        </nav>
-        <button type="button" className="saBtn saBtnGhost saBtnSm" onClick={signOut}>Sign out</button>
-      </header>
+      <SAHeader />
 
       <main className="saMain">
         {/* Breadcrumb */}
@@ -170,7 +231,14 @@ export default function CompanyDetailPage() {
                 </div>
                 <div className="saPanelBody">
                   <dl className="saInfoList">
-                    <div className="saInfoRow"><dt>Domain</dt><dd className="saCellMono">{company.domain}</dd></div>
+                    <div className="saInfoRow"><dt>Products</dt><dd><ProductTags products={company.products} /></dd></div>
+                    <div className="saInfoRow"><dt>Plan</dt><dd>{company.plan ?? "—"}</dd></div>
+                    <div className="saInfoRow"><dt>Valid until</dt><dd>{fmtDate(company.subscriptionEndsAt)}</dd></div>
+                    {company.products.includes("HRMS") && (
+                      <div className="saInfoRow"><dt>Employees</dt><dd>{company.employeeCount}{company.maxEmployees ? ` of ${company.maxEmployees}` : " (no limit)"}</dd></div>
+                    )}
+                    <div className="saInfoRow"><dt>Created by</dt><dd>{company.provisionedBy === "SUPERADMIN" ? "Admin portal" : "Self sign-up"}</dd></div>
+                    <div className="saInfoRow"><dt>Workspace ID</dt><dd className="saCellMono">{company.domain}</dd></div>
                     <div className="saInfoRow"><dt>Owner Email</dt><dd>{company.email}</dd></div>
                     <div className="saInfoRow"><dt>Phone</dt><dd>{company.phone || "—"}</dd></div>
                     <div className="saInfoRow"><dt>Country</dt><dd>{company.country}</dd></div>
@@ -230,6 +298,81 @@ export default function CompanyDetailPage() {
                 </div>
               </section>
             </div>
+
+            {/* Subscription Panel */}
+            {sub && (
+              <section className="saPanel" style={{ marginTop: "1.5rem" }}>
+                <div className="saPanelHead">
+                  <h2 className="saPanelTitle">Subscription</h2>
+                </div>
+                <div className="saPanelBody">
+                  {subMsg && (
+                    <div
+                      className={`saBanner ${subMsg.tone === "error" ? "saBannerError" : ""}`}
+                      style={{ marginBottom: "1rem", ...(subMsg.tone === "ok" ? { background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" } : {}) }}
+                    >
+                      <span>{subMsg.text}</span>
+                    </div>
+                  )}
+                  <div className="saProductChoices" style={{ marginBottom: "1rem" }}>
+                    {PRODUCTS.map((p) => (
+                      <label key={p} className="saProductChoice" data-checked={sub.products.includes(p)}>
+                        <input type="checkbox" checked={sub.products.includes(p)} onChange={() => toggleProduct(p)} />
+                        <div>
+                          <strong>{PRODUCT_LABELS[p]}</strong>
+                          <span>
+                            {p === "HRMS" && !company.products.includes("HRMS")
+                              ? "Turning this on sets up shifts, leave types, departments and HR roles."
+                              : "Included in this workspace when ticked"}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="saFormGrid">
+                    <div className="saField">
+                      <label htmlFor="s-plan">Plan</label>
+                      <select id="s-plan" className="saInput" value={sub.plan} onChange={(e) => setSub({ ...sub, plan: e.target.value })}>
+                        {[...PLAN_OPTIONS, ...(PLAN_OPTIONS.some((o) => o.value === sub.plan) ? [] : [{ value: sub.plan, label: sub.plan }])].map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="saField">
+                      <label htmlFor="s-until">Valid until</label>
+                      <input id="s-until" type="date" className="saInput" value={sub.subscriptionEndsAt} onChange={(e) => setSub({ ...sub, subscriptionEndsAt: e.target.value })} />
+                      <span className="saHint">Blank = no expiry. Extend this to renew.</span>
+                    </div>
+                    <div className="saField">
+                      <label htmlFor="s-max">Employee limit</label>
+                      <input id="s-max" type="number" min={1} className="saInput" value={sub.maxEmployees} onChange={(e) => setSub({ ...sub, maxEmployees: e.target.value })} />
+                      <span className="saHint">Blank = unlimited. Currently {company.employeeCount} active.</span>
+                    </div>
+                  </div>
+                  <div className="saFormActions">
+                    <button type="button" className="saBtn saBtnPrimary saBtnSm" disabled={subBusy || sub.products.length === 0} onClick={saveSubscription}>
+                      {subBusy ? <span className="spinner" /> : "Save subscription"}
+                    </button>
+                  </div>
+
+                  <div className="saActionRow" style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid #e2e8f0", alignItems: "flex-end" }}>
+                    <div style={{ flex: 1 }}>
+                      <div className="saActionLabel">Reset owner password</div>
+                      <div className="saActionDesc">For a locked-out customer. Unlocks the owner login and signs it out everywhere.</div>
+                      {pwMsg && (
+                        <div className={pwMsg.tone === "error" ? "saFieldError" : "saHint"} style={{ marginTop: "0.35rem" }}>
+                          {pwMsg.text}
+                        </div>
+                      )}
+                    </div>
+                    <input className="saInput" style={{ maxWidth: "14rem" }} placeholder="New temporary password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+                    <button type="button" className="saBtn saBtnSecondary saBtnSm" disabled={pwBusy || newPassword.length < 8} onClick={resetOwnerPassword}>
+                      {pwBusy ? <span className="spinner" /> : "Reset"}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Users Panel */}
             <section className="saPanel" style={{ marginTop: "1.5rem" }}>

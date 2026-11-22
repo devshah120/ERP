@@ -105,6 +105,20 @@ MongoDB Database (Replica Set)
 - **Files**: `src/lib/services/numberingService.ts`, `src/lib/services/documentPrefixService.ts`.
 - **Sequence Generation**: Atomic counter generation using MongoDB `$inc` on `MasterCounter` and `DocumentSequence`, supporting custom prefixes and financial year formatting (e.g. `INV-2026-2027-000001`).
 
+#### H. Products & Subscriptions (ERP / HRMS)
+- **Files**: `src/lib/products.ts`, `src/lib/services/provisioningService.ts`, `src/app/api/superadmin/companies/**`.
+- A `Business` carries `products` (`["ERP"]`, `["HRMS"]` or both; missing = ERP), `plan`, `maxEmployees` and `subscriptionEndsAt`. The super admin portal (`/superadmin/companies/new`) creates and sells workspaces; public sign-up is ERP only.
+- Products travel in the access token (`ctx.products`). `requirePermission()` refuses a permission whose module belongs to a product the workspace lacks, even for the Owner's `*`. **Any permission module starting with `hr-` is HRMS; `users`, `roles`, `audit-logs`, `settings`, `storage` are core; everything else is ERP.** Screens follow the same rule by path (`/hr`, `/hr/...`, `/hr-...` are HRMS).
+- Login and token refresh refuse suspended workspaces and lapsed subscriptions.
+
+#### I. HRMS
+- **Files**: `src/models/hr.ts`, `src/lib/hr/*`, `src/app/api/hr/**`, `src/app/(app)/hr/**`, masters in `src/lib/resources/hrRegistry.ts` + `ui/hrRegistry.ts`.
+- **Masters on the generic framework** (`/hr-employees`, `/hr-departments`, `/hr-designations`, `/hr-shifts`, `/hr-holidays`, `/hr-leave-types`, `/hr-announcements`, `/hr-assets`, `/hr-job-openings`, `/hr-candidates`, `/hr-appraisals`). The employee limit is enforced by the resource `beforeCreate` hook (single create and Excel import).
+- **Attendance** (`attendance.ts`): one row per employee per day (UTC-midnight dates, see `calendar.ts`). `summarizeMonth()` is the single source of loss-of-pay days for the register and payroll; unmarked working days count as present.
+- **Leave** (`leave.ts`): approving writes LEAVE rows to attendance in a transaction; balance = allocation (or the type's annual quota) + carry-forward − approved days.
+- **Payroll** (`payrollMath.ts` pure, `payroll.ts` workflow): DRAFT → APPROVED (locks the month's attendance/leave, records loan instalments, marks claims reimbursed) → PAID. Cancelling an approved run reverses those; a draft is deleted. PF 12% of basic capped at ₹15,000, ESI 0.75%/3.25% when gross ≤ ₹21,000, fixed PT and TDS per employee.
+- **Self-service**: `hr-self.view` (role "Employee (Self Service)") gives an employee their own attendance punch, leave, payslips and claims via `/api/hr/self/**`; HR grants it from the employee profile.
+
 ---
 
 ## 4. Frontend Architecture & Design

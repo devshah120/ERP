@@ -1,5 +1,6 @@
 import type { ResourceUi, SectionConfig } from "./types";
 import { EXTENDED_RESOURCE_UI } from "./extendedRegistry";
+import { HR_RESOURCE_UI } from "./hrRegistry";
 
 const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Active" },
@@ -513,6 +514,7 @@ export const RESOURCE_UI: Record<string, ResourceUi> = {
   warehouses,
   branches,
   ...EXTENDED_RESOURCE_UI,
+  ...HR_RESOURCE_UI,
 };
 
 export function getResourceUi(key: string): ResourceUi | undefined {

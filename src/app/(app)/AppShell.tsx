@@ -59,7 +59,7 @@ function hit(text: string | undefined, q: string) {
 type Flyout = { key: string; top: number; kind: "tip" | "menu" } | null;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { me, loading, hasPermission } = useAuth();
+  const { me, loading, hasPermission, hasProduct, canReach, homePath } = useAuth();
   const { openPalette } = useShortcuts();
   const pathname = usePathname();
 
@@ -137,6 +137,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .map((g) => {
           if (g.href) {
             if (g.soon) return null;
+            if (!canReach(g.href)) return null;
             const perm = getRequiredPermission(g.href);
             if (perm && !hasPermission(perm)) return null;
             if (q && !hit(g.label, q) && !hit(g.keywords, q)) return null;
@@ -144,6 +145,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           }
           let kids = (g.children ?? []).filter((c) => {
             if (!c.enabled) return false;
+            if (!canReach(c.href)) return false;
             const perm = getRequiredPermission(c.href);
             if (perm && !hasPermission(perm)) return false;
             return true;
@@ -156,7 +158,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         })
         .filter((x): x is { group: NavGroup; children: NavChild[] } => x !== null),
     })).filter((s) => s.groups.length > 0);
-  }, [q, hasPermission]);
+  }, [q, hasPermission, canReach]);
 
   if (loading || !me) {
     return (
@@ -170,7 +172,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const crumbs = breadcrumbsFor(pathname);
   const flyoutGroup = flyout ? NAV_GROUPS.find((g) => g.key === flyout.key) : undefined;
   const flyoutChildren = (flyoutGroup?.children ?? [])
-    .filter((c) => c.enabled)
+    .filter((c) => c.enabled && canReach(c.href))
     .filter((c) => {
       const perm = getRequiredPermission(c.href);
       return !perm || hasPermission(perm);
@@ -201,13 +203,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <IconMenu />
         </button>
 
-        <Link href="/dashboard" className="hdrBrand" title={me.business?.name ?? "NEXORA"}>
+        <Link href={homePath} className="hdrBrand" title={me.business?.name ?? "NEXORA"}>
           <span className="hdrBrandText">
             NEXORA
           </span>
         </Link>
 
-        <FinancialYearMenu />
+        {hasProduct("ERP") && <FinancialYearMenu />}
 
         <div className="hdrCenter">
           <ButtonBase
@@ -223,7 +225,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             }}
           >
             <IconSearch />
-            <span>Search screens, parties, items, document no…</span>
+            <span>{hasProduct("ERP") ? "Search screens, parties, items, document no…" : "Search screens, employees, reports…"}</span>
             <Box
               component="kbd"
               sx={{
@@ -264,7 +266,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             </>
           )}
-          <NotificationsMenu />
+          {hasProduct("ERP") && <NotificationsMenu />}
           <UserMenu variant="topbar" />
         </div>
       </header>
@@ -422,7 +424,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* -------------------------------------------------------------- main */}
       <div className="mainColumn">
         <nav className="crumbBar" aria-label="Breadcrumb">
-          <Link href="/dashboard" className="crumbHome" aria-label="Home">
+          <Link href={homePath} className="crumbHome" aria-label="Home">
             <IconHome />
           </Link>
           {crumbs.map((c, i) => (
@@ -452,17 +454,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 /** "+ New" — every creatable record type, grouped by module. */
 function QuickCreate() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, canReach } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const allModules = useMemo(() => creatableModules(), []);
   const modules = useMemo(
     () =>
       allModules.filter((m) => {
+        if (!canReach(m.href)) return false;
         const perm = getCreatePermission(m.href);
         return !perm || hasPermission(perm);
       }),
-    [allModules, hasPermission]
+    [allModules, hasPermission, canReach]
   );
   const groups = useMemo(() => [...new Set(modules.map((m) => m.group))], [modules]);
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../AuthProvider";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import type { DashboardResult, Kpi } from "@/lib/analytics/types";
@@ -88,7 +89,25 @@ function healthMeters(dash: DashboardResult, ov: OverviewResult): MeterSpec[] {
   ];
 }
 
+/**
+ * /dashboard is the ERP home. Workspaces without ERP (HRMS-only) and
+ * self-service-only employees are sent to their own home screen instead, so
+ * the ERP widgets never fire requests they can't make.
+ */
 export default function DashboardPage() {
+  const { me, homePath } = useAuth();
+  const router = useRouter();
+  const elsewhere = Boolean(me) && homePath !== "/dashboard";
+
+  useEffect(() => {
+    if (elsewhere) router.replace(homePath);
+  }, [elsewhere, homePath, router]);
+
+  if (!me || elsewhere) return null;
+  return <BusinessPulse />;
+}
+
+function BusinessPulse() {
   const { me } = useAuth();
   const [period, setPeriod] = useState<PeriodState>({ period: "month", fromDate: "", toDate: "" });
   const [dash, setDash] = useState<DashboardResult | null>(null);

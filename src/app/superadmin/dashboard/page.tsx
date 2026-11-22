@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { IconBuilding, IconUsers, IconAlertCircle, IconRefresh } from "@/components/icons";
+import { IconBuilding, IconUsers, IconAlertCircle, IconRefresh, IconPlus } from "@/components/icons";
+import SAHeader, { ProductTags } from "../SAHeader";
 
 interface CompanyRow {
   id: string;
@@ -13,6 +14,7 @@ interface CompanyRow {
   email: string;
   status: string;
   userCount: number;
+  products: string[];
   createdAt: string;
 }
 
@@ -21,6 +23,10 @@ interface Summary {
   active: number;
   suspended: number;
   pending: number;
+  erp: number;
+  hrms: number;
+  expired: number;
+  employees: number;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -59,26 +65,13 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function signOut() {
-    await fetch("/api/superadmin/logout", { method: "POST" });
-    router.replace("/superadmin/login");
-  }
 
   const recent = companies?.slice(0, 8) ?? [];
 
   return (
     <div className="saPage">
       {/* Header */}
-      <header className="saHeader">
-        <div className="saHeaderBrand">NEXORA <span className="saHeaderTag">Admin Portal</span></div>
-        <nav className="saHeaderNav">
-          <Link href="/superadmin/dashboard" className="saNavLink saNavLinkActive">Dashboard</Link>
-          <Link href="/superadmin/companies" className="saNavLink">Companies</Link>
-        </nav>
-        <button type="button" className="saBtn saBtnGhost saBtnSm" onClick={signOut}>
-          Sign out
-        </button>
-      </header>
+      <SAHeader />
 
       <main className="saMain">
         <div className="saPageHead">
@@ -86,9 +79,14 @@ export default function SuperAdminDashboard() {
             <h1 className="saPageTitle">Dashboard</h1>
             <p className="saPageSub">Overview of all registered companies on the platform.</p>
           </div>
-          <button type="button" className="saBtn saBtnSecondary saBtnIcon" onClick={load} disabled={loading} aria-label="Refresh">
-            {loading ? <span className="spinner" /> : <IconRefresh />}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="saBtn saBtnSecondary saBtnIcon" onClick={load} disabled={loading} aria-label="Refresh">
+              {loading ? <span className="spinner" /> : <IconRefresh />}
+            </button>
+            <Link href="/superadmin/companies/new" className="saBtn saBtnPrimary">
+              <IconPlus /> New account
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -104,6 +102,10 @@ export default function SuperAdminDashboard() {
             { label: "Active", value: summary?.active ?? "—", icon: <IconBuilding />, accent: "active" },
             { label: "Suspended", value: summary?.suspended ?? "—", icon: <IconBuilding />, accent: "danger" },
             { label: "Pending Verification", value: summary?.pending ?? "—", icon: <IconUsers />, accent: "warn" },
+            { label: "ERP customers", value: summary?.erp ?? "—", icon: <IconBuilding /> },
+            { label: "HRMS customers", value: summary?.hrms ?? "—", icon: <IconUsers /> },
+            { label: "Employees on HRMS", value: summary?.employees ?? "—", icon: <IconUsers /> },
+            { label: "Expired subscriptions", value: summary?.expired ?? "—", icon: <IconAlertCircle />, accent: "danger" },
           ].map((c) => (
             <div key={c.label} className={`saCard ${c.accent ? `saCard--${c.accent}` : ""}`}>
               <div className="saCardIcon">{c.icon}</div>
@@ -125,7 +127,7 @@ export default function SuperAdminDashboard() {
               <thead>
                 <tr>
                   <th>Company</th>
-                  <th>Domain</th>
+                  <th>Products</th>
                   <th>Owner Email</th>
                   <th>Users</th>
                   <th>Registered</th>
@@ -146,7 +148,7 @@ export default function SuperAdminDashboard() {
                       <span className="saCellPrimary">{c.legalName}</span>
                       {c.tradeName !== c.legalName && <span className="saCellSub">{c.tradeName}</span>}
                     </td>
-                    <td className="saCellMono">{c.domain}</td>
+                    <td><ProductTags products={c.products} /></td>
                     <td className="saCellMuted">{c.email}</td>
                     <td className="saCellMuted">{c.userCount}</td>
                     <td className="saCellMuted">

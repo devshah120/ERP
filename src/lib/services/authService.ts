@@ -1,9 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { Business } from "@/models/Business";
-import { Branch } from "@/models/Branch";
-import { Warehouse } from "@/models/Warehouse";
-import { FinancialYear } from "@/models/FinancialYear";
-import { Role, OWNER_ROLE_NAME, OWNER_ALL_PERMISSIONS } from "@/models/Role";
+import { Role } from "@/models/Role";
 import { User, type IUser } from "@/models/User";
 import { OtpVerification } from "@/models/OtpVerification";
 import { Session } from "@/models/Session";
@@ -15,10 +12,10 @@ import { generateOtpCode, hashOtpCode } from "@/lib/auth/otp";
 import { signAccessToken, generateRefreshToken, hashToken } from "@/lib/auth/tokens";
 import { sendOtp } from "@/lib/services/notifications/otpSender";
 import { recordAudit } from "@/lib/services/auditService";
-import { computeCurrentFinancialYear } from "@/lib/services/financialYearService";
 import { resolveGstState } from "@/lib/gst/states";
-import { usernameFromEmail } from "@/lib/auth/username";
+import { seedWorkspace, slugifyDomain, uniqueDomain } from "@/lib/services/provisioningService";
 import type { RegisterInput, LoginInput } from "@/lib/validation/authSchemas";
+import { normalizeProducts } from "@/lib/products";
 
 export interface RegisterResult {
   businessId: string;
@@ -27,33 +24,12 @@ export interface RegisterResult {
   otpExpiresAt: Date;
 }
 
-/** "Rangoli Textiles" → "rangoli-textiles", padded so it always meets the 3-character minimum. */
-function slugifyDomain(s: string): string {
-  const base = s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return base.length >= 3 ? base : `${base || "workspace"}-ws`;
-}
-
-/** First free ID among base, base-2, base-3… then a random suffix as a last resort. */
-async function uniqueDomain(base: string): Promise<string> {
-  for (let i = 1; i <= 50; i++) {
-    const candidate = i === 1 ? base : `${base}-${i}`;
-    if (!(await Business.exists({ domain: candidate }))) return candidate;
-  }
-  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 export async function registerBusiness(input: RegisterInput, ip?: string): Promise<RegisterResult> {
   const env = getEnv();
 
   // The short sign-up form leaves these out; fill them with sensible defaults.
   const tradeName = input.tradeName ?? input.legalName;
   const businessType = input.businessType ?? "Retail";
-  // Sign-in is by email; the internal username is derived from it.
-  const username = usernameFromEmail(input.email);
   const phone = input.phone ?? "";
   const state = input.state ?? resolveGstState({ gstin: input.gstin })?.name ?? "";
 
@@ -79,92 +55,31 @@ export async function registerBusiness(input: RegisterInput, ip?: string): Promi
 
   try {
     await session.withTransaction(async () => {
-      const [business] = await Business.create(
-        [
-          {
-            legalName: input.legalName,
-            tradeName,
-            businessType,
-            domain,
-            email: input.email,
-            phone,
-            country: input.country,
-            state,
-            city: input.city ?? "",
-            address: input.address ?? "",
-            currency: input.currency,
-            timeZone: input.timeZone,
-            gstin: input.gstin,
-            registrationNumber: input.registrationNumber,
-            financialYearStartMonth: input.financialYearStartMonth,
-            status: "PENDING_VERIFICATION",
-          },
-        ],
-        { session }
-      );
-      businessId = business._id;
-
-      const { startDate, endDate, label } = computeCurrentFinancialYear(input.financialYearStartMonth);
-      await FinancialYear.create(
-        [{ businessId, startDate, endDate, label, status: "OPEN", isCurrent: true }],
-        { session }
-      );
-
-      const [branch] = await Branch.create(
-        [{ businessId, code: "MAIN", name: "Head Office", isDefault: true, isActive: true }],
-        { session }
-      );
-
-      const [warehouse] = await Warehouse.create(
-        [
-          {
-            businessId,
-            branchId: branch._id,
-            code: "MAIN",
-            name: "Main Warehouse",
-            isDefault: true,
-            isActive: true,
-          },
-        ],
-        { session }
-      );
-
-      business.defaultBranchId = branch._id;
-      business.defaultWarehouseId = warehouse._id;
-      await business.save({ session });
-
-      const [ownerRole] = await Role.create(
-        [
-          {
-            businessId,
-            name: OWNER_ROLE_NAME,
-            description: "Full access to all modules. Automatically assigned to the business owner.",
-            permissions: [OWNER_ALL_PERMISSIONS],
-            isSystemRole: true,
-            isActive: true,
-          },
-        ],
-        { session }
-      );
-
-      const [user] = await User.create(
-        [
-          {
-            businessId,
-            name: input.ownerName,
-            username,
-            email: input.email,
-            phone,
-            passwordHash,
-            roleId: ownerRole._id,
-            branchIds: [],
-            warehouseIds: [],
-            status: "PENDING_VERIFICATION",
-          },
-        ],
-        { session }
-      );
-      userId = user._id;
+      const seeded = await seedWorkspace(session, {
+        legalName: input.legalName,
+        tradeName,
+        businessType,
+        domain,
+        email: input.email,
+        phone,
+        country: input.country,
+        state,
+        city: input.city ?? "",
+        address: input.address ?? "",
+        currency: input.currency,
+        timeZone: input.timeZone,
+        gstin: input.gstin,
+        registrationNumber: input.registrationNumber,
+        financialYearStartMonth: input.financialYearStartMonth,
+        ownerName: input.ownerName,
+        passwordHash,
+        status: "PENDING_VERIFICATION",
+        // Public sign-up is the ERP product; HRMS is sold through the admin portal.
+        products: ["ERP"],
+        provisionedBy: "SELF",
+      });
+      businessId = seeded.businessId;
+      userId = seeded.userId;
 
       otpCode = generateOtpCode();
       otpExpiresAt = new Date(Date.now() + env.OTP_TTL_SECONDS * 1000);
@@ -348,12 +263,33 @@ export interface LoginResult {
   };
 }
 
+/**
+ * The workspace's products, after checking it may sign in at all: suspended
+ * workspaces and lapsed subscriptions are refused at login and at every token
+ * refresh, so a suspension bites within one access-token lifetime.
+ */
+async function workspaceAccess(businessId: Types.ObjectId): Promise<string[]> {
+  const business = await Business.findById(businessId, { status: 1, products: 1, subscriptionEndsAt: 1 }).lean<{
+    status: string;
+    products?: string[];
+    subscriptionEndsAt?: Date | null;
+  }>();
+  if (!business || business.status !== "ACTIVE") {
+    throw AppError.forbidden("This workspace is not active. Contact your administrator.", "WORKSPACE_INACTIVE");
+  }
+  if (business.subscriptionEndsAt && business.subscriptionEndsAt.getTime() < Date.now()) {
+    throw AppError.forbidden("This workspace's subscription has expired. Contact your provider to renew.", "SUBSCRIPTION_EXPIRED");
+  }
+  return normalizeProducts(business.products);
+}
+
 async function issueSession(
   user: IUser,
   permissions: string[],
   meta: { userAgent?: string; ip?: string }
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const env = getEnv();
+  const products = await workspaceAccess(user.businessId);
 
   const accessToken = signAccessToken({
     sub: user._id.toString(),
@@ -362,6 +298,7 @@ async function issueSession(
     permissions,
     branchIds: user.branchIds.map((id) => id.toString()),
     warehouseIds: user.warehouseIds.map((id) => id.toString()),
+    products,
   });
 
   const refreshToken = generateRefreshToken();

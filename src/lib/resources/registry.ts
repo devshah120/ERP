@@ -15,6 +15,7 @@ import { Branch } from "@/models/Branch";
 import type { ResourceDefinition } from "@/lib/resources/types";
 import { STATUS, permissionsFor, documentConverter } from "@/lib/resources/helpers";
 import { EXTENDED_RESOURCES } from "@/lib/resources/extendedRegistry";
+import { HR_RESOURCES } from "@/lib/resources/hrRegistry";
 
 const addressInput = z.object({
   line1: z.string().trim().min(1).max(200),
@@ -419,6 +420,7 @@ export const RESOURCES: Record<string, ResourceDefinition> = {
   warehouses,
   branches,
   ...EXTENDED_RESOURCES,
+  ...HR_RESOURCES,
 };
 
 export function getResource(key: string): ResourceDefinition | undefined {

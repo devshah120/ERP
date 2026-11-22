@@ -51,6 +51,7 @@ const RECORD_SOURCES: {
   { key: "delivery-challans", label: "Delivery Challan", api: "/api/documents/delivery-challans", base: "/delivery-challans", kind: "document" },
   { key: "purchase-orders", label: "Purchase Order", api: "/api/documents/purchase-orders", base: "/purchase-orders", kind: "document" },
   { key: "purchase-invoices", label: "Purchase Invoice", api: "/api/documents/purchase-invoices", base: "/purchase-invoices", kind: "document" },
+  { key: "hr-employees", label: "Employee", api: "/api/masters/hr-employees", base: "/hr/employees", kind: "party" },
 ];
 
 function str(v: unknown): string {
@@ -76,7 +77,7 @@ function score(item: PaletteItem, q: string): number {
  */
 export default function CommandPalette() {
   const router = useRouter();
-  const { hasPermission } = useAuth();
+  const { hasPermission, canReach } = useAuth();
   const { paletteOpen, closePalette, openHelp } = useShortcuts();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -101,7 +102,7 @@ export default function CommandPalette() {
     };
     const items: PaletteItem[] = [];
     for (const g of NAV_GROUPS) {
-      if (g.href && !g.soon) {
+      if (g.href && !g.soon && canReach(g.href)) {
         const perm = getRequiredPermission(g.href);
         if (perm && !hasPermission(perm)) continue;
         items.push({
@@ -114,7 +115,7 @@ export default function CommandPalette() {
         });
       }
       for (const c of g.children ?? []) {
-        if (!c.enabled) continue;
+        if (!c.enabled || !canReach(c.href)) continue;
         const perm = getRequiredPermission(c.href);
         if (perm && !hasPermission(perm)) continue;
         items.push({
@@ -129,6 +130,7 @@ export default function CommandPalette() {
       }
     }
     for (const m of creatableModules()) {
+      if (!canReach(m.href)) continue;
       const perm = getCreatePermission(m.href);
       if (perm && !hasPermission(perm)) continue;
       items.push({
@@ -154,7 +156,7 @@ export default function CommandPalette() {
       },
     });
     return items;
-  }, [router, closePalette, openHelp, hasPermission]);
+  }, [router, closePalette, openHelp, hasPermission, canReach]);
 
   // Live record search, debounced. Sources the user can't see (403) are skipped.
   useEffect(() => {
@@ -169,14 +171,16 @@ export default function CommandPalette() {
     setSearching(true);
     const t = setTimeout(async () => {
       const params = new URLSearchParams({ query: q, page: "1", pageSize: "4" });
+      // Only search what this workspace has bought; the rest would just 403.
+      const sources = RECORD_SOURCES.filter((s) => canReach(s.base));
       const results = await Promise.allSettled(
-        RECORD_SOURCES.map((s) => apiFetch<ListResult>(`${s.api}?${params.toString()}`))
+        sources.map((s) => apiFetch<ListResult>(`${s.api}?${params.toString()}`))
       );
       if (cancelled) return;
       const found: PaletteItem[] = [];
       results.forEach((r, i) => {
         if (r.status !== "fulfilled") return;
-        const src = RECORD_SOURCES[i];
+        const src = sources[i];
         for (const row of r.value.items ?? []) {
           const id = str(row.id);
           const href = `${src.base}/${id}`;
@@ -196,10 +200,10 @@ export default function CommandPalette() {
               run: open,
             });
           } else {
-            const code = str(row.customerCode ?? row.vendorCode ?? row.itemCode ?? row.code);
+            const code = str(row.customerCode ?? row.vendorCode ?? row.itemCode ?? row.employeeCode ?? row.code);
             found.push({
               id: `rec:${src.key}:${id}`,
-              group: src.kind === "item" ? "Items" : "Parties",
+              group: src.kind === "item" ? "Items" : src.key === "hr-employees" ? "Employees" : "Parties",
               label: str(row.name) || code || id,
               hint: [src.label, code].filter(Boolean).join(" · "),
               icon: src.kind === "item" ? <IconBox /> : <IconUser />,
@@ -216,7 +220,7 @@ export default function CommandPalette() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query, paletteOpen, router, closePalette]);
+  }, [query, paletteOpen, router, closePalette, canReach]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -1,4 +1,4 @@
-import type { Model } from "mongoose";
+import type { Model, Types } from "mongoose";
 import type { ZodType } from "zod";
 
 /**
@@ -44,4 +44,11 @@ export interface ResourceDefinition {
    * a record can never be moved out of its slice through the API.
    */
   baseFilter?: Record<string, string | number | boolean>;
+
+  /**
+   * Business rules checked before rows are created (single create and bulk
+   * import alike), e.g. the employee limit of an HRMS subscription. `count`
+   * is how many rows are about to be added. Throw an AppError to refuse.
+   */
+  beforeCreate?: (businessId: Types.ObjectId, count: number) => Promise<void>;
 }

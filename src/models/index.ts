@@ -39,3 +39,4 @@ export * from "./Expense";
 export * from "./BankClearance";
 export * from "./operations";
 export * from "./StoredFile";
+export * from "./hr";

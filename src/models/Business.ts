@@ -1,5 +1,6 @@
 import { Schema, model, models, Types } from "mongoose";
 import type { BaseAuditFields } from "./shared/types";
+import { PRODUCTS, type Product } from "@/lib/products";
 
 export const BUSINESS_STATUSES = ["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED"] as const;
 export type BusinessStatus = (typeof BUSINESS_STATUSES)[number];
@@ -25,6 +26,16 @@ export interface IBusiness extends BaseAuditFields {
   status: BusinessStatus;
   defaultBranchId?: Types.ObjectId;
   defaultWarehouseId?: Types.ObjectId;
+  /** Products this workspace has bought. Missing/empty on older records = ["ERP"] (see normalizeProducts). */
+  products?: Product[];
+  /** Commercial plan label, e.g. "STARTER". */
+  plan?: string;
+  /** Most active employees the HRMS allows; null = unlimited. */
+  maxEmployees?: number | null;
+  /** Sign-in stops after this date; null = no expiry. */
+  subscriptionEndsAt?: Date | null;
+  /** SELF = signed up on the website, SUPERADMIN = created and sold by the product owner. */
+  provisionedBy?: "SELF" | "SUPERADMIN";
 }
 
 const businessSchema = new Schema<IBusiness>(
@@ -56,6 +67,11 @@ const businessSchema = new Schema<IBusiness>(
     status: { type: String, enum: BUSINESS_STATUSES, required: true, default: "PENDING_VERIFICATION" },
     defaultBranchId: { type: Schema.Types.ObjectId, ref: "Branch" },
     defaultWarehouseId: { type: Schema.Types.ObjectId, ref: "Warehouse" },
+    products: { type: [String], enum: PRODUCTS, default: ["ERP"] },
+    plan: { type: String, trim: true, default: "STARTER" },
+    maxEmployees: { type: Number, min: 0, default: null },
+    subscriptionEndsAt: { type: Date, default: null },
+    provisionedBy: { type: String, enum: ["SELF", "SUPERADMIN"], default: "SELF" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },

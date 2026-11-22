@@ -1,5 +1,6 @@
 import type { Model, Types } from "mongoose";
 import type { ZodType } from "zod";
+import type { AuthContext } from "@/lib/auth/context";
 
 /**
  * Server-side definition of a master-data resource. One of these per entity
@@ -51,4 +52,12 @@ export interface ResourceDefinition {
    * is how many rows are about to be added. Throw an AppError to refuse.
    */
   beforeCreate?: (businessId: Types.ObjectId, count: number) => Promise<void>;
+
+  /**
+   * Runs after a single create or update through the form (not bulk import),
+   * with the saved document and, for an update, the document before it.
+   * Used to keep side records in step, e.g. an employee's history.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  afterWrite?: (ctx: AuthContext, kind: "CREATE" | "UPDATE", doc: any, before?: any) => Promise<void>;
 }

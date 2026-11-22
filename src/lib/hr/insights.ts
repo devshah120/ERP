@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { AppError } from "@/lib/errors/AppError";
+import { applyDueChanges } from "./history";
 import {
   Employee,
   Attendance,
@@ -41,6 +42,8 @@ function upcoming(date: Date | null | undefined, today: Date, days: number): { o
 }
 
 export async function hrDashboard(ctx: AuthContext) {
+  // Bring future-dated promotions and revisions that are now due onto the employee records.
+  await applyDueChanges(ctx.businessId);
   const tz = await businessTimeZone(ctx.businessId);
   const today = todayIn(tz);
   const { start: monthStart, end: monthEnd } = monthRange(today.getUTCFullYear(), today.getUTCMonth() + 1);

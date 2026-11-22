@@ -373,4 +373,64 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(await elOf(emp.asha, 2027)).toMatchObject({ carriedForward: 3, available: 18 });
     expect(await elOf(emp.ravi, 2027)).toMatchObject({ allocated: 10, carriedForward: 3 });
   });
+
+  it("keeps dated job and salary history and pays a mid-month revision day by day", async () => {
+    const { recordChange, deleteChange, employmentHistory, applyDueChanges, recordFormWrite } = await import("@/lib/hr/history");
+    const { createRun, getRun, cancelRun } = await import("@/lib/hr/payroll");
+    const { Employee, EmploymentChange, Designation, Payslip } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+    const basicOf = async (id: Types.ObjectId) => String((await Employee.findById(id).lean<{ basic: unknown }>())!.basic);
+
+    // A raise from Mon 16 November 2026 (already in effect today): the record updates, history starts at joining.
+    const raise = await recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-11-16", reason: "Appraisal", changes: { basic: "18000" } });
+    expect(raise).toMatchObject({ changedFields: ["basic"], scheduled: false });
+    expect(await basicOf(emp.asha)).toBe("18000.00");
+    let history = await employmentHistory(ctx, String(emp.asha));
+    expect(history.items.map((i) => i.changeType)).toEqual(["SALARY_REVISION", "JOINED"]);
+    expect(history.items[0].changes).toEqual([{ field: "basic", label: "Basic", from: "15000.00", to: "18000.00", money: true }]);
+
+    await expect(recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-11-20", reason: "", changes: { basic: "18000" } })).rejects.toMatchObject({ code: "NOTHING_TO_CHANGE" });
+    // October's payroll is approved: no changes inside it.
+    await expect(recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-20", reason: "", changes: { basic: "16000" } })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+
+    // November payroll: 15 days at 15,000 and 15 at 18,000 → basic 16,500 for the month.
+    const nov = await createRun(ctx, { month: 11, year: 2026, notes: "" });
+    const slip = (await getRun(ctx, nov.id)).payslips.find((s) => s.employeeId === String(emp.asha))!;
+    expect(slip.salaryRevisedOn).toEqual(["2026-11-16"]);
+    const stored = await Payslip.findById(slip.id).lean<{ structure: { basic: unknown } }>();
+    expect(String(stored!.structure.basic)).toBe("16500.00");
+    await cancelRun(ctx, nov.id, "Test run");
+
+    // A promotion scheduled for January waits; a December HRA change made afterwards carries into it.
+    const mgr = await Designation.findOne({ businessId, code: "MGR" }).lean<{ _id: Types.ObjectId }>();
+    const promo = await recordChange(ctx, String(emp.asha), { changeType: "PROMOTION", effectiveDate: "2027-01-01", reason: "", changes: { designationId: String(mgr!._id), basic: "22000" } });
+    expect(promo.scheduled).toBe(true);
+    expect(String((await Employee.findById(emp.asha).lean<{ designationId: unknown }>())!.designationId)).not.toBe(String(mgr!._id));
+    const hraChange = await recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-12-01", reason: "", changes: { hra: "6000" } });
+    const promoValues = async () => (await EmploymentChange.findById(promo.id).lean<{ values: { hra: unknown; basic: unknown } }>())!.values;
+    expect(String((await promoValues()).hra)).toBe("6000.00");
+    expect(String((await promoValues()).basic)).toBe("22000.00"); // its own change is kept
+
+    // Removing the December change gives the promotion the earlier HRA back.
+    await deleteChange(ctx, String(emp.asha), hraChange.id);
+    expect(String((await promoValues()).hra)).toBe("5000.00");
+
+    // When the promotion's day comes it is applied to the record.
+    await EmploymentChange.updateOne({ _id: promo.id }, { effectiveDate: new Date("2026-11-21T00:00:00Z") });
+    expect(await applyDueChanges(bId)).toBe(1);
+    const promoted = await Employee.findById(emp.asha).lean<{ designationId: unknown; basic: unknown }>();
+    expect(String(promoted!.designationId)).toBe(String(mgr!._id));
+    expect(String(promoted!.basic)).toBe("22000.00");
+    expect(await applyDueChanges(bId)).toBe(0);
+
+    // An edit on the employee form is logged as a correction instead of overwriting silently.
+    const before = await Employee.findById(emp.ravi);
+    const after = await Employee.findByIdAndUpdate(emp.ravi, { basic: "13000" }, { new: true });
+    await recordFormWrite(ctx, "UPDATE", after, before);
+    history = await employmentHistory(ctx, String(emp.ravi));
+    expect(history.items.map((i) => [i.changeType, i.changes.map((c) => `${c.from}->${c.to}`).join()])).toEqual([
+      ["CORRECTION", "12000.00->13000.00"],
+      ["JOINED", ""],
+    ]);
+  });
 });

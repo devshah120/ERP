@@ -50,6 +50,8 @@ interface Payslip {
   totalDeductions: string;
   netPay: string;
   netPayInWords: string;
+  /** Days in the month a new salary took effect (earnings are day-weighted). */
+  salaryRevisedOn?: string[];
   business: { name: string; tradeName: string; address: string; logoUrl: string | null };
 }
 
@@ -229,6 +231,7 @@ export default function PayslipView({ apiUrl, backHref, backLabel }: { apiUrl: s
           </p>
         )}
         <p className="hrMuted" style={{ marginTop: "1.5rem", marginBottom: 0 }}>
+          {p.salaryRevisedOn && p.salaryRevisedOn.length > 0 && <>Salary revised on {p.salaryRevisedOn.map((x) => fmtDate(x)).join(", ")}; earnings are paid at each rate for the days it applied. </>}
           Attendance: {p.presentDays} present · {p.paidLeaveDays} paid leave · {p.holidays} holidays · {p.weeklyOffs} weekly offs. This is a computer-generated payslip and needs no signature.
         </p>
       </article>

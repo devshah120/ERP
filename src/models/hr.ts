@@ -27,6 +27,11 @@ export const APPRAISAL_STAGES = ["DRAFT", "SELF_REVIEW", "MANAGER_REVIEW", "COMP
 
 const money = { type: Schema.Types.Decimal128, default: "0" };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function defineHrModel(name: string, schema: Schema): Model<any> {
+  return models[name] ?? model(name, schema);
+}
+
 /* ------------------------------------------------------------------ */
 /* Organisation masters                                                */
 /* ------------------------------------------------------------------ */
@@ -182,6 +187,67 @@ export const Employee = defineMasterModel(
     uniqueField: "employeeCode",
     indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }],
   }
+);
+
+/* ------------------------------------------------------------------ */
+/* Employment history                                                  */
+/* ------------------------------------------------------------------ */
+
+export const EMPLOYMENT_CHANGE_TYPES = ["JOINED", "SALARY_REVISION", "PROMOTION", "TRANSFER", "STATUS_CHANGE", "CORRECTION"] as const;
+export type EmploymentChangeType = (typeof EMPLOYMENT_CHANGE_TYPES)[number];
+
+/** Fields whose history is kept: job placement and the salary structure. */
+export const HISTORY_REF_FIELDS = ["departmentId", "designationId", "reportingManagerId", "branchId"] as const;
+export const HISTORY_TEXT_FIELDS = ["workLocation", "employmentType", "employmentStatus"] as const;
+export const HISTORY_MONEY_FIELDS = ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"] as const;
+export const HISTORY_FLAG_FIELDS = ["pfApplicable", "esiApplicable", "ptApplicable"] as const;
+
+/**
+ * One dated change to an employee's job or salary. `values` is the complete
+ * set of tracked fields from `effectiveDate` on, so "what applied on day X"
+ * is the latest change on or before X. The Employee record mirrors the
+ * state as of today; future-dated changes wait (`applied: false`).
+ */
+export const EmploymentChange = defineHrModel(
+  "EmploymentChange",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      effectiveDate: { type: Date, required: true },
+      changeType: { type: String, enum: EMPLOYMENT_CHANGE_TYPES, required: true },
+      values: {
+        departmentId: { type: Schema.Types.ObjectId, ref: "HrDepartment", default: null },
+        designationId: { type: Schema.Types.ObjectId, ref: "Designation", default: null },
+        reportingManagerId: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
+        branchId: { type: Schema.Types.ObjectId, ref: "Branch", default: null },
+        workLocation: { type: String, default: "" },
+        employmentType: { type: String, default: "" },
+        employmentStatus: { type: String, default: "" },
+        basic: money,
+        hra: money,
+        conveyance: money,
+        specialAllowance: money,
+        otherAllowance: money,
+        professionalTax: money,
+        monthlyTds: money,
+        pfApplicable: { type: Boolean, default: true },
+        esiApplicable: { type: Boolean, default: false },
+        ptApplicable: { type: Boolean, default: true },
+      },
+      /** Which tracked fields this change set (the rest carry over). */
+      changedFields: { type: [String], default: [] },
+      reason: { type: String, trim: true, default: "" },
+      /** BASELINE = the record as it stood when history began; FORM = an edit of the employee record. */
+      source: { type: String, enum: ["BASELINE", "HISTORY", "FORM"], default: "HISTORY" },
+      /** Copied onto the Employee record (false while a future-dated change waits). */
+      applied: { type: Boolean, default: false },
+      createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  ).index({ businessId: 1, employeeId: 1, effectiveDate: 1, createdAt: 1 })
+   .index({ businessId: 1, applied: 1, effectiveDate: 1 })
 );
 
 /* ------------------------------------------------------------------ */
@@ -476,6 +542,16 @@ const payslipSchema = new Schema(
     weeklyOffs: { type: Number, default: 0 },
     /** Working days with no attendance recorded; paid as present and included in presentDays. */
     unmarkedDays: { type: Number, default: 0 },
+    /** The monthly salary structure this payslip was calculated from (day-weighted when it changed mid-month). */
+    structure: {
+      basic: money,
+      hra: money,
+      conveyance: money,
+      specialAllowance: money,
+      otherAllowance: money,
+      /** Dates within the month on which a new salary took effect. */
+      revisedOn: { type: [Date], default: [] },
+    },
     earnings: { type: [payLineSchema], default: [] },
     deductions: { type: [payLineSchema], default: [] },
     employerContributions: { type: [payLineSchema], default: [] },

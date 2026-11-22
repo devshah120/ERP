@@ -12461,6 +12461,31 @@ a.hrKpi:hover {
   padding: 0;
 }
 
+/* Employment history: dated entries on a vertical rule. */
+.hrTimeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  border-left: 2px solid var(--border-subtle);
+}
+
+.hrTimeline > li {
+  position: relative;
+  padding: 0.25rem 0 0.9rem 0.5rem;
+}
+
+.hrTimeline > li::before {
+  content: "";
+  position: absolute;
+  left: calc(-1rem - 6px);
+  top: 0.55rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+
 .hrList li {
   display: flex;
   align-items: center;

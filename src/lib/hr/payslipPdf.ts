@@ -44,6 +44,7 @@ export interface PayslipPrintData {
   totalDeductions: string;
   netPay: string;
   netPayInWords: string;
+  salaryRevisedOn?: string[];
   business: { name: string; tradeName: string; address: string };
 }
 
@@ -209,6 +210,9 @@ function drawPayslip(page: PDFPage, p: PayslipPrintData, f: Fonts) {
   const notes: string[] = [];
   if (p.employerContributions.length > 0) {
     notes.push(`Employer contributions (not deducted from pay): ${p.employerContributions.map((l) => `${l.label} Rs. ${inr(l.amount)}`).join(", ")}`);
+  }
+  if (p.salaryRevisedOn && p.salaryRevisedOn.length > 0) {
+    notes.push(`Salary revised on ${p.salaryRevisedOn.map((x) => fmtDay(x)).join(", ")}; earnings are paid at each rate for the days it applied.`);
   }
   notes.push(`Attendance: ${p.presentDays} present, ${p.paidLeaveDays} paid leave, ${p.holidays} holidays, ${p.weeklyOffs} weekly offs.`);
   notes.push("This is a computer-generated payslip and needs no signature.");

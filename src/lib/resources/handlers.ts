@@ -160,6 +160,7 @@ export function createHandler(def: ResourceDefinition) {
     const doc = await repo.create(ctx.businessId, payload);
 
     await auditWrite(ctx, def, "CREATE", doc._id, undefined, payload);
+    if (def.afterWrite) await def.afterWrite(ctx, "CREATE", doc);
 
     return created(serializeDoc(doc), `${def.label} created successfully`);
   };
@@ -185,6 +186,7 @@ export function updateHandler(def: ResourceDefinition) {
     if (!doc) throw AppError.notFound(`${def.label} not found`);
 
     await auditWrite(ctx, def, "UPDATE", doc._id, serializeDoc(before), update);
+    if (def.afterWrite) await def.afterWrite(ctx, "UPDATE", doc, before);
 
     return ok(serializeDoc(doc), `${def.label} updated successfully`);
   };

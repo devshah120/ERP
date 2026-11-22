@@ -12,6 +12,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring } from "./calendar";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
+import { applyDueChanges, salaryForMonth } from "./history";
 import type { PayslipPrintData } from "./payslipPdf";
 import { nextHrNumber, employeeLabels, selfEmployee, monthQuery, type AnyDoc } from "./common";
 
@@ -80,7 +81,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
   if (emps.length === 0) throw AppError.badRequest(`No employees were on the rolls in ${monthLabel(run.month, run.year)}.`, "NO_EMPLOYEES");
   const ids = emps.map((e) => e._id);
 
-  const [cal, attendanceBy, loans, claims, labels] = await Promise.all([
+  const [cal, attendanceBy, loans, claims, labels, salaries] = await Promise.all([
     loadCalendar(ctx.businessId, start, end),
     monthAttendance(ctx.businessId, ids, start, end, session),
     EmployeeLoan.find({
@@ -94,6 +95,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       .lean<AnyDoc[]>(),
     ExpenseClaim.find({ businessId: ctx.businessId, employeeId: { $in: ids }, status: "APPROVED", payrollRunId: null, claimDate: { $lte: end } }).session(session).lean<AnyDoc[]>(),
     employeeLabels(ctx.businessId, ids),
+    salaryForMonth(ctx.businessId, emps, start, end, session),
   ]);
 
   let totalGross = new Decimal(0);
@@ -108,18 +110,20 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
     const { summary } = summarizeMonth(e, cal, days, attendanceBy.get(key) ?? new Map());
     const myLoans = loans.filter((l) => String(l.employeeId) === key);
     const myClaims = claims.filter((c) => String(c.employeeId) === key);
+    // The salary in effect during the month (day-weighted if it was revised mid-month).
+    const salary = salaries.get(key)!;
     const result = computePayslip({
       structure: {
-        basic: d(e.basic),
-        hra: d(e.hra),
-        conveyance: d(e.conveyance),
-        specialAllowance: d(e.specialAllowance),
-        otherAllowance: d(e.otherAllowance),
-        pfApplicable: e.pfApplicable !== false,
-        esiApplicable: Boolean(e.esiApplicable),
-        ptApplicable: e.ptApplicable !== false,
-        professionalTax: d(e.professionalTax),
-        monthlyTds: d(e.monthlyTds),
+        basic: salary.basic,
+        hra: salary.hra,
+        conveyance: salary.conveyance,
+        specialAllowance: salary.specialAllowance,
+        otherAllowance: salary.otherAllowance,
+        pfApplicable: salary.pfApplicable,
+        esiApplicable: salary.esiApplicable,
+        ptApplicable: salary.ptApplicable,
+        professionalTax: salary.professionalTax,
+        monthlyTds: salary.monthlyTds,
       },
       daysInMonth,
       lopDays: summary.lopDays,
@@ -164,6 +168,14 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       holidays: summary.holidays,
       weeklyOffs: summary.weeklyOffs,
       unmarkedDays: summary.unmarked,
+      structure: {
+        basic: dec128(salary.basic),
+        hra: dec128(salary.hra),
+        conveyance: dec128(salary.conveyance),
+        specialAllowance: dec128(salary.specialAllowance),
+        otherAllowance: dec128(salary.otherAllowance),
+        revisedOn: salary.revisedOn,
+      },
       earnings: result.earnings.map(line),
       deductions: result.deductions.map(line),
       employerContributions: result.employerContributions.map(line),
@@ -202,6 +214,7 @@ export async function createRun(ctx: AuthContext, input: z.infer<typeof createRu
   if (live) throw AppError.conflict(`Payroll for ${monthLabel(input.month, input.year)} already exists (${live.runNumber}).`, "PAYROLL_EXISTS");
 
   const { start, end } = monthRange(input.year, input.month);
+  await applyDueChanges(ctx.businessId);
   const session = await mongoose.startSession();
   const out: { id?: string; runNumber?: string; count?: number } = {};
   try {
@@ -226,6 +239,7 @@ export async function createRun(ctx: AuthContext, input: z.infer<typeof createRu
 export async function recomputeRun(ctx: AuthContext, id: string) {
   const run = await loadRun(ctx, id);
   if (run.status !== "DRAFT") throw AppError.badRequest("Only a draft payroll can be recalculated", "PAYROLL_NOT_DRAFT");
+  await applyDueChanges(ctx.businessId);
   const session = await mongoose.startSession();
   let count = 0;
   try {
@@ -453,6 +467,7 @@ function slipRow(s: AnyDoc) {
     holidays: s.holidays,
     weeklyOffs: s.weeklyOffs,
     unmarkedDays: s.unmarkedDays ?? 0,
+    salaryRevisedOn: (s.structure?.revisedOn ?? []).map((x: Date) => dayKey(toDay(x))),
     earnings: lines(s.earnings),
     deductions: lines(s.deductions),
     employerContributions: lines(s.employerContributions),

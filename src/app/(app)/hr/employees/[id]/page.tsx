@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ErrorState, SkeletonBlock, EmptyState } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { Card, fmtDate } from "@/components/hr/HrKit";
+import EmploymentHistory from "@/components/hr/EmploymentHistory";
 import { formatMoney } from "@/lib/format/number";
 import { EMPLOYMENT_STATUS_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/lib/resources/ui/hrRegistry";
 import { IconArrowLeft, IconEdit, IconKey, IconPlus } from "@/components/icons";
@@ -80,7 +81,7 @@ interface Profile {
   portal: { email: string; status: string; lastLoginAt?: string } | null;
 }
 
-type Tab = "overview" | "job" | "salary" | "leave" | "payslips";
+type Tab = "overview" | "job" | "salary" | "history" | "leave" | "payslips";
 
 function Dl({ items }: { items: [string, React.ReactNode][] }) {
   return (
@@ -251,6 +252,7 @@ export default function EmployeeProfilePage() {
             ["overview", "Personal"],
             ["job", "Job"],
             ["salary", "Salary & bank"],
+            ["history", "History"],
             ["leave", "Leave"],
             ["payslips", "Payslips"],
           ] as [Tab, string][]
@@ -428,6 +430,8 @@ export default function EmployeeProfilePage() {
           </Card>
         </div>
       )}
+
+      {tab === "history" && <EmploymentHistory employeeId={id} canEdit={hasPermission("hr-employees.edit")} onChanged={load} />}
 
       {tab === "payslips" && (
         <Card title="Payslips">

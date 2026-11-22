@@ -3,6 +3,7 @@ import type { Types } from "mongoose";
 import { moneyStringSchema } from "@/lib/validation/money";
 import { AppError } from "@/lib/errors/AppError";
 import { Business } from "@/models/Business";
+import { recordFormWrite } from "@/lib/hr/history";
 import {
   HrDepartment,
   Designation,
@@ -287,6 +288,8 @@ const employees = define("hr-employees", "Employee", {
   defaultSort: "employeeCode",
   defaultSortDir: "asc",
   beforeCreate: assertEmployeeSeats,
+  // Salary and job edits made on the form are logged in the employee's history.
+  afterWrite: recordFormWrite,
   toDocument: documentConverter({
     money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"],
     refs: ["departmentId", "designationId", "reportingManagerId", "shiftId", "branchId"],

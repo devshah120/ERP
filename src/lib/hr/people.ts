@@ -14,6 +14,7 @@ import { serializeDoc } from "@/lib/resources/serialize";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, todayIn } from "./calendar";
 import { balancesFor } from "./leave";
+import { applyDueChanges } from "./history";
 import { employeePayslips } from "./payroll";
 import { selfServiceRole } from "./setup";
 import { findEmployee, employeeLabels, selfEmployee, businessTimeZone, escapeRegex, pageQuery, type AnyDoc } from "./common";
@@ -73,6 +74,7 @@ function monthlyGross(e: AnyDoc) {
 
 /** Everything HR wants on one screen about a person. */
 export async function employeeProfile(ctx: AuthContext, id: string) {
+  await applyDueChanges(ctx.businessId);
   const emp = await findEmployee(ctx.businessId, id);
   const year = new Date().getUTCFullYear();
   const [labels, manager, shift, balances, leaves, loans, assets, payslips, reports, portalUser] = await Promise.all([

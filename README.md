@@ -1,6 +1,6 @@
 # NEXORA
 
-A multi-tenant, production-grade ERP for garment manufacturers and traders. Next.js (App Router) + Node + MongoDB, TypeScript throughout.
+A multi-tenant, production-grade ERP and HRMS for growing businesses: sales, stock, accounts, people and payroll in one workspace (sold as ERP, HRMS or both). Next.js (App Router) + Node + MongoDB, TypeScript throughout.
 
 ## Stack
 

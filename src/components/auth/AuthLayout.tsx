@@ -54,9 +54,9 @@ export default function AuthLayout({
   );
 }
 
-const DEFAULT_HEADLINE = ["Every order,", "piece & rupee", "accounted for."];
+const DEFAULT_HEADLINE = ["Every order,", "employee & rupee", "accounted for."];
 const DEFAULT_LEAD =
-  "Quotations, stock, POS and GST in one connected system — built for garment manufacturers and traders.";
+  "Sales, stock, accounts, people and payroll in one connected workspace — ERP and HRMS for growing businesses.";
 
 /** Colours for each texture: background gradient stops, glow and vein tints (RGB 0–1). */
 const TONES = {

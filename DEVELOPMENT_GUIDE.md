@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary & Tech Stack
 
-**NEXORA** is a multi-tenant, production-grade Enterprise Resource Planning (ERP) platform purpose-built for garment manufacturers, wholesalers, and retail traders. It is designed around strict financial accounting principles, Indian GST compliance, multi-document ACID transactions, and extensible generic frameworks.
+**NEXORA** is a multi-tenant, production-grade platform with two products, sold separately or together: an Enterprise Resource Planning (ERP) system for manufacturers, wholesalers and retail traders (with deep support for garments), and an HRMS for people, attendance, leave and payroll. It is designed around strict financial accounting principles, Indian GST compliance, multi-document ACID transactions, and extensible generic frameworks.
 
 ### Technology Stack
 - **Framework & Runtime**: Next.js 16 (App Router, Route Handlers, Server & Client Components), React 19, TypeScript 5.

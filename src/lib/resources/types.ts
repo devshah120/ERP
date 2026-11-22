@@ -59,5 +59,15 @@ export interface ResourceDefinition {
    * Used to keep side records in step, e.g. an employee's history.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  afterWrite?: (ctx: AuthContext, kind: "CREATE" | "UPDATE", doc: any, before?: any) => Promise<void>;
+  afterWrite?: (ctx: AuthContext, kind: "CREATE" | "UPDATE", doc: any, before?: any, side?: Record<string, unknown>) => Promise<void>;
+
+  /**
+   * Inputs validated by the schema but not stored on the record nor written to
+   * the audit log (e.g. a temporary password); handed to `validateCreate` and
+   * `afterWrite` instead.
+   */
+  sideFields?: string[];
+
+  /** Checks run before a single create through the form, with the side fields. Throw an AppError to refuse. */
+  validateCreate?: (ctx: AuthContext, side: Record<string, unknown>) => Promise<void>;
 }

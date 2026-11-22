@@ -139,8 +139,10 @@ export function createHandler(def: ResourceDefinition) {
 
     const body = await req.json();
     const input = def.createSchema.parse(body) as Record<string, unknown>;
+    const side = takeSideFields(def, input);
     const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
     if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
+    if (def.validateCreate) await def.validateCreate(ctx, side);
 
     if (def.autoCode) {
       const existing = payload[def.autoCode.field];
@@ -160,7 +162,7 @@ export function createHandler(def: ResourceDefinition) {
     const doc = await repo.create(ctx.businessId, payload);
 
     await auditWrite(ctx, def, "CREATE", doc._id, undefined, payload);
-    if (def.afterWrite) await def.afterWrite(ctx, "CREATE", doc);
+    if (def.afterWrite) await def.afterWrite(ctx, "CREATE", doc, undefined, side);
 
     return created(serializeDoc(doc), `${def.label} created successfully`);
   };
@@ -175,6 +177,7 @@ export function updateHandler(def: ResourceDefinition) {
 
     const body = await req.json();
     const input = def.updateSchema.parse(body) as Record<string, unknown>;
+    takeSideFields(def, input); // create-only inputs are never stored or logged on an edit
     const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
     update.updatedBy = ctx.userId;
 
@@ -220,6 +223,18 @@ export function deleteHandler(def: ResourceDefinition) {
 
     return ok(null, `${def.label} deleted successfully`);
   };
+}
+
+/** Removes the definition's side fields from the parsed input and returns them. */
+function takeSideFields(def: ResourceDefinition, input: Record<string, unknown>): Record<string, unknown> {
+  const side: Record<string, unknown> = {};
+  for (const f of def.sideFields ?? []) {
+    if (f in input) {
+      side[f] = input[f];
+      delete input[f];
+    }
+  }
+  return side;
 }
 
 async function auditWrite(

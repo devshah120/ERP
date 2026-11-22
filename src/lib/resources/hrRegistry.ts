@@ -4,6 +4,7 @@ import { moneyStringSchema } from "@/lib/validation/money";
 import { AppError } from "@/lib/errors/AppError";
 import { Business } from "@/models/Business";
 import { recordFormWrite } from "@/lib/hr/history";
+import { loginRequestFrom, checkLoginRequest, attachLogin } from "@/lib/hr/employeeLogin";
 import {
   HrDepartment,
   Designation,
@@ -223,6 +224,10 @@ const employees = define("hr-employees", "Employee", {
   model: Employee,
   autoCode: { field: "employeeCode", prefix: "EMP", entityType: "HR_EMPLOYEE" },
   fields: {
+    // Sign-in (create only; see sideFields)
+    loginEmail: optionalEmail,
+    loginRoleId: z.string().trim().max(40).optional().or(z.literal("")),
+    loginPassword: z.string().max(100).optional().or(z.literal("")),
     employeeCode: optionalCode,
     name: z.string().trim().min(2).max(150),
     gender: z.enum([...GENDERS_HR, ""]).default(""),
@@ -290,8 +295,18 @@ const employees = define("hr-employees", "Employee", {
   defaultSort: "employeeCode",
   defaultSortDir: "asc",
   beforeCreate: assertEmployeeSeats,
+  // Optional sign-in created with the employee (New employee form only); never stored on the record or logged.
+  sideFields: ["loginEmail", "loginRoleId", "loginPassword"],
+  validateCreate: async (ctx, side) => {
+    const login = loginRequestFrom(side);
+    if (login) await checkLoginRequest(ctx, login);
+  },
   // Salary and job edits made on the form are logged in the employee's history.
-  afterWrite: recordFormWrite,
+  afterWrite: async (ctx, kind, doc, before, side) => {
+    await recordFormWrite(ctx, kind, doc, before);
+    const login = kind === "CREATE" ? loginRequestFrom(side) : null;
+    if (login) await attachLogin(ctx, doc, login);
+  },
   toDocument: documentConverter({
     money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"],
     refs: ["departmentId", "designationId", "reportingManagerId", "shiftId", "branchId"],

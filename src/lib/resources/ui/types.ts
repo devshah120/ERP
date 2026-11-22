@@ -42,8 +42,14 @@ export interface FieldConfig {
   hint?: string;
   placeholder?: string;
   options?: { value: string; label: string }[];
-  /** For type "reference": which master to load options from. */
-  reference?: { resource: string; labelField: string };
+  /**
+   * For type "reference": which master to load options from. `url` loads from
+   * another endpoint returning `{ items }` instead of the master; `defaultLabel`
+   * preselects the option with that label on a new record.
+   */
+  reference?: { resource: string; labelField: string; url?: string; defaultLabel?: string };
+  /** For text fields: fill with a generated value on a new record and offer a "New" button. */
+  generate?: "password";
   fullWidth?: boolean;
   defaultValue?: unknown;
   /** For type "lines": the sub-row columns. */
@@ -67,6 +73,12 @@ export interface FieldConfig {
 export interface SectionConfig {
   label: string;
   fields: FieldConfig[];
+  /** One-line purpose under the heading. */
+  description?: string;
+  /** Only on the "new" form, not when editing. */
+  createOnly?: boolean;
+  /** Shown (and submitted) only when the signed-in user holds all of these permissions. */
+  permissions?: string[];
 }
 
 export interface ColumnConfig {

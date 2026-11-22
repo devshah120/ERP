@@ -658,4 +658,53 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     const report = await gratuityReport(ctx, "2027-04-15");
     expect(report.rows.every((r) => !r.eligible)).toBe(true);
   });
+
+  it("creates an employee's sign-in with a chosen role from the New employee form", async () => {
+    const { NextRequest } = await import("next/server");
+    const { createHandler } = await import("@/lib/resources/handlers");
+    const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
+    const { signAccessToken } = await import("@/lib/auth/tokens");
+    const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
+    const { Employee } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const { Role } = await import("@/models/Role");
+    const { AuditLog } = await import("@/models/AuditLog");
+    const { Business } = await import("@/models/Business");
+    await Business.updateOne({ _id: businessId }, { maxEmployees: 50 });
+
+    const hrManager = await Role.findOne({ businessId, name: "HR Manager" }).lean<{ _id: Types.ObjectId }>();
+    const tokenFor = (permissions: string[]) =>
+      signAccessToken({ sub: String(ctx.userId), businessId, roleId: String(ctx.roleId), permissions, branchIds: [], warehouseIds: [], products: ["HRMS"] });
+    const create = (body: Record<string, unknown>, permissions = ["*"]) =>
+      createHandler(HR_RESOURCES["hr-employees"])(
+        new NextRequest("http://localhost/api/masters/hr-employees", {
+          method: "POST",
+          body: JSON.stringify(body),
+          headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${tokenFor(permissions)}` },
+        })
+      );
+    const base = { name: "Kiran Mehta", employeeCode: "EMP-000101", dateOfJoining: "2027-01-10", basic: "10000" };
+    const count = () => Employee.countDocuments({ businessId, name: "Kiran Mehta" });
+
+    // A weak password or a missing permission refuses before anything is saved.
+    await expect(create({ ...base, loginEmail: "kiran@peoplefirst.test", loginRoleId: String(hrManager!._id), loginPassword: "short" })).rejects.toMatchObject({ code: "WEAK_PASSWORD" });
+    await expect(create({ ...base, loginEmail: "kiran@peoplefirst.test", loginPassword: "Temp!Pass9x" }, ["hr-employees.create"])).rejects.toMatchObject({ statusCode: 403 });
+    expect(await count()).toBe(0);
+
+    const res = await create({ ...base, loginEmail: "Kiran@PeopleFirst.test", loginRoleId: String(hrManager!._id), loginPassword: "Temp!Pass9x" });
+    expect(res.status).toBe(201);
+    const kiran = await Employee.findOne({ businessId, name: "Kiran Mehta" }).lean<{ _id: Types.ObjectId; userId: Types.ObjectId; workEmail: string }>();
+    const user = await User.findById(kiran!.userId).lean<{ email: string; roleId: Types.ObjectId; mustChangePassword: boolean }>();
+    expect(user).toMatchObject({ email: "kiran@peoplefirst.test", mustChangePassword: true });
+    expect(String(user!.roleId)).toBe(String(hrManager!._id));
+    expect(kiran!.workEmail).toBe("kiran@peoplefirst.test");
+    // The temporary password is never stored on the employee or written to the audit log.
+    expect(JSON.stringify(await Employee.findById(kiran!._id).lean())).not.toContain("Temp!Pass9x");
+    expect(JSON.stringify(await AuditLog.find({ businessId }).lean())).not.toContain("Temp!Pass9x");
+
+    // The same email can't sign in as a second employee; no email means no sign-in.
+    await expect(create({ ...base, name: "Kiran Two", employeeCode: "EMP-000102", loginEmail: "kiran@peoplefirst.test" })).rejects.toMatchObject({ code: "LOGIN_ALREADY_LINKED" });
+    await create({ ...base, name: "Meera Iyer", employeeCode: "EMP-000103" });
+    expect((await Employee.findOne({ businessId, name: "Meera Iyer" }).lean<{ userId: unknown }>())!.userId).toBeNull();
+  });
 });

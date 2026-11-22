@@ -17,6 +17,7 @@ import { balancesFor } from "./leave";
 import { applyDueChanges } from "./history";
 import { employeePayslips } from "./payroll";
 import { selfServiceRole } from "./setup";
+import { attachLogin } from "./employeeLogin";
 import { findEmployee, employeeLabels, selfEmployee, businessTimeZone, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
 const d = (v: unknown) => new Decimal(v ? String(v) : "0");
@@ -114,6 +115,8 @@ export async function employeeProfile(ctx: AuthContext, id: string) {
 /* ------------------------------------------------------------------ */
 
 export const portalAccessSchema = z.object({
+  /** Role for a new sign-in; default "Employee (Self Service)". */
+  roleId: z.string().trim().max(40).optional(),
   email: z.string().trim().toLowerCase().email("Enter the email they will sign in with"),
   password: z
     .string()
@@ -131,6 +134,7 @@ export const portalAccessSchema = z.object({
 export async function grantPortalAccess(ctx: AuthContext, employeeId: string, input: z.infer<typeof portalAccessSchema>) {
   const emp = await findEmployee(ctx.businessId, employeeId);
   if (emp.userId) throw AppError.conflict("This employee already has portal access", "PORTAL_EXISTS");
+  if (input.roleId) return attachLogin(ctx, emp, { email: input.email, roleId: input.roleId, password: input.password });
 
   let user = await User.findOne({ businessId: ctx.businessId, email: input.email });
   let created = false;

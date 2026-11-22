@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
@@ -16,10 +16,24 @@ import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { MODULE_DESCRIPTIONS } from "@/lib/ui/moduleDescriptions";
-import { IconAlertCircle, IconArrowLeft, IconTrash } from "@/components/icons";
+import { IconArrowLeft, IconTrash } from "@/components/icons";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
+import { useAuth } from "@/app/(app)/AuthProvider";
 
 type FormState = Record<string, unknown>;
+
+/** A strong temporary password: upper, lower, digit and symbol, 12 characters, no look-alikes. */
+function generatePassword(): string {
+  const sets = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnpqrstuvwxyz", "23456789", "@#$%&*!?"];
+  const all = sets.join("");
+  const pick = (s: string) => s[crypto.getRandomValues(new Uint32Array(1))[0] % s.length];
+  const chars = [...sets.map(pick), ...Array.from({ length: 8 }, () => pick(all))];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
 
 function buildInitialState(config: ResourceUi): FormState {
   let state: FormState = {};
@@ -124,6 +138,12 @@ export default function ResourceFormView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEdit = Boolean(recordId);
+  const { hasPermission } = useAuth();
+  /** The sections this form shows: create-only sections are left out of an edit, permission-gated ones without the permission. */
+  const view = useMemo<ResourceUi>(
+    () => ({ ...config, sections: config.sections.filter((s) => (!s.createOnly || !isEdit) && (s.permissions ?? []).every((p) => hasPermission(p))) }),
+    [config, isEdit, hasPermission]
+  );
   /** Copy: prefill a new record from an existing one of the same type. */
   const copyFromId = searchParams.get("copyFrom");
 
@@ -211,6 +231,14 @@ export default function ResourceFormView({
     };
   }, [config, isEdit, copyFromId]);
 
+  useEffect(() => {
+    if (isEdit) return;
+    const generated = config.sections.flatMap((s) => s.fields).filter((f) => f.generate === "password");
+    if (generated.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-off client-only fill (random values can't be rendered on the server)
+    setState((s) => generated.reduce((next, f) => (getPath(next, f.name) ? next : setPath(next, f.name, generatePassword())), s));
+  }, [config, isEdit]);
+
   useUnsavedChangesWarning(dirty && !submitting);
 
   useShortcutScope({
@@ -223,8 +251,8 @@ export default function ResourceFormView({
   useEffect(() => {
     // Top-level reference fields, plus reference columns inside "lines" fields
     // (keyed "<field>.<column>").
-    const refs: { key: string; reference: { resource: string; labelField: string } }[] = [];
-    for (const field of config.sections.flatMap((s) => s.fields)) {
+    const refs: { key: string; reference: { resource: string; labelField: string; url?: string; defaultLabel?: string } }[] = [];
+    for (const field of view.sections.flatMap((s) => s.fields)) {
       if (field.type === "reference" && field.reference) refs.push({ key: field.name, reference: field.reference });
       for (const col of field.columns ?? []) {
         if (col.type === "reference" && col.reference) refs.push({ key: `${field.name}.${col.name}`, reference: col.reference });
@@ -237,13 +265,15 @@ export default function ResourceFormView({
 
     Promise.all(
       refs.map(async ({ key, reference }) => {
-        if (!cache.has(reference.resource)) {
-          cache.set(reference.resource, apiFetch(`/api/masters/${reference.resource}?pageSize=200&status=ACTIVE`));
+        const url = reference.url ?? `/api/masters/${reference.resource}?pageSize=200&status=ACTIVE`;
+        if (!cache.has(url)) {
+          // A custom list (e.g. roles) that can't be read leaves just that picker empty rather than failing the form.
+          cache.set(url, reference.url ? apiFetch<{ items: Record<string, unknown>[] }>(url).catch(() => ({ items: [] })) : apiFetch(url));
         }
-        const res = await cache.get(reference.resource)!;
+        const res = await cache.get(url)!;
         return [
           key,
-          res.items.map((item): ReferenceOption => {
+          res.items.filter((item) => item.isActive !== false).map((item): ReferenceOption => {
             const variants = Array.isArray(item.variants)
               ? (item.variants as { sku: string; color?: string; size?: string; isActive?: boolean }[])
                   .filter((v) => v.isActive !== false)
@@ -260,7 +290,19 @@ export default function ResourceFormView({
       })
     )
       .then((entries) => {
-        if (!cancelled) setReferenceOptions(Object.fromEntries(entries));
+        if (cancelled) return;
+        setReferenceOptions(Object.fromEntries(entries));
+        if (isEdit) return;
+        // Preselect a default by label on a new record (e.g. the "Employee (Self Service)" role).
+        setState((s) => {
+          let next = s;
+          for (const { key, reference } of refs) {
+            if (!reference.defaultLabel || getPath(next, key)) continue;
+            const match = (entries.find(([k]) => k === key)?.[1] ?? []).find((o) => o.label === reference.defaultLabel);
+            if (match) next = setPath(next, key, match.value);
+          }
+          return next;
+        });
       })
       .catch((err) => {
         // Surfaced rather than swallowed — an empty picker with no message
@@ -275,7 +317,7 @@ export default function ResourceFormView({
     return () => {
       cancelled = true;
     };
-  }, [config]);
+  }, [view, isEdit]);
 
   async function handleSubmit(e?: FormEvent) {
     e?.preventDefault();
@@ -284,7 +326,7 @@ export default function ResourceFormView({
     setSubmitting(true);
 
     try {
-      const payload = buildPayload(config, state);
+      const payload = buildPayload(view, state);
 
       if (isEdit) {
         await apiFetch(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -484,6 +526,24 @@ export default function ResourceFormView({
             />
           );
         default:
+          if (field.generate === "password") {
+            return (
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  id={`f-${field.name}`}
+                  aria-invalid={error ? true : undefined}
+                  className="input cellMono"
+                  value={String(value ?? "")}
+                  onChange={(e) => updateField(field.name, e.target.value)}
+                  autoComplete="new-password"
+                  spellCheck={false}
+                />
+                <button type="button" className="button buttonSecondary buttonSm" onClick={() => updateField(field.name, generatePassword())}>
+                  New
+                </button>
+              </div>
+            );
+          }
           return (
             <input
               id={`f-${field.name}`}
@@ -584,10 +644,10 @@ export default function ResourceFormView({
       />
 
       <form onSubmit={handleSubmit} noValidate={false}>
-        <div className={config.sections.length > 2 ? "formLayout" : undefined}>
-          {config.sections.length > 2 && (
+        <div className={view.sections.length > 2 ? "formLayout" : undefined}>
+          {view.sections.length > 2 && (
             <nav className="formNav" aria-label="Form sections">
-              {config.sections.map((s) => (
+              {view.sections.map((s) => (
                 <a key={s.label} href={`#${sectionId(s.label)}`}>
                   {s.label}
                 </a>
@@ -602,11 +662,11 @@ export default function ResourceFormView({
               </Alert>
             )}
 
-            {config.sections.map((section) => (
+            {view.sections.map((section) => (
               <section key={section.label} id={sectionId(section.label)} className="formSection">
                 <div className="formSectionHead">
                   <h2 className="formSectionTitle">{section.label}</h2>
-                  {SECTION_HINTS[section.label] && <p className="formSectionDesc">{SECTION_HINTS[section.label]}</p>}
+                  {(section.description ?? SECTION_HINTS[section.label]) && <p className="formSectionDesc">{section.description ?? SECTION_HINTS[section.label]}</p>}
                 </div>
                 <div className="formSectionBody">
                   <div className="formGrid">{section.fields.map(renderField)}</div>

@@ -305,6 +305,17 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
         { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
       ],
     },
+    {
+      label: "Sign-in",
+      description: "Optional. Give them a login now with a role; they sign in with the temporary password and must change it. Leave the email blank to skip — you can add it later from the profile.",
+      createOnly: true,
+      permissions: ["users.create", "roles.view"],
+      fields: [
+        { name: "loginEmail", label: "Email", type: "email", hint: "used to sign in", placeholder: "asha@company.com" },
+        { name: "loginRoleId", label: "Role", type: "reference", reference: { resource: "roles", labelField: "name", url: "/api/admin/roles", defaultLabel: "Employee (Self Service)" } },
+        { name: "loginPassword", label: "Temporary password", type: "text", generate: "password" },
+      ],
+    },
   ],
 });
 

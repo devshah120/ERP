@@ -171,3 +171,19 @@ describe("attendance rules", () => {
     expect(dayKey(days[29])).toBe("2026-11-30");
   });
 });
+
+describe("leave pro-rata", () => {
+  it("grants the months left in the joining year, rounded to half days", async () => {
+    const { proratedQuota } = await import("@/lib/hr/leave");
+    expect(proratedQuota(12, 2026, new Date("2025-06-10"))).toBe(12); // joined earlier: full quota
+    expect(proratedQuota(12, 2026, new Date("2026-01-01"))).toBe(12);
+    expect(proratedQuota(12, 2026, new Date("2026-09-01"))).toBe(4); // Sep–Dec
+    expect(proratedQuota(12, 2026, new Date("2026-09-15"))).toBe(4); // on the 15th the month still counts
+    expect(proratedQuota(12, 2026, new Date("2026-09-16"))).toBe(3); // after the 15th it does not
+    expect(proratedQuota(15, 2026, new Date("2026-04-20"))).toBe(10); // 8 months of 15 = 10
+    expect(proratedQuota(7, 2026, new Date("2026-08-01"))).toBe(3); // 5 months of 7 = 2.92 → 3
+    expect(proratedQuota(12, 2026, new Date("2026-12-20"))).toBe(0);
+    expect(proratedQuota(12, 2026, new Date("2027-02-01"))).toBe(0); // not yet joined
+    expect(proratedQuota(12, 2026, null)).toBe(12);
+  });
+});

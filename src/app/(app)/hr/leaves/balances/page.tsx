@@ -18,6 +18,15 @@ interface Table {
   rows: { employeeId: string; employeeCode: string; name: string; balances: LeaveBalance[] }[];
 }
 
+interface CarryPreview {
+  fromYear: number;
+  toYear: number;
+  committed: boolean;
+  leaveTypes: { id: string; code: string; name: string; maxCarryForward: number }[];
+  rows: { employeeId: string; employeeCode: string; name: string; code: string; unused: number; carried: number; lapsed: number; before: number }[];
+  totals: { carried: number; lapsed: number };
+}
+
 interface Editing {
   employeeId: string;
   name: string;
@@ -37,6 +46,9 @@ export default function LeaveBalancesPage() {
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [saving, setSaving] = useState(false);
+  const [carry, setCarry] = useState<CarryPreview | null>(null);
+  const [carryBusy, setCarryBusy] = useState(false);
+  const [carryError, setCarryError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setApplied(query), 300);
@@ -86,6 +98,27 @@ export default function LeaveBalancesPage() {
     }
   }
 
+  async function runCarry(commit: boolean) {
+    setCarryBusy(true);
+    setCarryError(null);
+    try {
+      const r = await apiFetch<CarryPreview>("/api/hr/leaves/carry-forward", { method: "POST", body: JSON.stringify({ fromYear: year - 1, commit }) });
+      if (commit) {
+        toast.success(`Carried ${r.totals.carried} day(s) into ${r.toYear}`, r.totals.lapsed ? `${r.totals.lapsed} day(s) lapsed over the limits` : undefined);
+        setCarry(null);
+        load();
+      } else {
+        setCarry(r);
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Something went wrong";
+      if (carry) setCarryError(msg);
+      else toast.error("Could not check carry-forward", msg);
+    } finally {
+      setCarryBusy(false);
+    }
+  }
+
   if (isForbidden(error)) return <AccessDenied detail={(error as Error).message} />;
   const cols = (data?.leaveTypes.length ?? 0) + 1;
 
@@ -93,11 +126,18 @@ export default function LeaveBalancesPage() {
     <>
       <PageHeader
         title="Leave balances"
-        description={`Days available in ${year}: granted (the leave type's yearly quota unless changed here) plus carry-forward, minus approved leave.${canAllocate ? " Click a number to change what an employee is granted." : ""}`}
+        description={`Days available in ${year}: granted (the leave type's yearly quota, pro-rated for people who joined this year, unless changed here) plus carry-forward, minus approved leave.${canAllocate ? " Click a number to change what an employee is granted." : ""}`}
         actions={
-          <Link href="/hr-leave-types" className="button buttonSecondary">
-            Leave types
-          </Link>
+          <>
+            {canAllocate && (
+              <button type="button" className="button buttonSecondary" onClick={() => runCarry(false)} disabled={carryBusy} title={`Move unused ${year - 1} leave into ${year}`}>
+                {carryBusy && !carry && <span className="spinner" />} Carry forward from {year - 1}
+              </button>
+            )}
+            <Link href="/hr-leave-types" className="button buttonSecondary">
+              Leave types
+            </Link>
+          </>
         }
       />
       <div className="toolbar">
@@ -154,6 +194,8 @@ export default function LeaveBalancesPage() {
                     <>
                       <strong style={b.available < 0 ? { color: "var(--danger)" } : undefined}>{b.available}</strong>
                       <span className="hrMuted"> / {b.allocated + b.carriedForward}</span>
+                      {b.prorated && <div className="hrMuted">pro-rated</div>}
+                      {b.carriedForward > 0 && <div className="hrMuted">+{b.carriedForward} carried</div>}
                       {b.pending > 0 && <div className="hrMuted">{b.pending} pending</div>}
                     </>
                   );
@@ -179,6 +221,73 @@ export default function LeaveBalancesPage() {
           </tbody>
         </table>
       </div>
+
+      {carry && (
+        <Modal
+          title={`Carry forward ${carry.fromYear} → ${carry.toYear}`}
+          subtitle={
+            carry.leaveTypes.length === 0
+              ? "No active leave type is set to carry forward. Turn it on in Leave types."
+              : `Unused ${carry.fromYear} days of ${carry.leaveTypes.map((t) => `${t.code}${t.maxCarryForward ? ` (up to ${t.maxCarryForward})` : ""}`).join(", ")} move into ${carry.toYear}; anything over the limit lapses. Running it again recalculates.`
+          }
+          onClose={() => setCarry(null)}
+          busy={carryBusy}
+          width="44rem"
+          footer={
+            <>
+              <button type="button" className="button buttonSecondary" onClick={() => setCarry(null)} disabled={carryBusy}>
+                Cancel
+              </button>
+              <button type="button" className="button buttonPrimary" onClick={() => runCarry(true)} disabled={carryBusy || carry.rows.length === 0}>
+                {carryBusy && <span className="spinner" />} Carry {carry.totals.carried} day(s) forward
+              </button>
+            </>
+          }
+        >
+          {carryError && (
+            <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
+              <span>{carryError}</span>
+            </div>
+          )}
+          {carry.rows.length === 0 ? (
+            <EmptyState compact title="Nothing to carry forward" description={`No employee has unused ${carry.fromYear} leave of a carry-forward type.`} />
+          ) : (
+            <div className="tableWrap" style={{ maxHeight: "22rem", overflow: "auto" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Type</th>
+                    <th className="numCell">Unused</th>
+                    <th className="numCell">Carried</th>
+                    <th className="numCell">Lapses</th>
+                    <th className="numCell">Now in {carry.toYear}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carry.rows.map((r) => (
+                    <tr key={`${r.employeeId}-${r.code}`}>
+                      <td>
+                        {r.name}
+                        <div className="hrMuted">{r.employeeCode}</div>
+                      </td>
+                      <td>{r.code}</td>
+                      <td className="numCell">{r.unused}</td>
+                      <td className="numCell">
+                        <strong>{r.carried}</strong>
+                      </td>
+                      <td className="numCell" style={r.lapsed ? { color: "var(--danger)" } : undefined}>
+                        {r.lapsed || "—"}
+                      </td>
+                      <td className="numCell">{r.before || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {editing && (
         <Modal
@@ -208,7 +317,7 @@ export default function LeaveBalancesPage() {
             </div>
             <div className="field fieldSpanFull">
               <label htmlFor="al-notes">Note</label>
-              <input id="al-notes" className="input" value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} placeholder="e.g. prorated for mid-year joining" />
+              <input id="al-notes" className="input" value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} placeholder="e.g. extra days agreed at joining" />
             </div>
           </div>
         </Modal>

@@ -163,6 +163,7 @@ const leaveTypes = define("hr-leave-types", "Leave type", {
     allowHalfDay: z.coerce.boolean().default(true),
     carryForward: z.coerce.boolean().default(false),
     maxCarryForward: z.coerce.number().min(0).max(365).default(0),
+    prorateForJoiners: z.coerce.boolean().default(true),
     encashable: z.coerce.boolean().default(false),
     allowNegative: z.coerce.boolean().default(false),
     description: optionalText(500),

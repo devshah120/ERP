@@ -13,6 +13,8 @@ export interface LeaveBalance {
   allowNegative: boolean;
   allowHalfDay: boolean;
   allocated: number;
+  /** The quota pro-rated for a mid-year joiner. */
+  prorated?: boolean;
   carriedForward: number;
   used: number;
   pending: number;

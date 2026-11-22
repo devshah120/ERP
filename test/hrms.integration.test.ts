@@ -139,7 +139,8 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     ]);
 
     const balance = (await balancesFor(new Types.ObjectId(businessId), [emp.asha], 2026)).get(String(emp.asha))!;
-    expect(balance.find((x) => x.code === "CL")).toMatchObject({ allocated: 12, used: 2, available: 10 });
+    // Joined 1 September: 4 of 12 months left, so CL is pro-rated to 4 days.
+    expect(balance.find((x) => x.code === "CL")).toMatchObject({ allocated: 4, prorated: true, used: 2, available: 2 });
   });
 
   it("lets an employee with portal access check in and out", async () => {
@@ -298,8 +299,8 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     // October's payroll is approved, so its attendance is locked.
     await expect(requestCorrection(asha, { ...base, date: "2026-10-20" })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
     // Approved leave is changed by cancelling the leave, not by a correction.
-    const cl = await LeaveType.findOne({ businessId, code: "CL" }).lean<{ _id: Types.ObjectId }>();
-    const leave = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(cl!._id), fromDate: "2026-11-16", toDate: "2026-11-16", halfDay: false, reason: "" }, { self: false });
+    const lop = await LeaveType.findOne({ businessId, code: "LOP" }).lean<{ _id: Types.ObjectId }>();
+    const leave = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(lop!._id), fromDate: "2026-11-16", toDate: "2026-11-16", halfDay: false, reason: "" }, { self: false });
     await approveLeave(ctx, leave.id, "");
     await expect(requestCorrection(asha, { ...base, date: "2026-11-16" })).rejects.toMatchObject({ code: "ON_LEAVE" });
 
@@ -331,5 +332,37 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     const mine = await listMyCorrections(asha, { page: 1, pageSize: 25 });
     expect(mine.items.map((r) => r.status).sort()).toEqual(["APPROVED", "CANCELLED", "REJECTED"]);
+  });
+
+  it("carries unused leave into the next year up to the leave type's limit", async () => {
+    const { carryForwardLeave, balancesFor, setAllocation } = await import("@/lib/hr/leave");
+    const { LeaveType } = await import("@/models/hr");
+    const el = await LeaveType.findOne({ businessId, code: "EL" }).lean<{ _id: Types.ObjectId }>();
+    const bId = new Types.ObjectId(businessId);
+    const elOf = async (empId: Types.ObjectId, year: number) => (await balancesFor(bId, [empId], year)).get(String(empId))!.find((b) => b.code === "EL")!;
+
+    // Joined 1 September 2026: EL 15 a year, pro-rated to 5 for 2026; nothing used.
+    expect(await elOf(emp.asha, 2026)).toMatchObject({ allocated: 5, prorated: true, available: 5 });
+
+    const preview = await carryForwardLeave(ctx, { fromYear: 2026, commit: false });
+    expect(preview.committed).toBe(false);
+    expect(preview.rows.filter((r) => r.code === "EL").map((r) => [r.name, r.unused, r.carried])).toEqual([
+      ["Asha Rao", 5, 5],
+      ["Ravi Kumar", 5, 5],
+    ]);
+    expect(preview.rows.some((r) => r.code === "CL")).toBe(false); // CL does not carry forward
+    expect((await elOf(emp.asha, 2027)).carriedForward).toBe(0); // a preview writes nothing
+
+    await carryForwardLeave(ctx, { fromYear: 2026, commit: true });
+    // 2027 is a full year: 15 granted + 5 carried.
+    expect(await elOf(emp.asha, 2027)).toMatchObject({ allocated: 15, prorated: false, carriedForward: 5, available: 20 });
+
+    // A lower limit is applied when it runs again, and a grant set by hand for 2027 is kept.
+    await LeaveType.updateOne({ _id: el!._id }, { maxCarryForward: 3 });
+    await setAllocation(ctx, { employeeId: String(emp.ravi), leaveTypeId: String(el!._id), year: 2027, allocated: 10, carriedForward: 5, notes: "" });
+    const again = await carryForwardLeave(ctx, { fromYear: 2026, commit: true });
+    expect(again.totals).toEqual({ carried: 6, lapsed: 4 });
+    expect(await elOf(emp.asha, 2027)).toMatchObject({ carriedForward: 3, available: 18 });
+    expect(await elOf(emp.ravi, 2027)).toMatchObject({ allocated: 10, carriedForward: 3 });
   });
 });

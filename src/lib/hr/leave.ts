@@ -45,10 +45,26 @@ export interface LeaveBalance {
   allowNegative: boolean;
   allowHalfDay: boolean;
   allocated: number;
+  /** True when `allocated` is the quota pro-rated for a mid-year joiner (no grant set by hand). */
+  prorated: boolean;
   carriedForward: number;
   used: number;
   pending: number;
   available: number;
+}
+
+/**
+ * The yearly quota for someone who joined in `year`: the months left counting
+ * the joining month when they joined on or before the 15th, rounded to the
+ * nearest half day. Earlier joiners get the full quota; future joiners none.
+ */
+export function proratedQuota(quota: number, year: number, dateOfJoining: Date | null | undefined): number {
+  if (!dateOfJoining) return quota;
+  const joined = new Date(dateOfJoining);
+  if (joined.getUTCFullYear() < year) return quota;
+  if (joined.getUTCFullYear() > year) return 0;
+  const months = 12 - joined.getUTCMonth() - (joined.getUTCDate() > 15 ? 1 : 0);
+  return Math.round(((quota * months) / 12) * 2) / 2;
 }
 
 function yearRange(year: number) {
@@ -63,14 +79,16 @@ function yearRange(year: number) {
  */
 export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types.ObjectId[], year: number): Promise<Map<string, LeaveBalance[]>> {
   const { start, end } = yearRange(year);
-  const [types, allocations, apps] = await Promise.all([
+  const [types, allocations, apps, emps] = await Promise.all([
     LeaveType.find({ businessId, deletedAt: null, status: "ACTIVE" }).sort({ code: 1 }).lean<AnyDoc[]>(),
     LeaveAllocation.find({ businessId, year, employeeId: { $in: employeeIds } }).lean<AnyDoc[]>(),
     LeaveApplication.aggregate([
       { $match: { businessId, employeeId: { $in: employeeIds }, status: { $in: ["APPROVED", "PENDING"] }, fromDate: { $gte: start, $lte: end } } },
       { $group: { _id: { e: "$employeeId", t: "$leaveTypeId", s: "$status" }, days: { $sum: "$days" } } },
     ]),
+    Employee.find({ businessId, _id: { $in: employeeIds } }, { dateOfJoining: 1 }).lean<AnyDoc[]>(),
   ]);
+  const joinedOn = new Map(emps.map((e) => [String(e._id), e.dateOfJoining as Date]));
   const alloc = new Map(allocations.map((a) => [`${a.employeeId}:${a.leaveTypeId}`, a]));
   const usage = new Map<string, number>(apps.map((a: AnyDoc) => [`${a._id.e}:${a._id.t}:${a._id.s}`, a.days as number]));
 
@@ -80,7 +98,10 @@ export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types
       String(eid),
       types.map((t) => {
         const a = alloc.get(`${eid}:${t._id}`);
-        const allocated = a ? a.allocated : t.annualQuota ?? 0;
+        const quota = t.annualQuota ?? 0;
+        const byHand = a && a.allocated !== null && a.allocated !== undefined;
+        const fromQuota = t.prorateForJoiners === false ? quota : proratedQuota(quota, year, joinedOn.get(String(eid)));
+        const allocated = byHand ? a.allocated : fromQuota;
         const carriedForward = a ? a.carriedForward ?? 0 : 0;
         const used = usage.get(`${eid}:${t._id}:APPROVED`) ?? 0;
         const pending = usage.get(`${eid}:${t._id}:PENDING`) ?? 0;
@@ -92,6 +113,7 @@ export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types
           allowNegative: Boolean(t.allowNegative),
           allowHalfDay: t.allowHalfDay !== false,
           allocated,
+          prorated: !byHand && fromQuota !== quota,
           carriedForward,
           used,
           pending,
@@ -416,3 +438,88 @@ export async function decideTeamLeave(ctx: AuthContext, id: string, action: "app
   if (action === "reject" && !note.trim()) throw AppError.badRequest("Give a reason for rejecting", "REASON_REQUIRED");
   return action === "approve" ? approveLeave(ctx, id, note, { asManager: true }) : rejectLeave(ctx, id, note, { asManager: true });
 }
+
+/* ------------------------------------------------------------------ */
+/* Year-end carry-forward                                              */
+/* ------------------------------------------------------------------ */
+
+export const carryForwardSchema = z.object({
+  fromYear: z.coerce.number().int().min(2000).max(2100),
+  /** false = preview only. */
+  commit: z.boolean().optional().default(false),
+});
+
+/**
+ * Moves each employee's unused days of every carry-forward leave type from
+ * `fromYear` into the next year, up to the type's limit; the rest lapse.
+ * Preview first, then commit. Running it again recalculates and overwrites
+ * the carried days (a grant set by hand for the new year is kept).
+ */
+export async function carryForwardLeave(ctx: AuthContext, input: z.infer<typeof carryForwardSchema>) {
+  const { fromYear, commit } = input;
+  const toYear = fromYear + 1;
+  const types = await LeaveType.find({ businessId: ctx.businessId, deletedAt: null, status: "ACTIVE", carryForward: true }).sort({ code: 1 }).lean<AnyDoc[]>();
+  const emps = await Employee.find(
+    { businessId: ctx.businessId, deletedAt: null, employmentStatus: { $in: ["PROBATION", "CONFIRMED", "ON_NOTICE"] } },
+    { employeeCode: 1, name: 1 }
+  )
+    .sort({ employeeCode: 1 })
+    .lean<AnyDoc[]>();
+  if (types.length === 0 || emps.length === 0) {
+    return { fromYear, toYear, committed: false, leaveTypes: [], rows: [], totals: { carried: 0, lapsed: 0 } };
+  }
+
+  const ids = emps.map((e) => e._id);
+  const [balances, existing] = await Promise.all([
+    balancesFor(ctx.businessId, ids, fromYear),
+    LeaveAllocation.find({ businessId: ctx.businessId, year: toYear, employeeId: { $in: ids }, leaveTypeId: { $in: types.map((t) => t._id) } }).lean<AnyDoc[]>(),
+  ]);
+  const current = new Map(existing.map((a) => [`${a.employeeId}:${a.leaveTypeId}`, a.carriedForward ?? 0]));
+
+  const rows = [];
+  let carriedTotal = 0;
+  let lapsedTotal = 0;
+  for (const e of emps) {
+    for (const t of types) {
+      const b = balances.get(String(e._id))?.find((x) => x.leaveTypeId === String(t._id));
+      const unused = Math.max(0, b?.available ?? 0);
+      const cap = (t.maxCarryForward ?? 0) > 0 ? t.maxCarryForward : Infinity;
+      const carried = Math.min(unused, cap);
+      const before = current.get(`${e._id}:${t._id}`) ?? 0;
+      if (unused === 0 && before === 0) continue;
+      carriedTotal += carried;
+      lapsedTotal += unused - carried;
+      rows.push({ employeeId: String(e._id), employeeCode: e.employeeCode, name: e.name, leaveTypeId: String(t._id), code: t.code, unused, carried, lapsed: unused - carried, before });
+    }
+  }
+
+  if (commit && rows.length > 0) {
+    await LeaveAllocation.bulkWrite(
+      rows.map((r) => ({
+        updateOne: {
+          filter: { businessId: ctx.businessId, employeeId: new Types.ObjectId(r.employeeId), leaveTypeId: new Types.ObjectId(r.leaveTypeId), year: toYear },
+          update: { $set: { carriedForward: r.carried, updatedBy: ctx.userId }, $setOnInsert: { allocated: null, notes: `Carried forward from ${fromYear}`, createdBy: ctx.userId } },
+          upsert: true,
+        },
+      }))
+    );
+    await recordAudit({
+      businessId: ctx.businessId,
+      userId: ctx.userId,
+      action: "UPDATE",
+      module: "hr.leave",
+      documentType: "LeaveAllocation",
+      newValue: { carryForward: `${fromYear} → ${toYear}`, employees: new Set(rows.map((r) => r.employeeId)).size, carried: carriedTotal, lapsed: lapsedTotal },
+    });
+  }
+
+  return {
+    fromYear,
+    toYear,
+    committed: commit && rows.length > 0,
+    leaveTypes: types.map((t) => ({ id: String(t._id), code: t.code, name: t.name, maxCarryForward: t.maxCarryForward ?? 0 })),
+    rows,
+    totals: { carried: carriedTotal, lapsed: lapsedTotal },
+  };
+}
+

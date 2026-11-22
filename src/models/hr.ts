@@ -91,7 +91,10 @@ export const LeaveType = defineMasterModel(
     isPaid: { type: Boolean, default: true },
     allowHalfDay: { type: Boolean, default: true },
     carryForward: { type: Boolean, default: false },
+    /** Most days carried into the next year; 0 = no limit. */
     maxCarryForward: { type: Number, default: 0, min: 0 },
+    /** Employees who join during a year get the quota for the months left (rounded to half days). */
+    prorateForJoiners: { type: Boolean, default: true },
     encashable: { type: Boolean, default: false },
     /** Lets a balance go below zero (e.g. loss of pay, which has no quota). */
     allowNegative: { type: Boolean, default: false },
@@ -344,7 +347,8 @@ const leaveAllocationSchema = new Schema(
     employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
     leaveTypeId: { type: Schema.Types.ObjectId, ref: "LeaveType", required: true },
     year: { type: Number, required: true },
-    allocated: { type: Number, required: true, min: 0 },
+    /** Days granted for the year; null = the leave type's quota (pro-rated for joiners). */
+    allocated: { type: Number, default: null, min: 0 },
     carriedForward: { type: Number, default: 0, min: 0 },
     notes: { type: String, trim: true, default: "" },
     ...audit,

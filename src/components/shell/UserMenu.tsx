@@ -13,7 +13,7 @@ import Typography from "@mui/material/Typography";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { apiFetch } from "@/lib/api/client";
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
-import { IconKeyboard, IconLogout, IconSettings, IconChevronUp } from "@/components/icons";
+import { IconKeyboard, IconLock, IconLogout, IconSettings, IconChevronUp } from "@/components/icons";
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -127,6 +127,13 @@ export default function UserMenu({ variant }: { variant: "sidebar" | "topbar" })
         <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace", ml: 1 }}>
           Ctrl /
         </Typography>
+      </MenuItem>
+
+      <MenuItem component={Link} href="/change-password" onClick={handleClose}>
+        <ListItemIcon sx={{ minWidth: 28 }}>
+          <IconLock />
+        </ListItemIcon>
+        <ListItemText primary={<Typography variant="body2" sx={{ fontWeight: 500 }}>Change password</Typography>} />
       </MenuItem>
 
       <Divider sx={{ my: 0.5 }} />

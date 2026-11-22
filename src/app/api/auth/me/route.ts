@@ -16,7 +16,8 @@ import "@/models";
  * Every future module's routes should follow this same shape.
  */
 export const GET = withApiHandler(async (req: NextRequest) => {
-  const ctx = getAuthContext(req);
+  // Reachable with a temporary password, so the app knows to show the change-password screen.
+  const ctx = getAuthContext(req, { allowPasswordChangePending: true });
 
   const [user, role, business, financialYear, employee] = await Promise.all([
     User.findOne({ _id: ctx.userId, businessId: ctx.businessId }).lean(),
@@ -40,6 +41,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
     permissions: ctx.permissions,
     products: ctx.products,
     employeeId: employee ? String(employee._id) : null,
+    mustChangePassword: Boolean(ctx.mustChangePassword),
     business: business
       ? {
           name: business.tradeName,

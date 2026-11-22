@@ -5,7 +5,7 @@
  */
 export function safeNext(next: string | null | undefined): string {
   if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/dashboard";
-  if (/^\/(login|register|verify-otp|forgot-password|reset-password|session-expired)(\/|\?|$)/.test(next)) {
+  if (/^\/(login|register|verify-otp|forgot-password|reset-password|session-expired|change-password)(\/|\?|$)/.test(next)) {
     return "/dashboard";
   }
   return next;

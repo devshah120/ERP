@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { apiFetch, ApiError, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
+import { apiFetch, ApiError, PASSWORD_CHANGE_REQUIRED_EVENT, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
 import { grants, homePathFor, normalizeProducts, productForHref, type Product } from "@/lib/products";
 
 export interface Me {
@@ -16,6 +16,8 @@ export interface Me {
   products: Product[];
   /** Employee record linked to this login (self-service), if any. */
   employeeId: string | null;
+  /** Signed in with a temporary password; the app is blocked until it is changed. */
+  mustChangePassword?: boolean;
   business: {
     name: string;
     currency: string;
@@ -64,6 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await apiFetch<Me>("/api/auth/me");
       signedIn.current = true;
       setMe({ ...data, products: normalizeProducts(data.products) });
+      if (data.mustChangePassword) {
+        router.replace(`/change-password?next=${encodeURIComponent(pathRef.current)}`);
+      }
     } catch (err) {
       // First load with no session → sign-in, remembering where they were going.
       if (err instanceof ApiError && !signedIn.current) {
@@ -93,6 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, [router]);
 
+  // A temporary password set by an admin (or a reset) blocks every screen until it is replaced.
+  useEffect(() => {
+    function onPasswordChangeRequired() {
+      router.replace(`/change-password?next=${encodeURIComponent(pathRef.current)}`);
+    }
+    window.addEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onPasswordChangeRequired);
+    return () => window.removeEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, onPasswordChangeRequired);
+  }, [router]);
+
   const hasPermission = useCallback(
     (permission: string) => !!me && grants(me.permissions, me.products, permission),
     [me]
@@ -111,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const homePath = me ? homePathFor(me.permissions, me.products, Boolean(me.employeeId)) : "/dashboard";
 
   return (
-    <AuthContext.Provider value={{ me, loading, hasPermission, hasProduct, canReach, homePath, refresh: load }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ me, loading, hasPermission, hasProduct, canReach, homePath, refresh: load }}>
+      {/* Nothing behind the shell is usable until a temporary password is replaced; the redirect is under way. */}
+      {me?.mustChangePassword ? null : children}
+    </AuthContext.Provider>
   );
 }
 

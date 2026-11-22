@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Types } from "mongoose";
 import { AppError } from "@/lib/errors/AppError";
-import { verifyAccessToken } from "@/lib/auth/tokens";
+import { verifyAccessToken, type AccessTokenPayload } from "@/lib/auth/tokens";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/cookies";
 import { normalizeProducts, productForPermission, PRODUCT_SHORT_LABELS, type Product } from "@/lib/products";
 
@@ -14,27 +14,48 @@ export interface AuthContext {
   warehouseIds: Types.ObjectId[];
   /** Products the workspace has bought; gates whole modules regardless of role. */
   products: Product[];
+  /** True only on routes that opted in with `allowPasswordChangePending`. */
+  mustChangePassword?: boolean;
 }
 
-/** Reads and verifies the access token cookie. Throws 401 if missing/invalid/expired. */
-export function getAuthContext(req: NextRequest): AuthContext {
+export const PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED";
+
+/** Builds the context from a verified token payload (shared with the Server Component variant). */
+export function contextFromPayload(payload: AccessTokenPayload): AuthContext {
+  return {
+    userId: new Types.ObjectId(payload.sub),
+    businessId: new Types.ObjectId(payload.businessId),
+    roleId: new Types.ObjectId(payload.roleId),
+    permissions: payload.permissions,
+    branchIds: payload.branchIds.map((id) => new Types.ObjectId(id)),
+    warehouseIds: payload.warehouseIds.map((id) => new Types.ObjectId(id)),
+    products: normalizeProducts(payload.products),
+    mustChangePassword: payload.mustChangePassword === true,
+  };
+}
+
+/**
+ * Reads and verifies the access token cookie. Throws 401 if missing/invalid/expired.
+ *
+ * A user who still has to replace a temporary password gets 403
+ * PASSWORD_CHANGE_REQUIRED from every route, except the few that pass
+ * `allowPasswordChangePending` (who am I, change password).
+ */
+export function getAuthContext(req: NextRequest, opts?: { allowPasswordChangePending?: boolean }): AuthContext {
   const token = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) throw AppError.unauthorized();
 
+  let ctx: AuthContext;
   try {
-    const payload = verifyAccessToken(token);
-    return {
-      userId: new Types.ObjectId(payload.sub),
-      businessId: new Types.ObjectId(payload.businessId),
-      roleId: new Types.ObjectId(payload.roleId),
-      permissions: payload.permissions,
-      branchIds: payload.branchIds.map((id) => new Types.ObjectId(id)),
-      warehouseIds: payload.warehouseIds.map((id) => new Types.ObjectId(id)),
-      products: normalizeProducts(payload.products),
-    };
+    ctx = contextFromPayload(verifyAccessToken(token));
   } catch {
     throw AppError.unauthorized("Session expired, please log in again", "SESSION_EXPIRED");
   }
+
+  if (ctx.mustChangePassword && !opts?.allowPasswordChangePending) {
+    throw AppError.forbidden("Change your temporary password to continue.", PASSWORD_CHANGE_REQUIRED);
+  }
+  return ctx;
 }
 
 /**

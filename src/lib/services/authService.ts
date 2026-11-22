@@ -260,6 +260,8 @@ export interface LoginResult {
     email: string;
     businessId: string;
     roleId: string;
+    /** Signed in with a temporary password that must be replaced before anything else. */
+    mustChangePassword: boolean;
   };
 }
 
@@ -299,6 +301,7 @@ async function issueSession(
     branchIds: user.branchIds.map((id) => id.toString()),
     warehouseIds: user.warehouseIds.map((id) => id.toString()),
     products,
+    ...(user.mustChangePassword ? { mustChangePassword: true } : {}),
   });
 
   const refreshToken = generateRefreshToken();
@@ -445,6 +448,7 @@ export async function login(input: LoginInput, meta: { userAgent?: string; ip?: 
       email: user.email,
       businessId: user.businessId.toString(),
       roleId: user.roleId.toString(),
+      mustChangePassword: user.mustChangePassword === true,
     },
   };
 }
@@ -647,6 +651,9 @@ export async function resetPassword(
           passwordHash,
           failedLoginAttempts: 0,
           lockedUntil: null,
+          // They chose this password themselves, so a pending forced change is satisfied.
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
           ...(user.status === "LOCKED" ? { status: "ACTIVE" } : {}),
         },
         { session }
@@ -671,4 +678,61 @@ export async function resetPassword(
     reason: "Password reset via emailed code; all sessions revoked",
     ip,
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Password change (signed in)                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A signed-in user replaces their password, which is how a temporary password
+ * (set by an admin, the super admin or an HR portal grant) gets cleared.
+ * Every existing session is revoked and a fresh one is issued, so other
+ * devices using the old password are signed out and this one carries on.
+ */
+export async function changePassword(
+  userId: Types.ObjectId,
+  businessId: Types.ObjectId,
+  input: { currentPassword: string; password: string },
+  meta: { userAgent?: string; ip?: string }
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const user = await User.findOne({ _id: userId, businessId }).select("+passwordHash");
+  if (!user || user.status !== "ACTIVE") {
+    throw AppError.unauthorized("Account is no longer active", "ACCOUNT_INACTIVE");
+  }
+  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+    throw AppError.badRequest("Your current password is incorrect.", "CURRENT_PASSWORD_INVALID");
+  }
+
+  const passwordHash = await hashPassword(input.password);
+  const now = new Date();
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await User.updateOne(
+        { _id: user._id, businessId },
+        { passwordHash, mustChangePassword: false, passwordChangedAt: now, failedLoginAttempts: 0 },
+        { session }
+      );
+      await Session.updateMany({ userId: user._id, businessId, revokedAt: null }, { revokedAt: now }, { session });
+      await LoginHistory.create([{ businessId, userId: user._id, event: "PASSWORD_CHANGED", ip: meta.ip, userAgent: meta.userAgent }], { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  await recordAudit({
+    businessId,
+    userId: user._id,
+    action: "PASSWORD_CHANGE",
+    module: "auth",
+    documentType: "User",
+    documentId: user._id,
+    reason: user.mustChangePassword ? "Temporary password replaced; all sessions revoked" : "Password changed; all sessions revoked",
+    ip: meta.ip,
+  });
+
+  user.mustChangePassword = false;
+  const role = await Role.findOne({ _id: user.roleId, businessId }).lean();
+  return issueSession(user, role?.permissions ?? [], meta);
 }

@@ -289,4 +289,47 @@ describe("auth flow (real MongoDB replica set, real transactions)", () => {
       { code: "DOMAIN_TAKEN" }
     );
   });
+
+  it("forces a user created with a temporary password to change it before using any API", async () => {
+    const { NextRequest } = await import("next/server");
+    const { login, changePassword, refreshSession } = await import("@/lib/services/authService");
+    const { getAuthContext } = await import("@/lib/auth/context");
+    const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
+    const { User } = await import("@/models/User");
+    const { Session } = await import("@/models/Session");
+    const reqWith = (token: string) => new NextRequest("http://localhost/api/anything", { headers: { cookie: `${ACCESS_TOKEN_COOKIE}=${token}` } });
+
+    // ravi@acme.test was added by an admin above, so his password is temporary.
+    const temp = await login({ domain: "acme-garments", email: "ravi@acme.test", password: "Str0ng!Passw0rd" }, {});
+    expect(temp.user.mustChangePassword).toBe(true);
+
+    expect(() => getAuthContext(reqWith(temp.accessToken))).toThrow(expect.objectContaining({ code: "PASSWORD_CHANGE_REQUIRED", statusCode: 403 }));
+    const pending = getAuthContext(reqWith(temp.accessToken), { allowPasswordChangePending: true });
+    expect(pending.mustChangePassword).toBe(true);
+
+    // A token refresh does not get around it.
+    const refreshed = await refreshSession(temp.refreshToken, {});
+    expect(() => getAuthContext(reqWith(refreshed.accessToken))).toThrow(expect.objectContaining({ code: "PASSWORD_CHANGE_REQUIRED" }));
+
+    await expect(
+      changePassword(pending.userId, pending.businessId, { currentPassword: "Wr0ng!Passw0rd", password: "N3w!Passw0rd" }, {})
+    ).rejects.toMatchObject({ code: "CURRENT_PASSWORD_INVALID" });
+
+    const fresh = await changePassword(pending.userId, pending.businessId, { currentPassword: "Str0ng!Passw0rd", password: "N3w!Passw0rd" }, {});
+    expect(getAuthContext(reqWith(fresh.accessToken)).mustChangePassword).toBe(false);
+
+    // Every earlier session is gone; only the one just issued is live.
+    await expect(refreshSession(refreshed.refreshToken, {})).rejects.toMatchObject({ code: "SESSION_EXPIRED" });
+    expect(await Session.countDocuments({ userId: pending.userId, revokedAt: null })).toBe(1);
+
+    const user = await User.findById(pending.userId).lean();
+    expect(user?.mustChangePassword).toBe(false);
+    expect(user?.passwordChangedAt).toBeTruthy();
+
+    const again = await login({ domain: "acme-garments", email: "ravi@acme.test", password: "N3w!Passw0rd" }, {});
+    expect(again.user.mustChangePassword).toBe(false);
+    await expect(login({ domain: "acme-garments", email: "ravi@acme.test", password: "Str0ng!Passw0rd" }, {})).rejects.toMatchObject({
+      code: "INVALID_CREDENTIALS",
+    });
+  });
 });

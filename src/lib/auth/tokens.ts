@@ -12,6 +12,8 @@ export interface AccessTokenPayload {
   warehouseIds: string[];
   /** Products the workspace has bought. Absent on tokens issued before products existed (= ERP). */
   products?: string[];
+  /** Set while the user still has to replace a temporary password; every API but the password change refuses the token. */
+  mustChangePassword?: boolean;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

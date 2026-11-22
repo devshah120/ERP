@@ -28,7 +28,7 @@ export default function LoginForm() {
     setSubmitting(true);
 
     try {
-      const res = await apiFetch<{ superAdmin?: boolean; redirectTo?: string }>("/api/auth/login", {
+      const res = await apiFetch<{ superAdmin?: boolean; redirectTo?: string; user?: { mustChangePassword?: boolean } }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
@@ -38,6 +38,8 @@ export default function LoginForm() {
       });
       if (res?.superAdmin && res.redirectTo) {
         router.push(res.redirectTo);
+      } else if (res?.user?.mustChangePassword) {
+        router.push(`/change-password?next=${encodeURIComponent(next)}`);
       } else {
         router.push(next);
       }

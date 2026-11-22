@@ -23,6 +23,9 @@ interface ApiEnvelope<T> {
 /** Fired on window when the session can't be renewed; AuthProvider decides where to send the user. */
 export const SESSION_EXPIRED_EVENT = "erp:session-expired";
 
+/** Fired on window when the server refuses a request until a temporary password is replaced. */
+export const PASSWORD_CHANGE_REQUIRED_EVENT = "erp:password-change-required";
+
 let refreshInFlight: Promise<boolean> | null = null;
 
 /**
@@ -82,6 +85,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   if (!body.success) {
+    if (res.status === 403 && body.code === "PASSWORD_CHANGE_REQUIRED" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(PASSWORD_CHANGE_REQUIRED_EVENT));
+    }
     throw new ApiError(body.message ?? "Request failed", body.code ?? "UNKNOWN_ERROR", body.errors, res.status);
   }
 

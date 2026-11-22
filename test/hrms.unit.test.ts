@@ -306,3 +306,23 @@ describe("payroll journal", () => {
     expect(payment.find((e) => e.role === "CASH")!.credit!.toFixed(2)).toBe("11910.00");
   });
 });
+
+describe("gratuity", () => {
+  it("counts completed years (over six months rounds up), needs five years and is capped", async () => {
+    const { gratuityFor, serviceBetween } = await import("@/lib/hr/fnf");
+    const g = (joined: string, until: string, basic: string, waive = false) => gratuityFor({ joined: new Date(joined), until: new Date(until), basic, waiveMinimum: waive });
+    expect(serviceBetween(new Date("2020-01-01"), new Date("2025-12-31"))).toEqual({ years: 6, months: 0, days: 0 });
+    expect(g("2020-01-01", "2025-12-31", "26000")).toMatchObject({ completedYears: 6, eligible: true });
+    expect(g("2020-01-01", "2025-12-31", "26000").payable.toFixed(2)).toBe("90000.00"); // 26000 × 15/26 × 6
+    expect(g("2021-03-10", "2026-10-09", "20000")).toMatchObject({ completedYears: 6, eligible: true }); // 5 yr 7 mo
+    expect(g("2021-01-01", "2026-06-30", "20000").completedYears).toBe(5); // exactly six months extra does not count
+    const short = g("2022-01-01", "2026-11-30", "20000"); // 4 yr 11 mo
+    expect(short.eligible).toBe(false);
+    expect(short.payable.toFixed(2)).toBe("0.00");
+    expect(short.accrued.toFixed(2)).toBe("57692.31"); // 20000 × 15/26 × 5, for the provision
+    expect(g("2022-01-01", "2026-11-30", "20000", true).payable.toFixed(2)).toBe("57692.31"); // e.g. on death
+    const big = g("1990-01-01", "2025-12-31", "1000000");
+    expect(big).toMatchObject({ capped: true });
+    expect(big.payable.toFixed(2)).toBe("2000000.00");
+  });
+});

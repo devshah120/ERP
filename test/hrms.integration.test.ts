@@ -601,4 +601,61 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await deleteChange(ctx, String(emp.ravi), raise.id);
     expect((await listArrears(ctx, { kind: "INCREMENT" })).items[0].status).toBe("CANCELLED");
   });
+
+  it("settles a leaving employee in full and final and keeps them out of later payroll", async () => {
+    const { createFnf, updateFnf, approveFnf, markFnfPaid, cancelFnf, getFnf, gratuityReport } = await import("@/lib/hr/fnf");
+    const { createLoan } = await import("@/lib/hr/money");
+    const { payrollEmployees } = await import("@/lib/hr/holds");
+    const { Employee, EmployeeLoan, PayrollArrear } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+
+    // Ravi resigned on 20 March 2027 and leaves on 15 April (30 days' notice, 27 served). March is already paid.
+    const draft = await createFnf(ctx, { employeeId: String(emp.ravi), separationType: "RESIGNED", resignationDate: "2027-03-20", lastWorkingDay: "2027-04-15", noticeDays: 30, exitReason: "Higher studies", notes: "" });
+    await expect(createFnf(ctx, { employeeId: String(emp.ravi), separationType: "RESIGNED", resignationDate: "", lastWorkingDay: "2027-04-15", noticeDays: 30, exitReason: "", notes: "" })).rejects.toMatchObject({ code: "FNF_EXISTS" });
+    let f = await getFnf(ctx, draft.id);
+    const amt = (lines: { code: string; amount: string }[], code: string) => lines.find((l) => l.code === code)?.amount;
+    expect(f.salaryFrom).toEqual({ year: 2027, month: 4 });
+    expect(amt(f.earnings, "BASIC")).toBe("6500.00"); // 13,000 × 15/30
+    expect(amt(f.earnings, "LEAVE_ENC")).toBe("5633.29"); // EL 13 days × 13,000 / 30
+    expect(amt(f.earnings, "ARR_DA")).toBe("1200.00"); // the DA arrear still pending
+    expect(amt(f.earnings, "GRATUITY")).toBeUndefined(); // under five years
+    expect(amt(f.deductions, "PF")).toBe("780.00");
+    expect(amt(f.deductions, "PT")).toBe("200.00");
+    expect(amt(f.deductions, "NOTICE_RECOVERY")).toBe("1300.00"); // 3 days × 13,000 / 30
+    expect(f).toMatchObject({ noticeServedDays: 27, noticeShortfallDays: 3, netPayable: "11053.29" });
+
+    // A loan given after the draft: approval refuses the stale figures until recalculated (with an asset recovery added).
+    await createLoan(ctx, { employeeId: String(emp.ravi), loanType: "ADVANCE", issueDate: "2027-03-25", amount: "5000", emiAmount: "1000", startMonth: 5, startYear: 2027, reason: "" });
+    await expect(approveFnf(ctx, draft.id)).rejects.toMatchObject({ code: "FNF_STALE" });
+    await updateFnf(ctx, draft.id, { manualLines: [{ kind: "DEDUCTION", label: "Laptop not returned", amount: "2000" }] });
+    f = await getFnf(ctx, draft.id);
+    expect(amt(f.deductions, "LOAN")).toBe("5000.00");
+    expect(f.netPayable).toBe("4053.29");
+
+    await approveFnf(ctx, draft.id);
+    const ravi = await Employee.findById(emp.ravi).lean<{ employmentStatus: string; dateOfExit: Date }>();
+    expect(ravi!.employmentStatus).toBe("RESIGNED");
+    expect(ravi!.dateOfExit.toISOString().slice(0, 10)).toBe("2027-04-15");
+    const loan = await EmployeeLoan.findOne({ businessId, employeeId: emp.ravi }).lean<{ status: string; repaidAmount: unknown }>();
+    expect(loan).toMatchObject({ status: "CLOSED" });
+    expect(await PayrollArrear.countDocuments({ businessId, employeeId: emp.ravi, status: "INCLUDED", fnfSettlementId: draft.id })).toBe(1);
+    // April's payroll would pay him twice: he is left out.
+    expect((await payrollEmployees(bId, 2027, 4)).map((e) => e.name)).toEqual(["Asha Rao"]);
+
+    // Cancelling an approved settlement reverses the loan recovery and the arrear.
+    await cancelFnf(ctx, draft.id, "Rejoined");
+    expect((await EmployeeLoan.findOne({ businessId, employeeId: emp.ravi }).lean<{ status: string }>())!.status).toBe("ACTIVE");
+    expect(await PayrollArrear.countDocuments({ businessId, employeeId: emp.ravi, status: "PENDING" })).toBe(1);
+
+    // A fresh settlement can then be approved and paid.
+    const again = await createFnf(ctx, { employeeId: String(emp.ravi), separationType: "RESIGNED", resignationDate: "2027-03-20", lastWorkingDay: "2027-04-15", noticeDays: 30, exitReason: "", notes: "" });
+    await approveFnf(ctx, again.id);
+    await markFnfPaid(ctx, again.id, { paidOn: "2027-04-30", reference: "UTR999" });
+    expect((await getFnf(ctx, again.id)).status).toBe("PAID");
+    await expect(cancelFnf(ctx, again.id, "Too late")).rejects.toMatchObject({ code: "FNF_PAID" });
+
+    // Gratuity report: nobody has five years yet, but the provision accrues.
+    const report = await gratuityReport(ctx, "2027-04-15");
+    expect(report.rows.every((r) => !r.eligible)).toBe(true);
+  });
 });

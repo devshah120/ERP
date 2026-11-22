@@ -1,7 +1,7 @@
 import { Types, type ClientSession } from "mongoose";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { PayrollHold, PayrollRun } from "@/models/hr";
+import { PayrollHold, PayrollRun, FnfSettlement } from "@/models/hr";
 import { recordAudit } from "@/lib/services/auditService";
 import type { AuthContext } from "@/lib/auth/context";
 import { monthRange, employeesDuring } from "./calendar";
@@ -25,8 +25,18 @@ export async function heldEmployeeIds(businessId: Types.ObjectId, year: number, 
 /** Employees a month's payroll covers: on the rolls during the month and not on hold. */
 export async function payrollEmployees(businessId: Types.ObjectId, year: number, month: number, session?: ClientSession): Promise<AnyDoc[]> {
   const { start, end } = monthRange(year, month);
-  const [emps, held] = await Promise.all([employeesDuring(businessId, start, end), heldEmployeeIds(businessId, year, month, session)]);
-  return emps.filter((e) => !held.has(String(e._id)));
+  const [emps, held, settled] = await Promise.all([employeesDuring(businessId, start, end), heldEmployeeIds(businessId, year, month, session), settledEmployeeIds(businessId, year, month, session)]);
+  return emps.filter((e) => !held.has(String(e._id)) && !settled.has(String(e._id)));
+}
+
+/** Employees whose approved full & final settlement already pays this month's salary. */
+export async function settledEmployeeIds(businessId: Types.ObjectId, year: number, month: number, session?: ClientSession): Promise<Set<string>> {
+  const q = FnfSettlement.find(
+    { businessId, status: { $in: ["APPROVED", "PAID"] }, $or: [{ salaryFromYear: { $lt: year } }, { salaryFromYear: year, salaryFromMonth: { $lte: month } }] },
+    { employeeId: 1 }
+  );
+  const rows = await (session ? q.session(session) : q).lean<AnyDoc[]>();
+  return new Set(rows.map((r) => String(r.employeeId)));
 }
 
 export const holdSchema = monthQuery.extend({

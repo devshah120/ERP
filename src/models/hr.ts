@@ -276,6 +276,8 @@ export const PayrollArrear = defineHrModel(
       status: { type: String, enum: ["PENDING", "INCLUDED", "CANCELLED"], default: "PENDING" },
       /** The payroll run that paid it. */
       payrollRunId: { type: Schema.Types.ObjectId, ref: "PayrollRun", default: null },
+      /** Or the full & final settlement that paid it. */
+      fnfSettlementId: { type: Schema.Types.ObjectId, ref: "FnfSettlement", default: null },
       createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     },
     { timestamps: true }
@@ -283,6 +285,78 @@ export const PayrollArrear = defineHrModel(
     .index({ businessId: 1, status: 1, employeeId: 1 })
     .index({ businessId: 1, sourceChangeId: 1 })
     .index({ businessId: 1, payrollRunId: 1 })
+);
+
+export const SEPARATION_TYPES = ["RESIGNED", "TERMINATED", "RETIRED"] as const;
+export const NOTICE_TREATMENTS = ["RECOVER", "PAY", "WAIVE"] as const;
+export const FNF_STATUSES = ["DRAFT", "APPROVED", "PAID", "CANCELLED"] as const;
+
+const fnfLineSchema = new Schema(
+  {
+    code: { type: String, required: true },
+    label: { type: String, required: true },
+    amount: { type: Schema.Types.Decimal128, required: true },
+    note: { type: String, default: "" },
+    manual: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+/** Full and final settlement of a leaving employee: last salary, encashment, gratuity, recoveries. */
+export const FnfSettlement = defineHrModel(
+  "FnfSettlement",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      settlementNumber: { type: String, required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      separationType: { type: String, enum: SEPARATION_TYPES, required: true },
+      resignationDate: { type: Date, default: null },
+      lastWorkingDay: { type: Date, required: true },
+      exitReason: { type: String, trim: true, default: "" },
+      noticeDays: { type: Number, default: 0, min: 0 },
+      noticeServedDays: { type: Number, default: 0 },
+      noticeShortfallDays: { type: Number, default: 0 },
+      noticeTreatment: { type: String, enum: NOTICE_TREATMENTS, default: "RECOVER" },
+      /** First month whose salary the settlement pays (the month after the last approved payroll). */
+      salaryFromYear: { type: Number, required: true },
+      salaryFromMonth: { type: Number, required: true },
+      gratuity: {
+        eligible: { type: Boolean, default: false },
+        completedYears: { type: Number, default: 0 },
+        service: { type: String, default: "" },
+        basic: money,
+        amount: money,
+      },
+      leaveEncashment: { days: { type: Number, default: 0 }, ratePerDay: money },
+      earnings: { type: [fnfLineSchema], default: [] },
+      deductions: { type: [fnfLineSchema], default: [] },
+      /** Lines HR adds by hand (kind EARNING / DEDUCTION); kept across recalculations. */
+      manualLines: {
+        type: [new Schema({ kind: { type: String, enum: ["EARNING", "DEDUCTION"], required: true }, label: { type: String, required: true }, amount: { type: Schema.Types.Decimal128, required: true } }, { _id: false })],
+        default: [],
+      },
+      totalEarnings: money,
+      totalDeductions: money,
+      netPayable: money,
+      loanRecoveries: { type: [new Schema({ loanId: { type: Schema.Types.ObjectId, ref: "EmployeeLoan" }, amount: Schema.Types.Decimal128 }, { _id: false })], default: [] },
+      arrearIds: { type: [Schema.Types.ObjectId], ref: "PayrollArrear", default: [] },
+      assetsPending: { type: [new Schema({ assetTag: String, name: String }, { _id: false })], default: [] },
+      status: { type: String, enum: FNF_STATUSES, default: "DRAFT" },
+      approvedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      approvedAt: { type: Date, default: null },
+      paidAt: { type: Date, default: null },
+      paymentReference: { type: String, trim: true, default: "" },
+      cancelReason: { type: String, trim: true, default: "" },
+      notes: { type: String, trim: true, default: "" },
+      createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  )
+    .index({ businessId: 1, settlementNumber: 1 }, { unique: true })
+    .index({ businessId: 1, employeeId: 1 }, { unique: true, partialFilterExpression: { status: { $in: ["DRAFT", "APPROVED", "PAID"] } } })
+    .index({ businessId: 1, status: 1, createdAt: -1 })
 );
 
 /* ------------------------------------------------------------------ */
@@ -707,6 +781,8 @@ const employeeLoanSchema = new Schema(
             year: Number,
             amount: { type: Schema.Types.Decimal128, required: true },
             note: { type: String, default: "" },
+            /** Recovered in a full & final settlement instead of payroll. */
+            fnfSettlementId: { type: Schema.Types.ObjectId, ref: "FnfSettlement", default: null },
             at: { type: Date, default: () => new Date() },
           },
           { _id: false }

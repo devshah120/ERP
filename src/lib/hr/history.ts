@@ -373,6 +373,13 @@ export async function recordFormWrite(ctx: AuthContext, kind: "CREATE" | "UPDATE
 /* Payroll                                                             */
 /* ------------------------------------------------------------------ */
 
+/** The tracked values (salary and placement) in effect on a day; the employee record when there is no history. */
+export async function stateOn(businessId: Types.ObjectId, emp: AnyDoc, date: Date, session?: ClientSession): Promise<Values> {
+  const changes = await loadChanges(businessId, emp._id, session);
+  const c = changeAsOf(changes, date) ?? changes[0];
+  return snapshotOf(c ? c.values : emp);
+}
+
 export interface MonthStructure {
   basic: Decimal;
   hra: Decimal;

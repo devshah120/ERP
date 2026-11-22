@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
 import Modal from "@/components/ui/Modal";
@@ -65,6 +66,7 @@ function MyWorkspace() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
+  const { me: account, hasPermission } = useAuth();
   const initial = (params.get("tab") as Tab) || "overview";
   const [tab, setTabState] = useState<Tab>(TABS.some(([k]) => k === initial) ? initial : "overview");
   const [me, setMe] = useState<Me | null>(null);
@@ -125,7 +127,24 @@ function MyWorkspace() {
     return (
       <>
         <PageHeader title="My workspace" />
-        <EmptyState title="No employee profile linked to your login" description="Ask HR to open your employee record and choose “Give portal access” with this email." />
+        {hasPermission("hr-employees.edit") ? (
+          <EmptyState
+            title="Your login isn't linked to an employee record"
+            description={`My Workspace is the employee self-service view. To use it yourself, add yourself as an employee, open your profile and choose “Give portal access” with ${account?.email ?? "your sign-in email"}.`}
+            actions={
+              <>
+                <Link href="/hr/dashboard" className="button buttonSecondary">
+                  HR dashboard
+                </Link>
+                <Link href="/hr/employees" className="button buttonPrimary">
+                  Employees
+                </Link>
+              </>
+            }
+          />
+        ) : (
+          <EmptyState title="No employee profile linked to your login" description="Ask HR to open your employee record and choose “Give portal access” with this email." />
+        )}
       </>
     );
   }

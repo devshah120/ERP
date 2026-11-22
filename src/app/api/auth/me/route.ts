@@ -6,6 +6,7 @@ import { User } from "@/models/User";
 import { Role } from "@/models/Role";
 import { Business } from "@/models/Business";
 import { FinancialYear } from "@/models/FinancialYear";
+import { Employee } from "@/models/hr";
 import { AppError } from "@/lib/errors/AppError";
 import "@/models";
 
@@ -17,11 +18,15 @@ import "@/models";
 export const GET = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
 
-  const [user, role, business, financialYear] = await Promise.all([
+  const [user, role, business, financialYear, employee] = await Promise.all([
     User.findOne({ _id: ctx.userId, businessId: ctx.businessId }).lean(),
     Role.findOne({ _id: ctx.roleId, businessId: ctx.businessId }).lean(),
     Business.findById(ctx.businessId).lean(),
     FinancialYear.findOne({ businessId: ctx.businessId, isCurrent: true }).lean(),
+    // The employee record linked to this login, which is what self-service screens show.
+    ctx.products.includes("HRMS")
+      ? Employee.findOne({ businessId: ctx.businessId, userId: ctx.userId, deletedAt: null }, { _id: 1 }).lean<{ _id: unknown }>()
+      : Promise.resolve(null),
   ]);
 
   if (!user) throw AppError.notFound("User not found");
@@ -34,6 +39,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
     role: role ? { id: role._id.toString(), name: role.name } : null,
     permissions: ctx.permissions,
     products: ctx.products,
+    employeeId: employee ? String(employee._id) : null,
     business: business
       ? {
           name: business.tradeName,

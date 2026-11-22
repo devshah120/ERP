@@ -80,11 +80,11 @@ export function grants(permissions: readonly string[], products: readonly Produc
  * dashboard; HRMS-only workspaces open on the HR dashboard; an employee whose
  * role only covers self-service opens on their own workspace.
  */
-export function homePathFor(permissions: readonly string[], products: readonly Product[]): string {
+export function homePathFor(permissions: readonly string[], products: readonly Product[], linkedToEmployee = true): string {
   const can = (p: string) => grants(permissions, products, p);
   if (products.includes("ERP") && (can("analytics.view") || !products.includes("HRMS"))) return "/dashboard";
   if (can("hr-dashboard.view")) return "/hr/dashboard";
-  if (can("hr-self.view")) return "/hr/me";
+  if (can("hr-self.view") && linkedToEmployee) return "/hr/me";
   if (products.includes("ERP")) return "/dashboard";
   return "/hr/me";
 }

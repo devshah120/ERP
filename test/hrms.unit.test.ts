@@ -44,6 +44,8 @@ describe("product gating", () => {
     expect(homePathFor(["*"], ["ERP", "HRMS"])).toBe("/dashboard");
     expect(homePathFor(["hr-self.view"], ["HRMS"])).toBe("/hr/me");
     expect(homePathFor(["hr-self.view"], ["ERP", "HRMS"])).toBe("/hr/me");
+    // An HR owner whose login is not an employee lands on the HR dashboard, never an empty self-service page.
+    expect(homePathFor(["*"], ["HRMS"], false)).toBe("/hr/dashboard");
   });
 });
 

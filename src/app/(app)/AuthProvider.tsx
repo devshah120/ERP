@@ -14,6 +14,8 @@ export interface Me {
   permissions: string[];
   /** Products the workspace has bought (ERP, HRMS). */
   products: Product[];
+  /** Employee record linked to this login (self-service), if any. */
+  employeeId: string | null;
   business: {
     name: string;
     currency: string;
@@ -99,12 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canReach = useCallback(
     (href: string) => {
       if (!me) return false;
+      // Self-service shows the signed-in person's own employee record; without one there is nothing to show.
+      if ((href === "/hr/me" || href.startsWith("/hr/me/")) && !me.employeeId) return false;
       const product = productForHref(href);
       return product === null || me.products.includes(product);
     },
     [me]
   );
-  const homePath = me ? homePathFor(me.permissions, me.products) : "/dashboard";
+  const homePath = me ? homePathFor(me.permissions, me.products, Boolean(me.employeeId)) : "/dashboard";
 
   return (
     <AuthContext.Provider value={{ me, loading, hasPermission, hasProduct, canReach, homePath, refresh: load }}>{children}</AuthContext.Provider>

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { getEnv } from "@/lib/config/env";
 import { signSAToken } from "@/lib/auth/superAdminTokens";
 import { setSACookie } from "@/lib/auth/superAdminContext";
+import { verifySuperAdminCredentials } from "@/lib/auth/superAdminCredentials";
+import { getRequestMeta } from "@/lib/http/requestMeta";
+import { enforceRateLimit } from "@/lib/http/rateLimit";
+import { AppError } from "@/lib/errors/AppError";
 import { fail } from "@/lib/http/response";
 
 const schema = z.object({
@@ -13,41 +15,22 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const meta = getRequestMeta(req);
+    enforceRateLimit(`sa-login:${meta.ip ?? "unknown"}`, 10, 60_000);
+
     const { email, password } = schema.parse(await req.json());
-    const env = getEnv();
-
-    const saEmail = env.SUPERADMIN_EMAIL ?? "superadmin@nexora.in";
-    const emailMatch = email.trim().toLowerCase() === saEmail.toLowerCase();
-
-    const saPlain = env.SUPERADMIN_PASSWORD ?? process.env.SUPERADMIN_PASSWORD;
-    const saHash = env.SUPERADMIN_PASSWORD_HASH ?? process.env.SUPERADMIN_PASSWORD_HASH;
-
-    let passwordMatch = false;
-    if (saPlain && password === saPlain) {
-      passwordMatch = true;
-    } else if (saHash) {
-      try {
-        passwordMatch = await bcrypt.compare(password, saHash);
-      } catch {
-        passwordMatch = false;
-      }
-    }
-
-    // Default development fallback
-    if (!passwordMatch && password === "Admin@12345") {
-      passwordMatch = true;
-    }
-
-    if (!emailMatch || !passwordMatch) {
+    if (!(await verifySuperAdminCredentials(email, password))) {
       return fail("Invalid email or password.", 401, "SA_INVALID_CREDENTIALS");
     }
 
     const token = signSAToken();
-    const res = NextResponse.json({ success: true, data: { email: saEmail } }, { status: 200 });
+    const res = NextResponse.json({ success: true, data: { email: email.trim().toLowerCase() } }, { status: 200 });
     setSACookie(res, token);
     return res;
-  } catch {
+  } catch (err) {
+    if (err instanceof AppError && err.statusCode === 429) {
+      return fail("Too many sign-in attempts. Try again in a minute.", 429, "RATE_LIMITED");
+    }
     return fail("Invalid request.", 400, "BAD_REQUEST");
   }
 }
-

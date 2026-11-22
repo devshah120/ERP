@@ -73,7 +73,19 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "People & Payroll",
     groups: [
       { key: "hr-dashboard", label: "HR Dashboard", icon: IconDashboard, href: "/hr/dashboard", keywords: "hrms people overview headcount" },
-      { key: "hr-me", label: "My Workspace", icon: IconUser, href: "/hr/me", keywords: "self service my attendance my leave my payslip punch in check in ess" },
+      {
+        key: "hr-me",
+        label: "My Workspace",
+        keywords: "self service ess",
+        icon: IconUser,
+        children: [
+          { href: "/hr/me", label: "Overview", enabled: true, keywords: "punch in check in check out today announcements holidays my details" },
+          { href: "/hr/me/attendance", label: "My Attendance", enabled: true, keywords: "my attendance calendar present absent late" },
+          { href: "/hr/me/leave", label: "My Leave", enabled: true, keywords: "apply leave time off my leave balance" },
+          { href: "/hr/me/payslips", label: "My Payslips", enabled: true, keywords: "salary slip payslip download" },
+          { href: "/hr/me/claims", label: "My Claims", enabled: true, keywords: "expense claim reimbursement bills" },
+        ],
+      },
       {
         key: "hr-people",
         label: "Employees",
@@ -547,6 +559,10 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   // HRMS
   "/hr/dashboard": "hr-dashboard.view",
   "/hr/me": "hr-self.view",
+  "/hr/me/attendance": "hr-self.view",
+  "/hr/me/leave": "hr-self.view",
+  "/hr/me/payslips": "hr-self.view",
+  "/hr/me/claims": "hr-self.view",
   "/hr/employees": "hr-employees.view",
   "/hr-employees": "hr-employees.view",
   "/hr-departments": "hr-departments.view",

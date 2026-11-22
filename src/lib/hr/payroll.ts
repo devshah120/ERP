@@ -10,7 +10,7 @@ import { serializeDoc } from "@/lib/resources/serialize";
 import { amountInWords } from "@/lib/documents/numberToWords";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring } from "./calendar";
-import { summarizeMonth, type AttendanceRow } from "./attendance";
+import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { nextHrNumber, employeeLabels, selfEmployee, monthQuery, type AnyDoc } from "./common";
 
@@ -18,6 +18,10 @@ export const createRunSchema = monthQuery.extend({ notes: z.string().trim().max(
 export const payRunSchema = z.object({
   paidOn: z.string().trim().optional(),
   reference: z.string().trim().max(100).optional().default(""),
+});
+export const approveRunSchema = z.object({
+  /** Approve even though some working days have no attendance, paying them as present. Recorded in the audit log. */
+  payUnmarkedAsPresent: z.boolean().optional().default(false),
 });
 export const cancelRunSchema = z.object({ reason: z.string().trim().min(3, "Give a reason").max(500) });
 
@@ -34,6 +38,35 @@ async function loadRun(ctx: AuthContext, id: string) {
   return run;
 }
 
+/** Each employee's attendance rows for the month, keyed by day — the same input the register and payroll read. */
+async function monthAttendance(businessId: Types.ObjectId, ids: Types.ObjectId[], start: Date, end: Date, session?: ClientSession) {
+  const query = Attendance.find({ businessId, employeeId: { $in: ids }, date: { $gte: start, $lte: end } });
+  const rows = await (session ? query.session(session) : query).lean<AnyDoc[]>();
+  const by = new Map<string, Map<string, AttendanceRow>>();
+  for (const a of rows) {
+    const k = String(a.employeeId);
+    if (!by.has(k)) by.set(k, new Map());
+    by.get(k)!.set(dayKey(toDay(a.date)), a);
+  }
+  return by;
+}
+
+/** Live month summary for every employee on the rolls, keyed by employee id. */
+async function liveSummaries(businessId: Types.ObjectId, year: number, month: number) {
+  const { start, end } = monthRange(year, month);
+  const days = eachDay(start, end);
+  const emps = await employeesDuring(businessId, start, end);
+  const [cal, attendanceBy] = await Promise.all([
+    loadCalendar(businessId, start, end),
+    monthAttendance(businessId, emps.map((e) => e._id), start, end),
+  ]);
+  const out = new Map<string, { emp: AnyDoc; summary: MonthSummary }>();
+  for (const e of emps) {
+    out.set(String(e._id), { emp: e, summary: summarizeMonth(e, cal, days, attendanceBy.get(String(e._id)) ?? new Map()).summary });
+  }
+  return out;
+}
+
 /**
  * Builds every payslip for a run inside the caller's transaction: who was on
  * the rolls that month, their attendance (loss-of-pay days), salary
@@ -46,9 +79,9 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
   if (emps.length === 0) throw AppError.badRequest(`No employees were on the rolls in ${monthLabel(run.month, run.year)}.`, "NO_EMPLOYEES");
   const ids = emps.map((e) => e._id);
 
-  const [cal, attendance, loans, claims, labels] = await Promise.all([
+  const [cal, attendanceBy, loans, claims, labels] = await Promise.all([
     loadCalendar(ctx.businessId, start, end),
-    Attendance.find({ businessId: ctx.businessId, employeeId: { $in: ids }, date: { $gte: start, $lte: end } }).session(session).lean<AnyDoc[]>(),
+    monthAttendance(ctx.businessId, ids, start, end, session),
     EmployeeLoan.find({
       businessId: ctx.businessId,
       employeeId: { $in: ids },
@@ -61,13 +94,6 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
     ExpenseClaim.find({ businessId: ctx.businessId, employeeId: { $in: ids }, status: "APPROVED", payrollRunId: null, claimDate: { $lte: end } }).session(session).lean<AnyDoc[]>(),
     employeeLabels(ctx.businessId, ids),
   ]);
-
-  const attendanceBy = new Map<string, Map<string, AttendanceRow>>();
-  for (const a of attendance) {
-    const k = String(a.employeeId);
-    if (!attendanceBy.has(k)) attendanceBy.set(k, new Map());
-    attendanceBy.get(k)!.set(dayKey(toDay(a.date)), a);
-  }
 
   let totalGross = new Decimal(0);
   let totalReimb = new Decimal(0);
@@ -136,6 +162,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       paidLeaveDays: summary.paidLeave,
       holidays: summary.holidays,
       weeklyOffs: summary.weeklyOffs,
+      unmarkedDays: summary.unmarked,
       earnings: result.earnings.map(line),
       deductions: result.deductions.map(line),
       employerContributions: result.employerContributions.map(line),
@@ -217,11 +244,12 @@ export async function recomputeRun(ctx: AuthContext, id: string) {
  * reimbursed claims are marked paid, all in one transaction. From here the
  * month's attendance and leave are frozen.
  */
-export async function approveRun(ctx: AuthContext, id: string) {
+export async function approveRun(ctx: AuthContext, id: string, input: { payUnmarkedAsPresent?: boolean } = {}) {
   const run = await loadRun(ctx, id);
   if (run.status !== "DRAFT") throw AppError.badRequest(`This payroll is already ${run.status.toLowerCase()}`, "PAYROLL_NOT_DRAFT");
   const slips = await Payslip.find({ businessId: ctx.businessId, payrollRunId: run._id }).lean<AnyDoc[]>();
   if (slips.length === 0) throw AppError.badRequest("This payroll has no payslips", "PAYROLL_EMPTY");
+  const { unmarkedDays, unmarkedEmployees } = await assertAttendanceSettled(ctx, run, slips, input.payUnmarkedAsPresent === true);
 
   const session = await mongoose.startSession();
   try {
@@ -246,14 +274,59 @@ export async function approveRun(ctx: AuthContext, id: string) {
         }
       }
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "APPROVED" }, { session });
-      run.set({ status: "APPROVED", approvedByUserId: ctx.userId, approvedAt: new Date(), updatedBy: ctx.userId });
+      run.set({ status: "APPROVED", approvedByUserId: ctx.userId, approvedAt: new Date(), unmarkedDaysPaid: unmarkedDays, updatedBy: ctx.userId });
       await run.save({ session });
     });
   } finally {
     await session.endSession();
   }
-  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.payroll", documentType: "PayrollRun", documentId: run._id, newValue: { status: "APPROVED" } });
-  return { id, status: "APPROVED" };
+  await recordAudit({
+    businessId: ctx.businessId,
+    userId: ctx.userId,
+    action: "UPDATE",
+    module: "hr.payroll",
+    documentType: "PayrollRun",
+    documentId: run._id,
+    newValue: { status: "APPROVED", ...(unmarkedDays > 0 ? { unmarkedDaysPaidAsPresent: unmarkedDays, unmarkedEmployees } : {}) },
+    ...(unmarkedDays > 0 ? { reason: `Approved with ${unmarkedDays} unmarked working day(s) for ${unmarkedEmployees} employee(s) paid as present` } : {}),
+  });
+  return { id, status: "APPROVED", unmarkedDaysPaid: unmarkedDays };
+}
+
+/**
+ * Re-reads the month's attendance before approval. Refuses when the payslips
+ * no longer match it (attendance, leave or the employee list changed after the
+ * draft was calculated), and refuses unmarked working days unless the
+ * approver explicitly chose to pay them as present.
+ */
+async function assertAttendanceSettled(ctx: AuthContext, run: AnyDoc, slips: AnyDoc[], payUnmarkedAsPresent: boolean) {
+  const live = await liveSummaries(ctx.businessId, run.year, run.month);
+  const slipBy = new Map(slips.map((s) => [String(s.employeeId), s]));
+
+  const changed: string[] = [];
+  for (const [key, { emp, summary }] of live) {
+    const slip = slipBy.get(key);
+    // Payslips made before unmarked days were stored have no count to compare; their LOP days still are.
+    if (!slip || slip.lopDays !== summary.lopDays || (slip.unmarkedDays !== undefined && slip.unmarkedDays !== summary.unmarked)) {
+      changed.push(emp.name);
+    }
+  }
+  for (const s of slips) if (!live.has(String(s.employeeId))) changed.push(s.employee?.name ?? "an employee");
+  if (changed.length > 0) {
+    const names = `${changed.slice(0, 5).join(", ")}${changed.length > 5 ? "…" : ""}`;
+    throw new AppError(`Attendance changed after this payroll was calculated (${names}). Recalculate it before approving.`, 409, "PAYROLL_STALE", changed);
+  }
+
+  const unmarked = [...live.values()].filter(({ summary }) => summary.unmarked > 0);
+  const unmarkedDays = unmarked.reduce((t, { summary }) => t + summary.unmarked, 0);
+  if (unmarkedDays > 0 && !payUnmarkedAsPresent) {
+    throw AppError.badRequest(
+      `${unmarkedDays} working day(s) for ${unmarked.length} employee(s) have no attendance in ${monthLabel(run.month, run.year)}. Mark attendance and recalculate, or approve paying those days as present.`,
+      "UNMARKED_ATTENDANCE",
+      unmarked.map(({ emp, summary }) => ({ id: String(emp._id), code: emp.employeeCode, name: emp.name, days: summary.unmarked }))
+    );
+  }
+  return { unmarkedDays, unmarkedEmployees: unmarked.length };
 }
 
 export async function markRunPaid(ctx: AuthContext, id: string, input: z.infer<typeof payRunSchema>) {
@@ -343,6 +416,7 @@ function runRow(r: AnyDoc) {
     approvedAt: r.approvedAt,
     paidAt: r.paidAt,
     paymentReference: r.paymentReference,
+    unmarkedDaysPaid: r.unmarkedDaysPaid ?? 0,
     cancelReason: r.cancelReason,
     notes: r.notes,
     createdAt: r.createdAt,
@@ -377,6 +451,7 @@ function slipRow(s: AnyDoc) {
     paidLeaveDays: s.paidLeaveDays,
     holidays: s.holidays,
     weeklyOffs: s.weeklyOffs,
+    unmarkedDays: s.unmarkedDays ?? 0,
     earnings: lines(s.earnings),
     deductions: lines(s.deductions),
     employerContributions: lines(s.employerContributions),
@@ -429,10 +504,12 @@ export async function employeePayslips(ctx: AuthContext, employeeId: Types.Objec
   return slips.map((s) => ({ id: String(s._id), payrollRunId: String(s.payrollRunId), period: monthLabel(s.month, s.year), netPay: d(s.netPay).toFixed(2), status: s.status }));
 }
 
-/** Employees missing what payroll needs (no salary, no bank details), shown before running payroll. */
+/** What would make a month's payroll wrong — no salary, no bank details, pending leave, unmarked attendance — shown before running it. */
 export async function payrollReadiness(ctx: AuthContext, year: number, month: number) {
   const { start, end } = monthRange(year, month);
-  const emps = await employeesDuring(ctx.businessId, start, end);
+  const live = await liveSummaries(ctx.businessId, year, month);
+  const emps = [...live.values()].map((v) => v.emp);
+  const unmarked = [...live.values()].filter(({ summary }) => summary.unmarked > 0);
   const noSalary = emps.filter((e) => d(e.basic).plus(d(e.hra)).plus(d(e.specialAllowance)).plus(d(e.conveyance)).plus(d(e.otherAllowance)).lte(0));
   const noBank = emps.filter((e) => (e.salaryPaymentMode ?? "BANK") === "BANK" && (!e.bankAccountNumber || !e.ifscCode));
   const pendingLeaves = await mongoose.model("LeaveApplication").countDocuments({ businessId: ctx.businessId, status: "PENDING", fromDate: { $lte: end }, toDate: { $gte: start } });
@@ -441,6 +518,8 @@ export async function payrollReadiness(ctx: AuthContext, year: number, month: nu
     noSalary: noSalary.map((e) => ({ id: String(e._id), code: e.employeeCode, name: e.name })),
     noBank: noBank.map((e) => ({ id: String(e._id), code: e.employeeCode, name: e.name })),
     pendingLeaves,
+    unmarked: unmarked.map(({ emp, summary }) => ({ id: String(emp._id), code: emp.employeeCode, name: emp.name, days: summary.unmarked })),
+    unmarkedDays: unmarked.reduce((t, { summary }) => t + summary.unmarked, 0),
     totalEmployees: await Employee.countDocuments({ businessId: ctx.businessId, deletedAt: null }),
   };
 }

@@ -177,7 +177,7 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     const view = await getRun(ctx, runId);
     const asha = view.payslips.find((s) => s.employeeId === String(emp.asha))!;
-    // 31 days, 2 lost (1 unpaid leave + 1 absent): basic 15000 × 29/31 = 14032.26, HRA 5000 × 29/31 = 4677.42.
+    // 31 days, 2 lost (1 unpaid leave + 1 absent): basic 15000 Ã— 29/31 = 14032.26, HRA 5000 Ã— 29/31 = 4677.42.
     expect(asha.lopDays).toBe(2);
     expect(asha.payableDays).toBe(29);
     expect(asha.grossEarnings).toBe("18709.68");
@@ -191,11 +191,23 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
   });
 
   it("approving locks the month and records recoveries; cancelling reverses them", async () => {
-    const { approveRun, cancelRun } = await import("@/lib/hr/payroll");
+    const { approveRun, cancelRun, recomputeRun, payrollReadiness } = await import("@/lib/hr/payroll");
     const { saveDailySheet } = await import("@/lib/hr/attendance");
-    const { EmployeeLoan, ExpenseClaim } = await import("@/models/hr");
+    const { EmployeeLoan, ExpenseClaim, PayrollRun } = await import("@/models/hr");
 
-    await approveRun(ctx, runId);
+    // Most of October has no attendance, so approval waits for an explicit decision.
+    await expect(approveRun(ctx, runId)).rejects.toMatchObject({ code: "UNMARKED_ATTENDANCE", statusCode: 400 });
+
+    // Attendance marked after the draft was calculated: the payslips are stale until recalculated.
+    await saveDailySheet(ctx, { date: "2026-10-12", rows: [{ employeeId: String(emp.asha), status: "PRESENT", checkIn: "", checkOut: "", notes: "" }] });
+    await expect(approveRun(ctx, runId, { payUnmarkedAsPresent: true })).rejects.toMatchObject({ code: "PAYROLL_STALE", statusCode: 409 });
+    await recomputeRun(ctx, runId);
+
+    const ready = await payrollReadiness(ctx, 2026, 10);
+    expect(ready.unmarked.map((u) => u.name).sort()).toEqual(["Asha Rao", "Ravi Kumar"].sort());
+    const approved = await approveRun(ctx, runId, { payUnmarkedAsPresent: true });
+    expect(approved.unmarkedDaysPaid).toBe(ready.unmarkedDays);
+    expect((await PayrollRun.findById(runId).lean<{ unmarkedDaysPaid: number }>())?.unmarkedDaysPaid).toBe(ready.unmarkedDays);
     const loan = await EmployeeLoan.findOne({ businessId, employeeId: emp.asha }).lean<{ repaidAmount: unknown; status: string }>();
     expect(String(loan?.repaidAmount)).toBe("1000.00");
     expect((await ExpenseClaim.findOne({ businessId, employeeId: emp.asha }).lean<{ status: string }>())?.status).toBe("REIMBURSED");
@@ -223,7 +235,7 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     // Draft payslips are not visible to employees yet.
     await expect(getPayslip(self, String(raviSlip!._id), { self: true })).rejects.toMatchObject({ statusCode: 404 });
-    await approveRun(ctx, run.id);
+    await approveRun(ctx, run.id, { payUnmarkedAsPresent: true });
 
     const mine = await getPayslip(self, String(raviSlip!._id), { self: true });
     expect(mine.employee).toMatchObject({ name: "Ravi Kumar" });

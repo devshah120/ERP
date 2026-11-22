@@ -374,6 +374,8 @@ const payrollRunSchema = new Schema(
     approvedAt: { type: Date, default: null },
     paidAt: { type: Date, default: null },
     paymentReference: { type: String, trim: true, default: "" },
+    /** Working days with no attendance that the approver chose to pay as present (0 when every day was marked). */
+    unmarkedDaysPaid: { type: Number, default: 0 },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
@@ -427,6 +429,8 @@ const payslipSchema = new Schema(
     paidLeaveDays: { type: Number, default: 0 },
     holidays: { type: Number, default: 0 },
     weeklyOffs: { type: Number, default: 0 },
+    /** Working days with no attendance recorded; paid as present and included in presentDays. */
+    unmarkedDays: { type: Number, default: 0 },
     earnings: { type: [payLineSchema], default: [] },
     deductions: { type: [payLineSchema], default: [] },
     employerContributions: { type: [payLineSchema], default: [] },

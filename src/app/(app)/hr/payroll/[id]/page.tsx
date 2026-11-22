@@ -30,6 +30,8 @@ interface Slip {
   daysInMonth: number;
   payableDays: number;
   lopDays: number;
+  /** Working days with no attendance, paid as present. */
+  unmarkedDays?: number;
   earnings: Line[];
   deductions: Line[];
   grossEarnings: string;
@@ -55,6 +57,8 @@ interface RunView {
     approvedAt: string | null;
     paidAt: string | null;
     paymentReference: string;
+    /** Unmarked working days the approver chose to pay as present. */
+    unmarkedDaysPaid?: number;
     cancelReason: string;
   };
   payslips: Slip[];
@@ -72,6 +76,7 @@ export default function PayrollRunPage() {
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<"approve" | "cancel" | "pay" | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [payUnmarked, setPayUnmarked] = useState(false);
   const [pay, setPay] = useState({ paidOn: todayKey(), reference: "" });
   const [query, setQuery] = useState("");
 
@@ -124,6 +129,8 @@ export default function PayrollRunPage() {
   const canProcess = hasPermission("hr-payroll.process");
   const canApprove = hasPermission("hr-payroll.approve");
   const reportParams = { year: run.year, month: run.month };
+  const unmarkedSlips = data.payslips.filter((s) => (s.unmarkedDays ?? 0) > 0);
+  const unmarkedTotal = unmarkedSlips.reduce((t, s) => t + (s.unmarkedDays ?? 0), 0);
 
   return (
     <>
@@ -157,7 +164,7 @@ export default function PayrollRunPage() {
               </button>
             )}
             {run.status === "DRAFT" && canApprove && (
-              <button type="button" className="button buttonPrimary" onClick={() => (setDialogError(null), setDialog("approve"))} disabled={busy}>
+              <button type="button" className="button buttonPrimary" onClick={() => (setDialogError(null), setPayUnmarked(false), setDialog("approve"))} disabled={busy}>
                 <IconCheck /> Approve
               </button>
             )}
@@ -186,6 +193,22 @@ export default function PayrollRunPage() {
       {run.status === "DRAFT" && (
         <div className="banner bannerInfo" style={{ marginBottom: "0.75rem" }}>
           <span>This is a draft. Changed attendance, leave or salaries? Recalculate. Approving locks the month and records loan recoveries and claim reimbursements.</span>
+        </div>
+      )}
+      {run.status === "DRAFT" && unmarkedTotal > 0 && (
+        <div className="banner bannerWarning" style={{ marginBottom: "0.75rem" }}>
+          <span>
+            {unmarkedTotal} working day(s) for {unmarkedSlips.length} employee(s) have no attendance and are paid as present.{" "}
+            <Link href="/hr/attendance/register" className="textLink">
+              Mark them in the register
+            </Link>{" "}
+            and recalculate, or confirm paying them when you approve.
+          </span>
+        </div>
+      )}
+      {(run.status === "APPROVED" || run.status === "PAID") && (run.unmarkedDaysPaid ?? 0) > 0 && (
+        <div className="banner bannerInfo" style={{ marginBottom: "0.75rem" }}>
+          <span>Approved with {run.unmarkedDaysPaid} unmarked working day(s) paid as present.</span>
         </div>
       )}
 
@@ -232,6 +255,11 @@ export default function PayrollRunPage() {
                 </td>
                 <td className="numCell">
                   {s.payableDays}/{s.daysInMonth}
+                  {(s.unmarkedDays ?? 0) > 0 && (
+                    <div className="hrMuted" style={{ color: "var(--warning)" }} title="Working days with no attendance, paid as present">
+                      {s.unmarkedDays} unmarked
+                    </div>
+                  )}
                 </td>
                 <td className="numCell" style={s.lopDays ? { color: "var(--danger)" } : undefined}>
                   {s.lopDays || "—"}
@@ -253,7 +281,48 @@ export default function PayrollRunPage() {
         </table>
       </div>
 
-      {dialog === "approve" && (
+      {dialog === "approve" && unmarkedTotal > 0 && (
+        <Modal
+          title={`Approve payroll for ${run.period}?`}
+          subtitle={`Net pay ${formatMoney(run.totalNet)} for ${run.employeeCount} employee(s).`}
+          onClose={() => setDialog(null)}
+          busy={busy}
+          footer={
+            <>
+              <button type="button" className="button buttonSecondary" onClick={() => setDialog(null)} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="button buttonPrimary" onClick={() => act("approve", { payUnmarkedAsPresent: true })} disabled={busy || !payUnmarked}>
+                {busy && <span className="spinner" />} Approve payroll
+              </button>
+            </>
+          }
+        >
+          {dialogError && (
+            <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
+              <span>{dialogError}</span>
+            </div>
+          )}
+          <div className="banner bannerWarning" style={{ marginBottom: "0.75rem" }}>
+            <span>
+              {unmarkedTotal} working day(s) have no attendance:{" "}
+              {unmarkedSlips
+                .slice(0, 6)
+                .map((s) => `${s.employee.name} (${s.unmarkedDays})`)
+                .join(", ")}
+              {unmarkedSlips.length > 6 ? "…" : ""}.
+            </span>
+          </div>
+          <p style={{ marginTop: 0 }}>
+            Attendance and leave for the month are locked, loan instalments are recorded and approved claims are marked reimbursed. Employees can then see their payslips.
+          </p>
+          <label className="checkboxRow">
+            <input type="checkbox" checked={payUnmarked} onChange={(e) => setPayUnmarked(e.target.checked)} />
+            Pay these {unmarkedTotal} unmarked day(s) as present. This is recorded in the audit log.
+          </label>
+        </Modal>
+      )}
+      {dialog === "approve" && unmarkedTotal === 0 && (
         <ConfirmDialog
           title={`Approve payroll for ${run.period}?`}
           message={`Net pay ${formatMoney(run.totalNet)} for ${run.employeeCount} employee(s). Attendance and leave for the month are locked, loan instalments are recorded and approved claims are marked reimbursed. Employees can then see their payslips.`}

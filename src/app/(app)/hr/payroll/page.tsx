@@ -35,6 +35,9 @@ interface Readiness {
   noSalary: { id: string; code: string; name: string }[];
   noBank: { id: string; code: string; name: string }[];
   pendingLeaves: number;
+  /** Employees with working days that have no attendance; payroll pays those days as present. */
+  unmarked: { id: string; code: string; name: string; days: number }[];
+  unmarkedDays: number;
 }
 
 function lastMonth() {
@@ -275,7 +278,23 @@ export default function PayrollRunsPage() {
                   </span>
                 </div>
               )}
-              {readiness.noSalary.length === 0 && readiness.noBank.length === 0 && readiness.pendingLeaves === 0 && readiness.employees > 0 && (
+              {readiness.unmarkedDays > 0 && (
+                <div className="banner bannerWarning" style={{ marginBottom: "0.5rem" }}>
+                  <IconWarning />
+                  <span>
+                    {readiness.unmarkedDays} working day(s) have no attendance for {readiness.unmarked.length} employee(s):{" "}
+                    {readiness.unmarked
+                      .slice(0, 5)
+                      .map((e) => `${e.name} (${e.days})`)
+                      .join(", ")}
+                    {readiness.unmarked.length > 5 ? "…" : ""}. Unmarked days are paid as present, and approving needs your confirmation.{" "}
+                    <Link href="/hr/attendance/register" className="textLink">
+                      Open the attendance register
+                    </Link>
+                  </span>
+                </div>
+              )}
+              {readiness.noSalary.length === 0 && readiness.noBank.length === 0 && readiness.pendingLeaves === 0 && readiness.unmarkedDays === 0 && readiness.employees > 0 && (
                 <div className="banner bannerSuccess">
                   <span>Everything looks ready.</span>
                 </div>

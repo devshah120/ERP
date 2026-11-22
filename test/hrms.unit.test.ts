@@ -187,3 +187,56 @@ describe("leave pro-rata", () => {
     expect(proratedQuota(12, 2026, null)).toBe(12);
   });
 });
+
+describe("salary slip PDF", () => {
+  const slip = {
+    period: "October 2026",
+    status: "APPROVED",
+    employee: { code: "EMP-000001", name: "Asha Rao", department: "Human Resources", designation: "Executive", dateOfJoining: "2026-09-01", panNumber: "ABCDE1234F", uanNumber: "100200300400", bankName: "HDFC Bank", bankAccountNumber: "50100012345678", paymentMode: "BANK" },
+    daysInMonth: 31,
+    payableDays: 29,
+    lopDays: 2,
+    presentDays: 26,
+    paidLeaveDays: 2,
+    holidays: 1,
+    weeklyOffs: 4,
+    earnings: [
+      { code: "BASIC", label: "Basic", amount: "14032.26" },
+      { code: "HRA", label: "House rent allowance", amount: "4677.42" },
+      { code: "REIMB", label: "Reimbursements", amount: "500.00" },
+    ],
+    deductions: [
+      { code: "PF", label: "Provident fund", amount: "1684.00" },
+      { code: "PT", label: "Professional tax", amount: "200.00" },
+      { code: "LOAN", label: "Loan / advance recovery", amount: "1000.00" },
+    ],
+    employerContributions: [{ code: "PF_ER", label: "Employer PF", amount: "1684.00" }],
+    grossEarnings: "18709.68",
+    reimbursements: "500.00",
+    totalDeductions: "2884.00",
+    netPay: "16325.68",
+    netPayInWords: "Rupees Sixteen Thousand Three Hundred Twenty Five and Sixty Eight Paise Only",
+    business: { name: "People First Pvt Ltd", tradeName: "People First", address: "12 MG Road, Pune, Maharashtra" },
+  };
+
+  it("formats amounts with Indian grouping from the decimal string", async () => {
+    const { inr } = await import("@/lib/hr/payslipPdf");
+    expect(inr("1234567.5")).toBe("12,34,567.50");
+    expect(inr("16325.68")).toBe("16,325.68");
+    expect(inr("999")).toBe("999.00");
+    expect(inr("0")).toBe("0.00");
+    expect(inr("-1500")).toBe("-1,500.00");
+    expect(inr("0.005")).toBe("0.01"); // half-up
+  });
+
+  it("renders one A4 page per payslip, drafts included", async () => {
+    const { PDFDocument } = await import("pdf-lib");
+    const { renderPayslipsPdf, pdfFilename } = await import("@/lib/hr/payslipPdf");
+    const bytes = await renderPayslipsPdf([slip, { ...slip, status: "DRAFT", employee: { ...slip.employee, name: "Ravi Kumar", bankAccountNumber: "" } }], "Payslips October 2026");
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(2);
+    expect(doc.getTitle()).toBe("Payslips October 2026");
+    expect(Math.round(doc.getPage(0).getWidth())).toBe(595);
+    expect(pdfFilename("Payslip", "EMP-000001", "October 2026")).toBe("Payslip-EMP-000001-October-2026.pdf");
+  });
+});

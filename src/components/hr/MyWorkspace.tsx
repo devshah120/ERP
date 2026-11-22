@@ -15,7 +15,7 @@ import ClaimForm from "@/components/hr/ClaimForm";
 import { dayLabel, type CorrectionRow } from "@/components/hr/CorrectionRequests";
 import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
-import { IconPlus, IconClock } from "@/components/icons";
+import { IconPlus, IconClock, IconDownload } from "@/components/icons";
 
 interface Me {
   employee: {
@@ -455,12 +455,13 @@ function MyPayslips() {
             <th className="numCell">Deductions</th>
             <th className="numCell">Net pay</th>
             <th>Status</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {rows && rows.length === 0 && (
             <tr>
-              <td colSpan={5}>
+              <td colSpan={6}>
                 <EmptyState title="No payslips yet" description="Payslips appear here once HR approves the month's payroll." />
               </td>
             </tr>
@@ -479,6 +480,11 @@ function MyPayslips() {
               </td>
               <td>
                 <StatusBadge status={r.status} />
+              </td>
+              <td style={{ textAlign: "right" }}>
+                <a href={`/api/hr/self/payslips/${r.id}/pdf`} className="button buttonGhost buttonSm" download title={`Download ${r.period} payslip as PDF`}>
+                  <IconDownload /> PDF
+                </a>
               </td>
             </tr>
           ))}

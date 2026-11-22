@@ -156,6 +156,9 @@ export default function PayrollRunPage() {
                 <a href={downloadHref("/api/hr/reports/bank-transfer", reportParams, "xlsx")} className="button buttonSecondary">
                   <IconDownload /> Bank sheet
                 </a>
+                <a href={`/api/hr/payroll/${run.id}/pdf`} className="button buttonSecondary" download title="Every payslip of this run in one PDF, one page each">
+                  <IconDownload /> All payslips (PDF)
+                </a>
               </>
             )}
             {run.status === "DRAFT" && canProcess && (

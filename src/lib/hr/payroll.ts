@@ -12,6 +12,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring } from "./calendar";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
+import type { PayslipPrintData } from "./payslipPdf";
 import { nextHrNumber, employeeLabels, selfEmployee, monthQuery, type AnyDoc } from "./common";
 
 export const createRunSchema = monthQuery.extend({ notes: z.string().trim().max(500).optional().default("") });
@@ -443,7 +444,7 @@ function slipRow(s: AnyDoc) {
     month: s.month,
     year: s.year,
     period: monthLabel(s.month, s.year),
-    employee: serializeDoc(s.employee),
+    employee: serializeDoc(s.employee) as PayslipPrintData["employee"],
     daysInMonth: s.daysInMonth,
     payableDays: s.payableDays,
     lopDays: s.lopDays,
@@ -481,11 +482,29 @@ export async function getPayslip(ctx: AuthContext, id: string, opts: { self: boo
     const emp = await selfEmployee(ctx);
     if (String(slip.employeeId) !== String(emp._id) || !["APPROVED", "PAID"].includes(slip.status)) throw AppError.notFound("Payslip not found");
   }
-  const business = await Business.findById(ctx.businessId, { legalName: 1, tradeName: 1, address: 1, city: 1, state: 1, logoUrl: 1 }).lean<AnyDoc>();
+  return { ...slipRow(slip), business: await payslipLetterhead(ctx.businessId) };
+}
+
+/** Business name and address printed at the top of every payslip. */
+async function payslipLetterhead(businessId: Types.ObjectId) {
+  const business = await Business.findById(businessId, { legalName: 1, tradeName: 1, address: 1, city: 1, state: 1, logoUrl: 1 }).lean<AnyDoc>();
   return {
-    ...slipRow(slip),
-    business: { name: business?.legalName ?? "", tradeName: business?.tradeName ?? "", address: [business?.address, business?.city, business?.state].filter(Boolean).join(", "), logoUrl: business?.logoUrl ?? null },
+    name: business?.legalName ?? "",
+    tradeName: business?.tradeName ?? "",
+    address: [business?.address, business?.city, business?.state].filter(Boolean).join(", "),
+    logoUrl: business?.logoUrl ?? null,
   };
+}
+
+/** Every payslip of a run with the letterhead, in employee-code order, for the combined PDF. */
+export async function runPayslipsForPrint(ctx: AuthContext, id: string) {
+  const run = await loadRun(ctx, id);
+  if (run.status === "CANCELLED") throw AppError.badRequest("This payroll is cancelled", "PAYROLL_CANCELLED");
+  const [slips, business] = await Promise.all([
+    Payslip.find({ businessId: ctx.businessId, payrollRunId: run._id }).sort({ "employee.code": 1 }).lean<AnyDoc[]>(),
+    payslipLetterhead(ctx.businessId),
+  ]);
+  return { period: monthLabel(run.month, run.year), runNumber: run.runNumber as string, slips: slips.map((s) => ({ ...slipRow(s), business })) };
 }
 
 /** The signed-in employee's approved and paid payslips. */

@@ -243,6 +243,14 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(mine.netPayInWords).toMatch(/Rupees/i);
     await expect(getPayslip(self, String(ashaSlip!._id), { self: true })).rejects.toMatchObject({ statusCode: 404 });
     expect((await myPayslips(self)).items).toHaveLength(1);
+
+    // The whole run prints as one PDF, a page per employee.
+    const { runPayslipsForPrint } = await import("@/lib/hr/payroll");
+    const { renderPayslipsPdf } = await import("@/lib/hr/payslipPdf");
+    const { PDFDocument } = await import("pdf-lib");
+    const printable = await runPayslipsForPrint(ctx, run.id);
+    expect(printable.slips.map((s) => s.employee.name)).toEqual(["Asha Rao", "Ravi Kumar"]);
+    expect((await PDFDocument.load(await renderPayslipsPdf(printable.slips, printable.period))).getPageCount()).toBe(2);
   });
 
   it("lets a reporting manager decide only their own team's leave", async () => {

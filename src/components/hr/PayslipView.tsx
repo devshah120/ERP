@@ -8,7 +8,7 @@ import { ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { formatMoney } from "@/lib/format/number";
 import { fmtDate } from "./HrKit";
-import { IconArrowLeft, IconPrint } from "@/components/icons";
+import { IconArrowLeft, IconDownload, IconPrint } from "@/components/icons";
 
 interface Line {
   code: string;
@@ -85,9 +85,14 @@ export default function PayslipView({ apiUrl, backHref, backLabel }: { apiUrl: s
         <Link href={backHref} className="textLink" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
           <IconArrowLeft /> {backLabel}
         </Link>
-        <button type="button" className="button buttonPrimary" onClick={() => window.print()}>
-          <IconPrint /> Print / save PDF
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="button buttonSecondary" onClick={() => window.print()}>
+            <IconPrint /> Print
+          </button>
+          <a href={`${apiUrl}/pdf`} className="button buttonPrimary" download>
+            <IconDownload /> Download PDF
+          </a>
+        </div>
       </div>
 
       {p.status === "DRAFT" && (

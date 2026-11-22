@@ -41,6 +41,10 @@ export const GET = withApiHandler(async (req: NextRequest) => {
     permissions: ctx.permissions,
     products: ctx.products,
     employeeId: employee ? String(employee._id) : null,
+    // People who report to this login's employee record; they unlock Team Leave.
+    directReports: employee
+      ? await Employee.countDocuments({ businessId: ctx.businessId, reportingManagerId: employee._id, _id: { $ne: employee._id }, deletedAt: null })
+      : 0,
     mustChangePassword: Boolean(ctx.mustChangePassword),
     business: business
       ? {

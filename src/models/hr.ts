@@ -325,6 +325,8 @@ const leaveApplicationSchema = new Schema(
     appliedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     decidedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     decidedAt: { type: Date, default: null },
+    /** Who decided: HR (leave approvers) or the employee's reporting manager. Empty while pending. */
+    decidedAs: { type: String, enum: ["", "HR", "MANAGER"], default: "" },
     decisionNote: { type: String, trim: true, default: "" },
     ...audit,
   },

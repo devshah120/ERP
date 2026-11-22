@@ -84,6 +84,7 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr/me/leave", label: "My Leave", enabled: true, keywords: "apply leave time off my leave balance" },
           { href: "/hr/me/payslips", label: "My Payslips", enabled: true, keywords: "salary slip payslip download" },
           { href: "/hr/me/claims", label: "My Claims", enabled: true, keywords: "expense claim reimbursement bills" },
+          { href: "/hr/me/team", label: "Team Leave", enabled: true, keywords: "approve team leave manager direct reports" },
         ],
       },
       {
@@ -563,6 +564,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/me/leave": "hr-self.view",
   "/hr/me/payslips": "hr-self.view",
   "/hr/me/claims": "hr-self.view",
+  "/hr/me/team": "hr-self.view",
   "/hr/employees": "hr-employees.view",
   "/hr-employees": "hr-employees.view",
   "/hr-departments": "hr-departments.view",

@@ -193,7 +193,7 @@ async function loadApp(ctx: AuthContext, id: string) {
  * Approves a pending request and marks each working day it covers as leave
  * on the attendance sheet, in one transaction so the two never disagree.
  */
-export async function approveLeave(ctx: AuthContext, id: string, note: string) {
+export async function approveLeave(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const app = await loadApp(ctx, id);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
 
@@ -231,23 +231,23 @@ export async function approveLeave(ctx: AuthContext, id: string, note: string) {
           { upsert: true, session }
         );
       }
-      app.set({ status: "APPROVED", decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: note, updatedBy: ctx.userId });
+      app.set({ status: "APPROVED", decidedByUserId: ctx.userId, decidedAt: new Date(), decidedAs: opts.asManager ? "MANAGER" : "HR", decisionNote: note, updatedBy: ctx.userId });
       await app.save({ session });
     });
   } finally {
     await session.endSession();
   }
 
-  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "APPROVED" }, reason: note || undefined });
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "APPROVED", decidedAs: opts.asManager ? "MANAGER" : "HR" }, reason: note || undefined });
   return { id: String(app._id), status: "APPROVED" };
 }
 
-export async function rejectLeave(ctx: AuthContext, id: string, note: string) {
+export async function rejectLeave(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const app = await loadApp(ctx, id);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
-  app.set({ status: "REJECTED", decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: note, updatedBy: ctx.userId });
+  app.set({ status: "REJECTED", decidedByUserId: ctx.userId, decidedAt: new Date(), decidedAs: opts.asManager ? "MANAGER" : "HR", decisionNote: note, updatedBy: ctx.userId });
   await app.save();
-  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "REJECTED" }, reason: note || undefined });
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "REJECTED", decidedAs: opts.asManager ? "MANAGER" : "HR" }, reason: note || undefined });
   return { id: String(app._id), status: "REJECTED" };
 }
 
@@ -299,10 +299,11 @@ export const leaveListSchema = z.object({
   ...pageQuery,
 });
 
-export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveListSchema>, opts: { employeeId?: Types.ObjectId } = {}) {
+export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveListSchema>, opts: { employeeId?: Types.ObjectId; employeeIds?: Types.ObjectId[] } = {}) {
   const filter: Record<string, unknown> = { businessId: ctx.businessId };
   if (params.status) filter.status = params.status;
-  if (opts.employeeId) filter.employeeId = opts.employeeId;
+  const scope = opts.employeeId ? { employeeId: opts.employeeId } : opts.employeeIds ? { employeeId: { $in: opts.employeeIds } } : {};
+  if (opts.employeeId || opts.employeeIds) Object.assign(filter, scope);
   else if (params.employeeId && Types.ObjectId.isValid(params.employeeId)) filter.employeeId = new Types.ObjectId(params.employeeId);
   if (params.fromDate) filter.toDate = { $gte: toDay(params.fromDate) };
   if (params.toDate) filter.fromDate = { $lte: toDay(params.toDate) };
@@ -319,7 +320,7 @@ export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveL
   ]);
   const labels = await employeeLabels(ctx.businessId, rows.map((r) => r.employeeId));
   const typeMap = new Map(types.map((t) => [String(t._id), t]));
-  const pending = await LeaveApplication.countDocuments({ businessId: ctx.businessId, status: "PENDING", ...(opts.employeeId ? { employeeId: opts.employeeId } : {}) });
+  const pending = await LeaveApplication.countDocuments({ businessId: ctx.businessId, status: "PENDING", ...scope });
 
   return {
     items: rows.map((r) => {
@@ -342,6 +343,7 @@ export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveL
         status: r.status,
         decisionNote: r.decisionNote,
         decidedAt: r.decidedAt,
+        decidedAs: r.decidedAs ?? "",
         createdAt: r.createdAt,
       };
     }),
@@ -378,4 +380,39 @@ export async function setAllocation(ctx: AuthContext, input: z.infer<typeof allo
   );
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveAllocation", documentId: doc._id, newValue: input });
   return { id: String(doc._id) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Reporting managers                                                  */
+/* ------------------------------------------------------------------ */
+
+/** The signed-in employee's direct reports who are still on the rolls. */
+export async function directReports(ctx: AuthContext): Promise<AnyDoc[]> {
+  const me = await selfEmployee(ctx);
+  return Employee.find(
+    { businessId: ctx.businessId, reportingManagerId: me._id, _id: { $ne: me._id }, deletedAt: null },
+    { _id: 1, employeeCode: 1, name: 1 }
+  )
+    .sort({ employeeCode: 1 })
+    .lean<AnyDoc[]>();
+}
+
+/** Leave requests of the signed-in manager's direct reports. */
+export async function listTeamLeaves(ctx: AuthContext, params: z.infer<typeof leaveListSchema>) {
+  const team = await directReports(ctx);
+  if (team.length === 0) throw AppError.forbidden("No one reports to you, so there is no team leave to review.", "NOT_A_MANAGER");
+  return { ...(await listLeaves(ctx, params, { employeeIds: team.map((e) => e._id) })), teamSize: team.length };
+}
+
+/**
+ * A reporting manager approves or rejects a direct report's pending request.
+ * The manager's decision is final; HR can still cancel an approved leave.
+ * Anyone outside the manager's team gets a plain "not found".
+ */
+export async function decideTeamLeave(ctx: AuthContext, id: string, action: "approve" | "reject", note: string) {
+  const app = await loadApp(ctx, id);
+  const team = await directReports(ctx);
+  if (!team.some((e) => String(e._id) === String(app.employeeId))) throw AppError.notFound("Leave request not found");
+  if (action === "reject" && !note.trim()) throw AppError.badRequest("Give a reason for rejecting", "REASON_REQUIRED");
+  return action === "approve" ? approveLeave(ctx, id, note, { asManager: true }) : rejectLeave(ctx, id, note, { asManager: true });
 }

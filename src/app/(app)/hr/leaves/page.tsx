@@ -32,6 +32,7 @@ interface Row {
   reason: string;
   status: string;
   decisionNote: string;
+  decidedAs?: string;
   createdAt: string;
 }
 
@@ -212,6 +213,7 @@ function LeaveRequests() {
                 </td>
                 <td>
                   <StatusBadge status={r.status} />
+                  {r.decidedAs === "MANAGER" && <div className="hrMuted">by manager</div>}
                 </td>
                 <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
                   {canDecide && r.status === "PENDING" && (

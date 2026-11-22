@@ -16,6 +16,8 @@ export interface Me {
   products: Product[];
   /** Employee record linked to this login (self-service), if any. */
   employeeId: string | null;
+  /** How many employees report to this login's employee record (they can decide those people's leave). */
+  directReports?: number;
   /** Signed in with a temporary password; the app is blocked until it is changed. */
   mustChangePassword?: boolean;
   business: {
@@ -117,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!me) return false;
       // Self-service shows the signed-in person's own employee record; without one there is nothing to show.
       if ((href === "/hr/me" || href.startsWith("/hr/me/")) && !me.employeeId) return false;
+      if (href === "/hr/me/team" && !me.directReports) return false;
       const product = productForHref(href);
       return product === null || me.products.includes(product);
     },

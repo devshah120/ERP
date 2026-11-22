@@ -314,6 +314,7 @@ interface LeaveRow {
   reason: string;
   status: string;
   decisionNote: string;
+  decidedAs?: string;
 }
 
 function MyLeave({ balances, onChanged }: { balances: LeaveBalance[]; onChanged: () => void }) {
@@ -381,7 +382,7 @@ function MyLeave({ balances, onChanged }: { balances: LeaveBalance[]; onChanged:
                   {fmtDate(r.fromDate)}
                   {r.toDate !== r.fromDate ? ` – ${fmtDate(r.toDate)}` : ""}
                   {r.halfDay ? " (half day)" : ""}
-                  {r.decisionNote && <div className="hrMuted">HR: {r.decisionNote}</div>}
+                  {r.decisionNote && <div className="hrMuted">{r.decidedAs === "MANAGER" ? "Manager" : "HR"}: {r.decisionNote}</div>}
                 </td>
                 <td className="numCell">{r.days}</td>
                 <td>

@@ -243,4 +243,39 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await expect(getPayslip(self, String(ashaSlip!._id), { self: true })).rejects.toMatchObject({ statusCode: 404 });
     expect((await myPayslips(self)).items).toHaveLength(1);
   });
+
+  it("lets a reporting manager decide only their own team's leave", async () => {
+    const { applyLeave, listTeamLeaves, decideTeamLeave, directReports } = await import("@/lib/hr/leave");
+    const { Employee, LeaveType, LeaveApplication, Attendance } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const cl = await LeaveType.findOne({ businessId, code: "CL" }).lean<{ _id: Types.ObjectId }>();
+    const ravi = await User.findOne({ businessId, email: "ravi@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const raviSelf = { ...ctx, userId: ravi!._id, roleId: ravi!.roleId, permissions: ["hr-self.view"] };
+
+    // Nobody reports to Ravi yet.
+    await expect(listTeamLeaves(raviSelf, { page: 1, pageSize: 25 } as never)).rejects.toMatchObject({ code: "NOT_A_MANAGER" });
+
+    await Employee.updateOne({ _id: emp.asha }, { reportingManagerId: emp.ravi });
+    expect((await directReports(raviSelf)).map((e) => e.name)).toEqual(["Asha Rao"]);
+
+    // Mon 7 and Tue 8 December 2026: Asha's request goes to Ravi.
+    const req = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(cl!._id), fromDate: "2026-12-07", toDate: "2026-12-08", halfDay: false, reason: "Wedding" }, { self: false });
+    // Ravi's own request is not his to decide.
+    const own = await applyLeave(ctx, { employeeId: String(emp.ravi), leaveTypeId: String(cl!._id), fromDate: "2026-12-09", toDate: "2026-12-09", halfDay: false, reason: "" }, { self: false });
+
+    const team = await listTeamLeaves(raviSelf, { status: "PENDING", page: 1, pageSize: 25 } as never);
+    expect(team.items.map((r) => r.leaveNumber)).toEqual([req.leaveNumber]);
+    expect(team.pending).toBe(1);
+    expect(team.teamSize).toBe(1);
+
+    await expect(decideTeamLeave(raviSelf, own.id, "approve", "")).rejects.toMatchObject({ statusCode: 404 });
+    await expect(decideTeamLeave(raviSelf, req.id, "reject", "  ")).rejects.toMatchObject({ code: "REASON_REQUIRED" });
+
+    await decideTeamLeave(raviSelf, req.id, "approve", "Enjoy");
+    const decided = await LeaveApplication.findById(req.id).lean<{ status: string; decidedAs: string; decidedByUserId: Types.ObjectId }>();
+    expect(decided).toMatchObject({ status: "APPROVED", decidedAs: "MANAGER" });
+    expect(String(decided!.decidedByUserId)).toBe(String(ravi!._id));
+    expect(await Attendance.countDocuments({ businessId, employeeId: emp.asha, leaveApplicationId: new Types.ObjectId(req.id) })).toBe(2);
+    await expect(decideTeamLeave(raviSelf, req.id, "reject", "Changed my mind")).rejects.toMatchObject({ code: "LEAVE_NOT_PENDING" });
+  });
 });

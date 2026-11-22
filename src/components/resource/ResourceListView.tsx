@@ -96,9 +96,9 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
   const statusColumn = config.columns.find((c) => c.key === "status");
   const filterableColumns = config.columns.some((c) => c.filterParam) || Boolean(statusColumn);
 
-  const canCreate = hasPermission(`${config.key}.create`);
-  const canEdit = hasPermission(`${config.key}.edit`);
-  const canDelete = hasPermission(`${config.key}.delete`);
+  const canCreate = hasPermission(config.permissions?.create ?? `${config.key}.create`);
+  const canEdit = hasPermission(config.permissions?.edit ?? `${config.key}.edit`);
+  const canDelete = hasPermission(config.permissions?.delete ?? `${config.key}.delete`);
 
   useEffect(() => {
     const t = setTimeout(() => {

@@ -47,6 +47,8 @@ export interface PayslipInput {
   loans: LoanDue[];
   /** Approved expense claims paid back with this salary. */
   reimbursements: Decimal.Value;
+  /** One-off amounts for the month (bonus, incentive, canteen…); not reduced for loss-of-pay days. */
+  variables?: { code: string; label: string; kind: "EARNING" | "DEDUCTION"; amount: Decimal.Value; esiApplicable?: boolean }[];
 }
 
 export interface PayLine {
@@ -91,7 +93,11 @@ export function computePayslip(input: PayslipInput): PayslipResult {
   const earnings: PayLine[] = components
     .map(([code, label, full]) => ({ code, label, amount: prorate(full) }))
     .filter((l) => l.amount.gt(0));
+  const variables = (input.variables ?? []).map((v) => ({ ...v, amount: money(v.amount) })).filter((v) => v.amount.gt(0));
+  for (const v of variables.filter((x) => x.kind === "EARNING")) earnings.push({ code: v.code, label: v.label, amount: v.amount });
   const gross = earnings.reduce((t, l) => t.plus(l.amount), new Decimal(0));
+  // Variable earnings that ESI does not cover (e.g. an annual bonus) stay out of ESI wages.
+  const esiExcluded = variables.filter((x) => x.kind === "EARNING" && x.esiApplicable === false).reduce((t, v) => t.plus(v.amount), new Decimal(0));
   const fullGross = components.reduce((t, [, , v]) => t.plus(new Decimal(v || 0)), new Decimal(0));
   const earnedBasic = earnings.find((l) => l.code === "BASIC")?.amount ?? new Decimal(0);
 
@@ -107,10 +113,10 @@ export function computePayslip(input: PayslipInput): PayslipResult {
   }
 
   let esiWages = new Decimal(0);
-  if (s.esiApplicable && fullGross.lte(ESI_GROSS_LIMIT) && gross.gt(0)) {
-    esiWages = gross;
-    deductions.push({ code: "ESI", label: "ESI", amount: rupeeUp(gross.times(ESI_EMPLOYEE_RATE)) });
-    employer.push({ code: "ESI_ER", label: "Employer ESI", amount: rupeeUp(gross.times(ESI_EMPLOYER_RATE)) });
+  if (s.esiApplicable && fullGross.lte(ESI_GROSS_LIMIT) && gross.minus(esiExcluded).gt(0)) {
+    esiWages = gross.minus(esiExcluded);
+    deductions.push({ code: "ESI", label: "ESI", amount: rupeeUp(esiWages.times(ESI_EMPLOYEE_RATE)) });
+    employer.push({ code: "ESI_ER", label: "Employer ESI", amount: rupeeUp(esiWages.times(ESI_EMPLOYER_RATE)) });
   }
 
   if (s.ptApplicable && gross.gt(0) && new Decimal(s.professionalTax || 0).gt(0)) {
@@ -120,6 +126,8 @@ export function computePayslip(input: PayslipInput): PayslipResult {
   if (new Decimal(s.monthlyTds || 0).gt(0) && gross.gt(0)) {
     deductions.push({ code: "TDS", label: "Income tax (TDS)", amount: money(s.monthlyTds) });
   }
+
+  for (const v of variables.filter((x) => x.kind === "DEDUCTION")) deductions.push({ code: v.code, label: v.label, amount: v.amount });
 
   // Loans come last and never push take-home below zero.
   let room = gross.minus(deductions.reduce((t, l) => t.plus(l.amount), new Decimal(0)));

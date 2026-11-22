@@ -28,6 +28,8 @@ import {
   OPENING_STATUSES,
   ASSET_CONDITIONS,
   APPRAISAL_STAGES,
+  PayComponent,
+  PAY_COMPONENT_KINDS,
 } from "@/models/hr";
 import type { ResourceDefinition } from "./types";
 import { STATUS, permissionsFor, documentConverter, optionalRef, optionalDate, requiredDate } from "./helpers";
@@ -407,7 +409,33 @@ const appraisals = define("hr-appraisals", "Appraisal", {
   toDocument: documentConverter({ refs: ["employeeId", "reviewerId"] }),
 });
 
+/* ------------------------------------------------------------------ */
+/* Payroll                                                             */
+/* ------------------------------------------------------------------ */
+
+/** Variable pay components ride on the payroll permissions so existing HR roles can use them at once. */
+const payComponents: ResourceDefinition = {
+  ...define("hr-pay-components", "Pay component", {
+    model: PayComponent,
+    fields: {
+      code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_]{2,12}$/, "2–12 letters, digits or _"),
+      name: z.string().trim().min(2).max(60),
+      kind: z.enum(PAY_COMPONENT_KINDS).default("EARNING"),
+      esiApplicable: z.coerce.boolean().default(true),
+      description: optionalText(300),
+      status,
+    },
+    searchFields: ["code", "name"],
+    filterFields: { code: "code", name: "name", kind: "kind" },
+    sortableFields: ["code", "name", "kind", "createdAt"],
+    defaultSort: "code",
+    defaultSortDir: "asc",
+  }),
+  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+};
+
 export const HR_RESOURCES: Record<string, ResourceDefinition> = {
+  "hr-pay-components": payComponents,
   "hr-departments": departments,
   "hr-designations": designations,
   "hr-shifts": shifts,

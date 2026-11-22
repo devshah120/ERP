@@ -2,14 +2,16 @@ import mongoose, { Types, type ClientSession } from "mongoose";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Attendance, PayrollRun, Payslip, EmployeeLoan, ExpenseClaim, Employee } from "@/models/hr";
+import { Attendance, PayrollRun, Payslip, EmployeeLoan, ExpenseClaim, Employee, PayrollHold } from "@/models/hr";
 import { Business } from "@/models/Business";
 import { recordAudit } from "@/lib/services/auditService";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { serializeDoc } from "@/lib/resources/serialize";
 import { amountInWords } from "@/lib/documents/numberToWords";
 import type { AuthContext } from "@/lib/auth/context";
-import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring } from "./calendar";
+import { toDay, dayKey, eachDay, monthRange, loadCalendar } from "./calendar";
+import { payrollEmployees } from "./holds";
+import { monthVariables, variableKey } from "./variables";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { applyDueChanges, salaryForMonth } from "./history";
@@ -57,7 +59,7 @@ async function monthAttendance(businessId: Types.ObjectId, ids: Types.ObjectId[]
 async function liveSummaries(businessId: Types.ObjectId, year: number, month: number) {
   const { start, end } = monthRange(year, month);
   const days = eachDay(start, end);
-  const emps = await employeesDuring(businessId, start, end);
+  const emps = await payrollEmployees(businessId, year, month);
   const [cal, attendanceBy] = await Promise.all([
     loadCalendar(businessId, start, end),
     monthAttendance(businessId, emps.map((e) => e._id), start, end),
@@ -77,11 +79,12 @@ async function liveSummaries(businessId: Types.ObjectId, year: number, month: nu
 async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSession) {
   const { start, end, days: daysInMonth } = monthRange(run.year, run.month);
   const days = eachDay(start, end);
-  const emps = await employeesDuring(ctx.businessId, start, end);
-  if (emps.length === 0) throw AppError.badRequest(`No employees were on the rolls in ${monthLabel(run.month, run.year)}.`, "NO_EMPLOYEES");
+  // Employees whose salary is on hold this month are left out.
+  const emps = await payrollEmployees(ctx.businessId, run.year, run.month, session);
+  if (emps.length === 0) throw AppError.badRequest(`No employees to pay in ${monthLabel(run.month, run.year)} (none on the rolls, or all on hold).`, "NO_EMPLOYEES");
   const ids = emps.map((e) => e._id);
 
-  const [cal, attendanceBy, loans, claims, labels, salaries] = await Promise.all([
+  const [cal, attendanceBy, loans, claims, labels, salaries, variables] = await Promise.all([
     loadCalendar(ctx.businessId, start, end),
     monthAttendance(ctx.businessId, ids, start, end, session),
     EmployeeLoan.find({
@@ -96,6 +99,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
     ExpenseClaim.find({ businessId: ctx.businessId, employeeId: { $in: ids }, status: "APPROVED", payrollRunId: null, claimDate: { $lte: end } }).session(session).lean<AnyDoc[]>(),
     employeeLabels(ctx.businessId, ids),
     salaryForMonth(ctx.businessId, emps, start, end, session),
+    monthVariables(ctx.businessId, run.year, run.month, ids, session),
   ]);
 
   let totalGross = new Decimal(0);
@@ -129,6 +133,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       lopDays: summary.lopDays,
       loans: myLoans.map((l) => ({ loanId: String(l._id), emi: d(l.emiAmount), outstanding: d(l.amount).minus(d(l.repaidAmount)) })),
       reimbursements: myClaims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0)),
+      variables: variables.get(key) ?? [],
     });
     const employerTotal = result.employerContributions.reduce((t, l) => t.plus(l.amount), new Decimal(0));
     const label = labels.get(key);
@@ -168,6 +173,7 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       holidays: summary.holidays,
       weeklyOffs: summary.weeklyOffs,
       unmarkedDays: summary.unmarked,
+      variableKey: variableKey(variables.get(key)),
       structure: {
         basic: dec128(salary.basic),
         hra: dec128(salary.hra),
@@ -327,9 +333,15 @@ async function assertAttendanceSettled(ctx: AuthContext, run: AnyDoc, slips: Any
     }
   }
   for (const s of slips) if (!live.has(String(s.employeeId))) changed.push(s.employee?.name ?? "an employee");
+  // Variable pay entered or edited after the draft was calculated.
+  const vars = await monthVariables(ctx.businessId, run.year, run.month, [...live.values()].map((v) => v.emp._id));
+  for (const [key, { emp }] of live) {
+    const slip = slipBy.get(key);
+    if (slip && slip.variableKey !== undefined && slip.variableKey !== variableKey(vars.get(key)) && !changed.includes(emp.name)) changed.push(emp.name);
+  }
   if (changed.length > 0) {
     const names = `${changed.slice(0, 5).join(", ")}${changed.length > 5 ? "…" : ""}`;
-    throw new AppError(`Attendance changed after this payroll was calculated (${names}). Recalculate it before approving.`, 409, "PAYROLL_STALE", changed);
+    throw new AppError(`Attendance, holds or variable pay changed after this payroll was calculated (${names}). Recalculate it before approving.`, 409, "PAYROLL_STALE", changed);
   }
 
   const unmarked = [...live.values()].filter(({ summary }) => summary.unmarked > 0);
@@ -485,7 +497,7 @@ function slipRow(s: AnyDoc) {
 export async function getRun(ctx: AuthContext, id: string) {
   const run = await loadRun(ctx, id);
   const slips = await Payslip.find({ businessId: ctx.businessId, payrollRunId: run._id }).sort({ "employee.code": 1 }).lean<AnyDoc[]>();
-  return { run: runRow(run.toObject()), payslips: slips.map(slipRow) };
+  return { run: runRow(run.toObject()), payslips: slips.map(slipRow), onHold: await heldList(ctx.businessId, run.year, run.month) };
 }
 
 /** A payslip with the business letterhead; through self-service only your own, and only once approved. */
@@ -532,6 +544,13 @@ export async function myPayslips(ctx: AuthContext) {
   return { items: slips.map((s) => ({ id: String(s._id), period: monthLabel(s.month, s.year), month: s.month, year: s.year, grossEarnings: d(s.grossEarnings).toFixed(2), totalDeductions: d(s.totalDeductions).toFixed(2), netPay: d(s.netPay).toFixed(2), status: s.status })) };
 }
 
+/** Employees whose salary is on hold for the month (left out of its payroll). */
+async function heldList(businessId: Types.ObjectId, year: number, month: number) {
+  const holds = await PayrollHold.find({ businessId, year, month }).lean<AnyDoc[]>();
+  const labels = await employeeLabels(businessId, holds.map((h) => h.employeeId));
+  return holds.map((h) => ({ id: String(h.employeeId), name: labels.get(String(h.employeeId))?.name ?? "—", code: labels.get(String(h.employeeId))?.code ?? "", reason: h.reason as string }));
+}
+
 /** Payslips for one employee (HR view on the profile). */
 export async function employeePayslips(ctx: AuthContext, employeeId: Types.ObjectId) {
   const slips = await Payslip.find({ businessId: ctx.businessId, employeeId, status: { $ne: "CANCELLED" } }).sort({ year: -1, month: -1 }).limit(24).lean<AnyDoc[]>();
@@ -554,6 +573,7 @@ export async function payrollReadiness(ctx: AuthContext, year: number, month: nu
     pendingLeaves,
     unmarked: unmarked.map(({ emp, summary }) => ({ id: String(emp._id), code: emp.employeeCode, name: emp.name, days: summary.unmarked })),
     unmarkedDays: unmarked.reduce((t, { summary }) => t + summary.unmarked, 0),
+    blocked: await heldList(ctx.businessId, year, month),
     totalEmployees: await Employee.countDocuments({ businessId: ctx.businessId, deletedAt: null }),
   };
 }

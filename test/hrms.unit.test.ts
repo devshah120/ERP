@@ -240,3 +240,32 @@ describe("salary slip PDF", () => {
     expect(pdfFilename("Payslip", "EMP-000001", "October 2026")).toBe("Payslip-EMP-000001-October-2026.pdf");
   });
 });
+
+describe("variable pay on the payslip", () => {
+  it("adds variable earnings to gross (ESI only where it applies) and takes deductions before loans", () => {
+    const r = computePayslip({
+      structure: { basic: "10000", hra: "4000", conveyance: "0", specialAllowance: "0", otherAllowance: "0", pfApplicable: true, esiApplicable: true, ptApplicable: false, professionalTax: "0", monthlyTds: "0" },
+      daysInMonth: 30,
+      lopDays: 3, // fixed pay is prorated…
+      loans: [{ loanId: "L1", emi: "100000", outstanding: "100000" }],
+      reimbursements: "0",
+      variables: [
+        { code: "BONUS", label: "Bonus", kind: "EARNING", amount: "2000", esiApplicable: false }, // …variable pay is not
+        { code: "OT", label: "Overtime pay", kind: "EARNING", amount: "1000", esiApplicable: true },
+        { code: "CANTEEN", label: "Canteen recovery", kind: "DEDUCTION", amount: "300" },
+        { code: "ZERO", label: "Nothing", kind: "EARNING", amount: "0" },
+      ],
+    });
+    // 14000 × 27/30 = 12600, + 2000 + 1000.
+    expect(r.grossEarnings.toFixed(2)).toBe("15600.00");
+    expect(r.earnings.map((l) => l.code)).toEqual(["BASIC", "HRA", "BONUS", "OT"]);
+    // ESI wages leave the bonus out: 13600 × 0.75% = 102 (rounded up).
+    expect(r.esiWages.toFixed(2)).toBe("13600.00");
+    expect(r.deductions.find((d) => d.code === "ESI")?.amount.toFixed(2)).toBe("102.00");
+    // PF stays on basic only: 9000 × 12% = 1080.
+    expect(r.deductions.find((d) => d.code === "PF")?.amount.toFixed(2)).toBe("1080.00");
+    // Canteen comes before the loan, which takes whatever is left.
+    expect(r.deductions.map((d) => d.code)).toEqual(["PF", "ESI", "CANTEEN", "LOAN"]);
+    expect(r.netPay.toFixed(2)).toBe("0.00");
+  });
+});

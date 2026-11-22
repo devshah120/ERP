@@ -446,7 +446,32 @@ const appraisals = master("hr-appraisals", "Appraisals", "Appraisal", {
   ],
 });
 
+const payComponents = master("hr-pay-components", "Pay Components", "Pay component", {
+  permissions: { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Component", filterParam: "name", sortField: "name" },
+    { key: "kind", label: "Type", type: "label", labels: { EARNING: "Earning", DEDUCTION: "Deduction" }, sortField: "kind" },
+    { key: "esiApplicable", label: "In ESI wages", type: "yesno" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Component",
+      fields: [
+        { name: "code", label: "Code", type: "text", required: true, placeholder: "BONUS" },
+        { name: "name", label: "Name", type: "text", required: true, placeholder: "Performance bonus" },
+        { name: "kind", label: "Type", type: "select", defaultValue: "EARNING", options: [{ value: "EARNING", label: "Earning (added to pay)" }, { value: "DEDUCTION", label: "Deduction (taken from pay)" }] },
+        { name: "esiApplicable", label: "Counts towards ESI wages (earnings)", type: "checkbox", defaultValue: true },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
 export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
+  "hr-pay-components": payComponents,
   "hr-departments": departments,
   "hr-designations": designations,
   "hr-shifts": shifts,

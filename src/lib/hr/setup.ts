@@ -1,6 +1,7 @@
 import type { ClientSession, Types } from "mongoose";
 import { Role } from "@/models/Role";
-import { HrDepartment, Designation, Shift, LeaveType } from "@/models/hr";
+import { HrDepartment, Designation, Shift, LeaveType, PayComponent } from "@/models/hr";
+import { DEFAULT_PAY_COMPONENTS } from "./variables";
 import { HR_PERMISSION_KEYS, HR_SELF_SERVICE_PERMISSIONS } from "@/lib/auth/permissionCatalog";
 
 export const HR_MANAGER_ROLE = "HR Manager";
@@ -49,6 +50,9 @@ export async function seedHrDefaults(businessId: Types.ObjectId, session?: Clien
   }
   if ((await LeaveType.countDocuments(live, opts)) === 0) {
     await LeaveType.create(LEAVE_TYPES.map((l) => ({ businessId, ...l })), { ...opts, ordered: true });
+  }
+  if ((await PayComponent.countDocuments(live, opts)) === 0) {
+    await PayComponent.create(DEFAULT_PAY_COMPONENTS.map((c) => ({ businessId, ...c })), { ...opts, ordered: true });
   }
   if ((await HrDepartment.countDocuments(live, opts)) === 0) {
     await HrDepartment.create(DEPARTMENTS.map((d) => ({ businessId, ...d })), { ...opts, ordered: true });

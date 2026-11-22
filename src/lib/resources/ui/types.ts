@@ -96,4 +96,6 @@ export interface ResourceUi {
   titleField?: string;
   /** New records start from these workspace settings: section + form field → setting key. */
   settingsDefaults?: { section: string; map: Record<string, string> };
+  /** Permission keys when they are not `<key>.create/edit/delete` (must match the server definition). */
+  permissions?: { create: string; edit: string; delete: string };
 }

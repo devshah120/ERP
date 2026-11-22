@@ -433,4 +433,68 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
       ["JOINED", ""],
     ]);
   });
+
+  it("adds variable pay to payroll, leaves held salaries out and imports amounts from a sheet", async () => {
+    const { variableSheet, saveVariables, importVariables, variableTemplate } = await import("@/lib/hr/variables");
+    const { blockPayroll, unblockPayroll, listHolds } = await import("@/lib/hr/holds");
+    const { createRun, getRun, approveRun, recomputeRun, cancelRun, payrollReadiness } = await import("@/lib/hr/payroll");
+    const period = { year: 2026, month: 12 };
+
+    // The grid seeds the usual components on first use.
+    const sheet = await variableSheet(ctx, { ...period });
+    const comp = (code: string) => sheet.allComponents.find((c) => c.code === code)!.id;
+    expect(sheet.allComponents.map((c) => c.code).sort()).toEqual(["ARREAR", "BONUS", "CANTEEN", "INCENTIVE", "OT", "OTHER_DED"]);
+    expect(sheet.rows.map((r) => r.name)).toEqual(["Asha Rao", "Ravi Kumar"]);
+
+    await saveVariables(ctx, {
+      ...period,
+      rows: [
+        { employeeId: String(emp.asha), amounts: { [comp("BONUS")]: "2000", [comp("CANTEEN")]: "300" } },
+        { employeeId: String(emp.ravi), amounts: { [comp("INCENTIVE")]: "1000" } },
+      ],
+    });
+    expect((await variableSheet(ctx, { ...period })).rows.find((r) => r.name === "Asha Rao")!.amounts[comp("BONUS")]).toBe("2000.00");
+
+    // Ravi's December salary is held: he is left out of the run.
+    const hold = await blockPayroll(ctx, { ...period, employeeId: String(emp.ravi), reason: "Documents awaited" });
+    await expect(blockPayroll(ctx, { ...period, employeeId: String(emp.ravi), reason: "Again" })).rejects.toMatchObject({ code: "ALREADY_HELD" });
+    expect((await payrollReadiness(ctx, 2026, 12)).blocked.map((b) => b.name)).toEqual(["Ravi Kumar"]);
+
+    const run = await createRun(ctx, { ...period, notes: "" });
+    expect(run.payslips).toBe(1);
+    const view = await getRun(ctx, run.id);
+    expect(view.onHold.map((h) => h.name)).toEqual(["Ravi Kumar"]);
+    const asha = view.payslips[0];
+    expect(asha.earnings.find((l) => l.code === "BONUS")?.amount).toBe("2000.00");
+    expect(asha.deductions.find((l) => l.code === "CANTEEN")?.amount).toBe("300.00");
+
+    // Changing variable pay after the draft makes it stale until recalculated.
+    await saveVariables(ctx, { ...period, rows: [{ employeeId: String(emp.asha), amounts: { [comp("BONUS")]: "2500" } }] });
+    await expect(approveRun(ctx, run.id, { payUnmarkedAsPresent: true })).rejects.toMatchObject({ code: "PAYROLL_STALE" });
+    await recomputeRun(ctx, run.id);
+    await approveRun(ctx, run.id, { payUnmarkedAsPresent: true });
+    expect((await getRun(ctx, run.id)).payslips[0].earnings.find((l) => l.code === "BONUS")?.amount).toBe("2500.00");
+
+    // Once approved, holds and variable pay are locked until the payroll is rolled back.
+    await expect(unblockPayroll(ctx, hold.id)).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+    await expect(saveVariables(ctx, { ...period, rows: [{ employeeId: String(emp.asha), amounts: { [comp("BONUS")]: "1" } }] })).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+    await cancelRun(ctx, run.id, "Roll back for test");
+    await unblockPayroll(ctx, hold.id);
+    expect((await listHolds(ctx, 2026, 12)).items).toHaveLength(0);
+
+    // Import: unknown columns and employees are reported and nothing is saved; a clean sheet saves.
+    const bad = await importVariables(ctx, { headers: ["Employee Code", "BONUS", "XYZ"], rows: [{ rowNumber: 2, cells: { "Employee Code": "EMP-999999", BONUS: "10", XYZ: "1" } }] }, 2026, 12, true);
+    expect(bad.committed).toBe(false);
+    expect(bad.errors.map((e) => e.message)).toEqual([expect.stringContaining("XYZ"), expect.stringContaining("EMP-999999")]);
+    const good = await importVariables(
+      ctx,
+      { headers: ["Employee Code", "Employee Name", "OT"], rows: [{ rowNumber: 2, cells: { "Employee Code": "emp-000002", "Employee Name": "Ravi", OT: "1,250.50" } }] },
+      2026,
+      12,
+      true
+    );
+    expect(good).toMatchObject({ committed: true, employees: 1, amounts: 1, errors: [] });
+    expect((await variableSheet(ctx, { ...period })).rows.find((r) => r.name === "Ravi Kumar")!.amounts[comp("OT")]).toBe("1250.50");
+    expect((await variableTemplate(ctx, 2026, 12)).length).toBeGreaterThan(1000);
+  });
 });

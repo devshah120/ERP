@@ -19,7 +19,7 @@ import type { AuthContext } from "@/lib/auth/context";
 /** Refuse absurd files up front rather than parsing them into memory. */
 export const MAX_IMPORT_ROWS = 2000;
 
-interface ParsedSheet {
+export interface ParsedSheet {
   headers: string[];
   /** Each row paired with its 1-based line number in the original file. */
   rows: { rowNumber: number; cells: Record<string, string> }[];

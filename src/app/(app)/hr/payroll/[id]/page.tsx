@@ -62,6 +62,8 @@ interface RunView {
     cancelReason: string;
   };
   payslips: Slip[];
+  /** Employees whose salary is on hold this month (no payslip). */
+  onHold?: { id: string; name: string; code: string; reason: string }[];
 }
 
 const amount = (lines: Line[], code: string) => lines.find((l) => l.code === code)?.amount ?? "0";
@@ -196,6 +198,16 @@ export default function PayrollRunPage() {
       {run.status === "DRAFT" && (
         <div className="banner bannerInfo" style={{ marginBottom: "0.75rem" }}>
           <span>This is a draft. Changed attendance, leave or salaries? Recalculate. Approving locks the month and records loan recoveries and claim reimbursements.</span>
+        </div>
+      )}
+      {(data.onHold?.length ?? 0) > 0 && (
+        <div className="banner bannerInfo" style={{ marginBottom: "0.75rem" }}>
+          <span>
+            Salary on hold (left out): {data.onHold!.map((h) => `${h.name} (${h.reason})`).join(", ")}.{" "}
+            <Link href="/hr/payroll/holds" className="textLink">
+              Block / unblock
+            </Link>
+          </span>
         </div>
       )}
       {run.status === "DRAFT" && unmarkedTotal > 0 && (

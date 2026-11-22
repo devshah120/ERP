@@ -190,6 +190,63 @@ export const Employee = defineMasterModel(
 );
 
 /* ------------------------------------------------------------------ */
+/* Variable pay                                                        */
+/* ------------------------------------------------------------------ */
+
+export const PAY_COMPONENT_KINDS = ["EARNING", "DEDUCTION"] as const;
+
+/** A one-off pay item entered month by month: bonus, incentive, overtime, canteen recovery… */
+export const PayComponent = defineMasterModel(
+  "PayComponent",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    kind: { type: String, enum: PAY_COMPONENT_KINDS, default: "EARNING" },
+    /** Earnings only: counted in ESI wages. */
+    esiApplicable: { type: Boolean, default: true },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "code" }
+);
+
+/** One employee's amount of one variable component for one month. */
+export const PayrollVariable = defineHrModel(
+  "PayrollVariable",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      componentId: { type: Schema.Types.ObjectId, ref: "PayComponent", required: true },
+      year: { type: Number, required: true },
+      month: { type: Number, required: true, min: 1, max: 12 },
+      amount: { type: Schema.Types.Decimal128, required: true },
+      note: { type: String, trim: true, default: "" },
+      createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  )
+    .index({ businessId: 1, year: 1, month: 1, employeeId: 1, componentId: 1 }, { unique: true })
+    .index({ businessId: 1, componentId: 1 })
+);
+
+/** A salary hold: the employee is left out of that month's payroll until unblocked. */
+export const PayrollHold = defineHrModel(
+  "PayrollHold",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      year: { type: Number, required: true },
+      month: { type: Number, required: true, min: 1, max: 12 },
+      reason: { type: String, trim: true, required: true },
+      createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  ).index({ businessId: 1, year: 1, month: 1, employeeId: 1 }, { unique: true })
+);
+
+/* ------------------------------------------------------------------ */
 /* Employment history                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -542,6 +599,8 @@ const payslipSchema = new Schema(
     weeklyOffs: { type: Number, default: 0 },
     /** Working days with no attendance recorded; paid as present and included in presentDays. */
     unmarkedDays: { type: Number, default: 0 },
+    /** Variable pay included, as "CODE:amount|…" — approval compares it with what is entered now. */
+    variableKey: { type: String, default: "" },
     /** The monthly salary structure this payslip was calculated from (day-weighted when it changed mid-month). */
     structure: {
       basic: money,

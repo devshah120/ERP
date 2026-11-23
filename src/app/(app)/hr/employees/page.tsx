@@ -12,7 +12,7 @@ import Pagination from "@/components/ui/Pagination";
 import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import RowActions from "@/components/table/RowActions";
-import EmployeeTabs from "@/components/hr/EmployeeTabs";
+import FilterDropdown from "@/components/ui/FilterDropdown";
 import { EMPLOYMENT_STATUS_LABELS } from "@/lib/resources/ui/hrRegistry";
 import { IconClose, IconEdit, IconEye, IconPlus, IconRefresh, IconUpload } from "@/components/icons";
 
@@ -51,22 +51,11 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-/** A labelled dropdown in the filter bar, like "DEPARTMENT / Customer Success". */
-function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <label className="dirFilter" data-active={value ? true : undefined}>
-      <span className="dirFilterLabel">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
-        <option value="">All</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
+const SCOPES = [
+  { value: "current", label: "Current" },
+  { value: "former", label: "Former" },
+  { value: "all", label: "Everyone" },
+];
 
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
@@ -145,26 +134,18 @@ export default function EmployeeDirectoryPage() {
           </>
         }
       />
-      <EmployeeTabs active="directory" />
 
       <section className="dirFilters">
         <div className="dirFilterRow">
           {(facets?.branches.length ?? 0) > 0 && (
-            <FilterSelect label="Business unit" value={filters.branchId} onChange={(v) => setFilter("branchId", v)} options={facets!.branches.map((b) => ({ value: b.id, label: b.name }))} />
+            <FilterDropdown label="Business unit" value={filters.branchId} onChange={(v) => setFilter("branchId", v)} options={facets!.branches.map((b) => ({ value: b.id, label: b.name }))} />
           )}
-          <FilterSelect label="Department" value={filters.departmentId} onChange={(v) => setFilter("departmentId", v)} options={(facets?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
-          <FilterSelect label="Location" value={filters.location} onChange={(v) => setFilter("location", v)} options={(facets?.locations ?? []).map((l) => ({ value: l, label: l }))} />
+          <FilterDropdown label="Department" value={filters.departmentId} onChange={(v) => setFilter("departmentId", v)} options={(facets?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
+          <FilterDropdown label="Location" value={filters.location} onChange={(v) => setFilter("location", v)} options={(facets?.locations ?? []).map((l) => ({ value: l, label: l }))} />
           {(facets?.costCenters.length ?? 0) > 0 && (
-            <FilterSelect label="Cost centre" value={filters.costCenter} onChange={(v) => setFilter("costCenter", v)} options={facets!.costCenters.map((c) => ({ value: c, label: c }))} />
+            <FilterDropdown label="Cost centre" value={filters.costCenter} onChange={(v) => setFilter("costCenter", v)} options={facets!.costCenters.map((c) => ({ value: c, label: c }))} />
           )}
-          <label className="dirFilter" data-active={scope !== "current" || undefined}>
-            <span className="dirFilterLabel">Employees</span>
-            <select value={scope} onChange={(e) => (setScope(e.target.value as typeof scope), setPage(1))} aria-label="Who">
-              <option value="current">Current</option>
-              <option value="former">Former</option>
-              <option value="all">Everyone</option>
-            </select>
-          </label>
+          <FilterDropdown label="Employees" value={scope} options={SCOPES} allLabel={null} onChange={(v) => (setScope(v as typeof scope), setPage(1))} />
           <div className="dirSearch">
             <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search name, code, email, phone…" width="100%" />
           </div>

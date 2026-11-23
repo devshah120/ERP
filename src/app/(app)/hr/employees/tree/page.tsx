@@ -7,7 +7,6 @@ import PageHeader from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import SearchSelect from "@/components/resource/SearchSelect";
-import EmployeeTabs from "@/components/hr/EmployeeTabs";
 import { IconMinus, IconPlus, IconRefresh, IconUser, IconHome } from "@/components/icons";
 
 interface OrgNode {
@@ -169,8 +168,7 @@ export default function OrgTreePage() {
 
   return (
     <>
-      <PageHeader title="Employees" description="Who reports to whom. Set each person's “Reports to” on their employee record." />
-      <EmployeeTabs active="tree" />
+      <PageHeader title="Organization Tree" description="Who reports to whom. Set each person's “Reports to” on their employee record." />
 
       <div className="toolbar">
         <div style={{ width: "18rem" }}>

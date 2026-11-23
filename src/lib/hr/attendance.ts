@@ -14,6 +14,7 @@ import {
   nowTimeIn,
   loadCalendar,
   shiftFor,
+  holidaysFor,
   dayKind,
   employeesDuring,
   type HrCalendar,
@@ -78,12 +79,12 @@ export interface AttendanceRow {
  * the records, so payroll and the register can never disagree.
  */
 export function summarizeMonth(
-  emp: { dateOfJoining: Date; dateOfExit?: Date | null; shiftId?: unknown },
+  emp: { dateOfJoining: Date; dateOfExit?: Date | null; shiftId?: unknown; holidayCalendarId?: unknown },
   cal: HrCalendar,
   days: Date[],
   records: Map<string, AttendanceRow>
 ): { codes: string[]; summary: MonthSummary } {
-  const shift = shiftFor(cal, emp.shiftId);
+  const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
   const joined = toDay(emp.dateOfJoining);
   const exited = emp.dateOfExit ? toDay(emp.dateOfExit) : null;
   const s: MonthSummary = { present: 0, absent: 0, halfDays: 0, paidLeave: 0, unpaidLeave: 0, holidays: 0, weeklyOffs: 0, onDuty: 0, unmarked: 0, lateDays: 0, notEmployed: 0, lopDays: 0 };
@@ -198,7 +199,7 @@ export async function dailySheet(ctx: AuthContext, dateStr: string) {
   const locked = await PayrollRun.exists({ businessId: ctx.businessId, year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, status: { $in: ["APPROVED", "PAID"] } });
 
   const rows = emps.map((e) => {
-    const shift = shiftFor(cal, e.shiftId);
+    const shift = shiftFor(cal, e.shiftId, e.holidayCalendarId);
     const kind = dayKind(cal, shift, date);
     const rec = byEmp.get(String(e._id));
     const label = labels.get(String(e._id));
@@ -231,7 +232,8 @@ export async function dailySheet(ctx: AuthContext, dateStr: string) {
 
   return {
     date: dayKey(date),
-    holiday: cal.holidays.get(dayKey(date)) ?? null,
+    // The holiday most people have that day (everyone's or the default calendar's); rows carry each person's own day kind.
+    holiday: holidaysFor(cal).get(dayKey(date)) ?? null,
     locked: Boolean(locked),
     rows,
     counts,
@@ -283,7 +285,7 @@ export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof sav
       skipped += 1;
       continue;
     }
-    const shift = shiftFor(cal, emp.shiftId);
+    const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
     const working = row.status === "PRESENT" || row.status === "HALF_DAY" || row.status === "ON_DUTY";
     const times = working ? computeTimes(shift, row.checkIn, row.checkOut) : { workedMinutes: 0, lateMinutes: 0, overtimeMinutes: 0 };
     ops.push({
@@ -362,7 +364,7 @@ export async function monthlyRegister(ctx: AuthContext, year: number, month: num
   return {
     year,
     month,
-    days: days.map((d) => ({ date: dayKey(d), day: d.getUTCDate(), weekday: d.getUTCDay(), holiday: cal.holidays.get(dayKey(d)) ?? null })),
+    days: days.map((d) => ({ date: dayKey(d), day: d.getUTCDate(), weekday: d.getUTCDay(), holiday: holidaysFor(cal).get(dayKey(d)) ?? null })),
     rows,
   };
 }
@@ -380,7 +382,7 @@ export async function punch(ctx: AuthContext) {
   await assertPayrollOpen(ctx.businessId, [date]);
 
   const cal = await loadCalendar(ctx.businessId, date, date);
-  const shift = shiftFor(cal, emp.shiftId);
+  const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
   const rec = await Attendance.findOne({ businessId: ctx.businessId, employeeId: emp._id, date });
 
   if (rec?.leaveApplicationId && rec.status === "LEAVE") {
@@ -425,7 +427,7 @@ export async function myAttendance(ctx: AuthContext, year: number, month: number
   const map = new Map(records.map((r) => [dayKey(toDay(r.date)), r]));
   const { codes, summary } = summarizeMonth(emp, cal, days, map);
   const todayRec = await Attendance.findOne({ businessId: ctx.businessId, employeeId: emp._id, date: today }).lean<AnyDoc>();
-  const shift = shiftFor(cal, emp.shiftId);
+  const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
   return {
     today: {
       date: dayKey(today),
@@ -441,7 +443,7 @@ export async function myAttendance(ctx: AuthContext, year: number, month: number
       code: codes[i],
       checkIn: map.get(dayKey(d))?.checkIn ?? "",
       checkOut: map.get(dayKey(d))?.checkOut ?? "",
-      holiday: cal.holidays.get(dayKey(d)) ?? null,
+      holiday: shift.holidays?.get(dayKey(d)) ?? null,
     })),
     summary,
     pendingLeaves,

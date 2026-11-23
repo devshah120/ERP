@@ -165,11 +165,14 @@ const shifts = master("hr-shifts", "Shifts", "Shift", {
   ],
 });
 
-const holidays = master("hr-holidays", "Holiday Calendar", "Holiday", {
+const HOLIDAY_CALENDAR_REF = { resource: "hr-holiday-calendars", labelField: "name" };
+
+const holidays = master("hr-holidays", "Holidays", "Holiday", {
   columns: [
     { key: "date", label: "Date", type: "date", sortField: "date" },
     { key: "name", label: "Holiday", filterParam: "name", sortField: "name" },
     { key: "holidayType", label: "Type", type: "label", labels: HOLIDAY_TYPE_LABELS },
+    { key: "calendarId", label: "Calendar", type: "reference", reference: HOLIDAY_CALENDAR_REF },
     { key: "description", label: "Description" },
     statusColumn,
   ],
@@ -180,6 +183,31 @@ const holidays = master("hr-holidays", "Holiday Calendar", "Holiday", {
         { name: "name", label: "Holiday", type: "text", required: true, placeholder: "Diwali" },
         { name: "date", label: "Date", type: "date", required: true },
         { name: "holidayType", label: "Type", type: "select", defaultValue: "PUBLIC", options: opts(HOLIDAY_TYPE_LABELS) },
+        { name: "calendarId", label: "Holiday calendar", type: "reference", reference: HOLIDAY_CALENDAR_REF, hint: "Blank = every employee gets it", sendBlank: true },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
+const holidayCalendars = master("hr-holiday-calendars", "Holiday Calendars", "Holiday calendar", {
+  permissions: { create: "hr-holidays.create", edit: "hr-holidays.edit", delete: "hr-holidays.delete" },
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Calendar", filterParam: "name", sortField: "name" },
+    { key: "isDefault", label: "Default", type: "yesno" },
+    { key: "description", label: "Description" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Calendar",
+      description: "Add its holidays under Holidays (choose this calendar on each), then assign employees on Assign Holiday Calendar.",
+      fields: [
+        { name: "name", label: "Calendar name", type: "text", required: true, placeholder: "Gujarat 2026" },
+        { name: "code", label: "Code", type: "text", hint: "Leave blank to number automatically" },
+        { name: "isDefault", label: "Default calendar for employees who have none", type: "checkbox", fullWidth: true },
         statusField,
         { name: "description", label: "Description", type: "textarea", fullWidth: true },
       ],
@@ -355,6 +383,7 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
         { name: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF, hint: "Sets leave days through its leave group", sendBlank: true },
         { name: "reportingManagerId", label: "Reports to", type: "reference", reference: EMPLOYEE_REF },
         { name: "shiftId", label: "Shift", type: "reference", reference: { resource: "hr-shifts", labelField: "name" }, hint: "Blank uses the default shift" },
+        { name: "holidayCalendarId", label: "Holiday calendar", type: "reference", reference: HOLIDAY_CALENDAR_REF, hint: "Blank uses the default calendar", sendBlank: true },
         { name: "workLocation", label: "Work location", type: "text" },
         { name: "employmentType", label: "Employment type", type: "select", defaultValue: "FULL_TIME", options: opts(EMPLOYMENT_TYPE_LABELS) },
         { name: "employmentStatus", label: "Employment status", type: "select", defaultValue: "PROBATION", options: opts(EMPLOYMENT_STATUS_LABELS) },
@@ -582,6 +611,7 @@ export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-grades": grades,
   "hr-shifts": shifts,
   "hr-holidays": holidays,
+  "hr-holiday-calendars": holidayCalendars,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
   "hr-attendance-reasons": attendanceReasons,

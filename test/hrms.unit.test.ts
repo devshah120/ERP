@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 import { productForPermission, productForHref, normalizeProducts, grants, homePathFor } from "@/lib/products";
 import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
-import { eachDay, monthRange, toDay, dayKey, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
+import { eachDay, monthRange, toDay, dayKey, dayKind, shiftFor, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
 import { toForest } from "@/lib/hr/orgTree";
 
 describe("product gating", () => {
@@ -343,5 +343,40 @@ describe("organization tree", () => {
     // Every chain now ends at the top.
     const top = (id: string): string => (out[id] ? top(out[id]!) : id);
     expect(new Set(["a", "b", "c", "x"].map(top)).size).toBe(1);
+  });
+});
+
+describe("holiday calendars", () => {
+  const general: ShiftRule = { id: "s", name: "General", startTime: "09:30", endTime: "18:30", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8, weeklyOffs: ["SUNDAY"] };
+  const cal: HrCalendar = {
+    holidays: new Map([["2026-01-26", "Republic Day"]]),
+    calendarHolidays: new Map([
+      ["gj", new Map([["2026-01-14", "Uttarayan"]])],
+      ["mh", new Map([["2026-05-01", "Maharashtra Day"]])],
+    ]),
+    defaultCalendarId: "gj",
+    shifts: new Map([["s", general]]),
+    defaultShift: general,
+  };
+  const kind = (calendarId: string | null, day: string) => dayKind(cal, shiftFor(cal, "s", calendarId), toDay(day));
+
+  it("gives everyone the holidays on no calendar", () => {
+    expect(kind("mh", "2026-01-26")).toBe("HOLIDAY");
+    expect(kind(null, "2026-01-26")).toBe("HOLIDAY");
+  });
+
+  it("gives a calendar's holidays only to its employees, and the default calendar's to those with none", () => {
+    expect(kind("mh", "2026-05-01")).toBe("HOLIDAY");
+    expect(kind("gj", "2026-05-01")).toBe("WORKING");
+    expect(kind("mh", "2026-01-14")).toBe("WORKING");
+    expect(kind(null, "2026-01-14")).toBe("HOLIDAY");
+    // An unknown calendar (deleted) leaves only the holidays for everyone.
+    expect(kind("gone", "2026-01-14")).toBe("WORKING");
+  });
+
+  it("keeps working for calendars built before holiday calendars existed", () => {
+    const old: HrCalendar = { holidays: new Map([["2026-01-26", "Republic Day"]]), shifts: new Map([["s", general]]), defaultShift: general };
+    expect(dayKind(old, general, toDay("2026-01-26"))).toBe("HOLIDAY");
+    expect(dayKind(old, shiftFor(old, "s", "anything"), toDay("2026-01-26"))).toBe("HOLIDAY");
   });
 });

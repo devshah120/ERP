@@ -62,9 +62,10 @@ export async function assertRegularizationAllowed(
   if (blank && future && !policy.futureBlankAttendance) refuse("Future days with no attendance marked can't be regularized.", "BLANK_ATTENDANCE");
 
   const cal = await loadCalendar(businessId, date, date);
-  const kind = dayKind(cal, shiftFor(cal, emp.shiftId), date);
+  const rule = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
+  const kind = dayKind(cal, rule, date);
   if (kind === "WEEKLY_OFF" && !policy.allowOnWeeklyOffs) refuse("That day is a weekly off, which can't be regularized.", "WEEKLY_OFF");
-  if (kind === "HOLIDAY" && !policy.allowOnHolidays) refuse(`That day is a holiday (${cal.holidays.get(dayKey(date))}), which can't be regularized.`, "HOLIDAY");
+  if (kind === "HOLIDAY" && !policy.allowOnHolidays) refuse(`That day is a holiday (${rule.holidays?.get(dayKey(date))}), which can't be regularized.`, "HOLIDAY");
 
   if (current?.leaveApplicationId) {
     const halfDayLeave = current.status === "HALF_DAY";

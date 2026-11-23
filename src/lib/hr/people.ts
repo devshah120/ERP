@@ -2,9 +2,10 @@ import { Types } from "mongoose";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Employee, HrAsset, HrDepartment, Shift, LeaveApplication, EmployeeLoan, Announcement, Holiday, WORKING_STATUSES } from "@/models/hr";
+import { Employee, HrAsset, HrDepartment, Shift, LeaveApplication, EmployeeLoan, Announcement, WORKING_STATUSES } from "@/models/hr";
 import { Branch } from "@/models/Branch";
 import { photoUrl } from "./photos";
+import { upcomingHolidaysFor } from "./holidayCalendars";
 import { User } from "@/models/User";
 import { Role } from "@/models/Role";
 import { Session } from "@/models/Session";
@@ -250,7 +251,7 @@ export async function myProfile(ctx: AuthContext) {
     emp.reportingManagerId ? employeeLabels(ctx.businessId, [emp.reportingManagerId]) : Promise.resolve(new Map()),
     balancesFor(ctx.businessId, [emp._id], year),
     activeAnnouncements(ctx.businessId, today),
-    Holiday.find({ businessId: ctx.businessId, deletedAt: null, status: "ACTIVE", date: { $gte: today } }).sort({ date: 1 }).limit(6).lean<AnyDoc[]>(),
+    upcomingHolidaysFor(ctx.businessId, emp, today, 6),
     Business.findById(ctx.businessId, { tradeName: 1 }).lean<AnyDoc>(),
   ]);
   const label = labels.get(String(emp._id));

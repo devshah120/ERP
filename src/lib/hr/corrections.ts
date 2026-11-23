@@ -135,7 +135,7 @@ export async function approveCorrection(ctx: AuthContext, id: string, note: stri
   }
 
   const cal = await loadCalendar(ctx.businessId, date, date);
-  const times = computeTimes(shiftFor(cal, emp.shiftId), req.checkIn, req.checkOut);
+  const times = computeTimes(shiftFor(cal, emp.shiftId, emp.holidayCalendarId), req.checkIn, req.checkOut);
   const decidedAs = opts.asManager ? "MANAGER" : "HR";
   const session = await mongoose.startSession();
   try {

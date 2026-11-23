@@ -154,7 +154,7 @@ export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types
 
 async function leaveDays(businessId: Types.ObjectId, emp: AnyDoc, from: Date, to: Date, halfDay: boolean) {
   const cal = await loadCalendar(businessId, from, to);
-  const days = workingDays(cal, shiftFor(cal, emp.shiftId), from, to);
+  const days = workingDays(cal, shiftFor(cal, emp.shiftId, emp.holidayCalendarId), from, to);
   return { dates: days, count: halfDay ? (days.length > 0 ? 0.5 : 0) : days.length };
 }
 

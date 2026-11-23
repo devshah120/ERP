@@ -977,4 +977,51 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect((await Employee.findById(emp.asha).lean<{ photoUpdatedAt: Date | null }>())!.photoUpdatedAt).toBeNull();
     await expect(readPhoto(ctx, String(emp.asha))).rejects.toMatchObject({ statusCode: 404 });
   });
+
+  it("gives each employee the holidays of their holiday calendar", async () => {
+    const { previewLeave } = await import("@/lib/hr/leave");
+    const { assignCalendar, calendarAssignments, keepSingleDefault, upcomingHolidaysFor } = await import("@/lib/hr/holidayCalendars");
+    const { Employee, Holiday, HolidayCalendar } = await import("@/models/hr");
+    const bid = new Types.ObjectId(businessId);
+    const working = { businessId, deletedAt: null, employmentStatus: { $in: ["PROBATION", "CONFIRMED", "ON_NOTICE"] } };
+    const [a, b] = await Employee.find(working).sort({ employeeCode: 1 }).limit(2).lean<{ _id: Types.ObjectId; holidayCalendarId: Types.ObjectId | null }[]>();
+
+    const gujarat = await HolidayCalendar.create({ businessId, code: "HC-GJ", name: "Gujarat", isDefault: true });
+    const maharashtra = await HolidayCalendar.create({ businessId, code: "HC-MH", name: "Maharashtra" });
+    const paused = await HolidayCalendar.create({ businessId, code: "HC-OLD", name: "Old", status: "INACTIVE" });
+    // Tuesday 12 and Wednesday 13 January 2027.
+    await Holiday.create({ businessId, name: "Gujarat day off", date: new Date("2027-01-12T00:00:00Z"), calendarId: gujarat._id });
+    await Holiday.create({ businessId, name: "Maharashtra day off", date: new Date("2027-01-13T00:00:00Z"), calendarId: maharashtra._id });
+    const days = async (id: Types.ObjectId) => (await previewLeave(ctx, { employeeId: String(id), fromDate: "2027-01-12", toDate: "2027-01-13", halfDay: false })).days;
+
+    // Neither has a calendar yet: both follow the default (Gujarat), so only the 13th is a working day.
+    expect(await days(a._id)).toBe(1);
+    expect(await days(b._id)).toBe(1);
+
+    await expect(assignCalendar(ctx, { employeeIds: [String(b._id)], calendarId: String(paused._id) })).rejects.toMatchObject({ code: "CALENDAR_INACTIVE" });
+    await assignCalendar(ctx, { employeeIds: [String(b._id)], calendarId: String(maharashtra._id) });
+    expect(await days(a._id)).toBe(1);
+    expect(await days(b._id)).toBe(1);
+    // B is now off on the 13th, not the 12th.
+    expect((await previewLeave(ctx, { employeeId: String(b._id), fromDate: "2027-01-12", toDate: "2027-01-12", halfDay: false })).days).toBe(1);
+    expect((await previewLeave(ctx, { employeeId: String(b._id), fromDate: "2027-01-13", toDate: "2027-01-13", halfDay: false })).days).toBe(0);
+    const bDoc = await Employee.findById(b._id).lean();
+    expect((await upcomingHolidaysFor(bid, bDoc, new Date("2027-01-01T00:00:00Z"), 10)).map((h: { name: string }) => h.name)).toContain("Maharashtra day off");
+    expect((await upcomingHolidaysFor(bid, bDoc, new Date("2027-01-01T00:00:00Z"), 10)).map((h: { name: string }) => h.name)).not.toContain("Gujarat day off");
+
+    const screen = await calendarAssignments(ctx, { page: 1, pageSize: 200, calendar: String(maharashtra._id) });
+    expect(screen.items.map((r) => r.id)).toEqual([String(b._id)]);
+    expect(screen.defaultCalendar?.name).toBe("Gujarat");
+
+    // Only one default: making Maharashtra the default clears Gujarat's flag.
+    await HolidayCalendar.updateOne({ _id: maharashtra._id }, { isDefault: true });
+    await keepSingleDefault(bid, { _id: maharashtra._id, isDefault: true });
+    expect((await HolidayCalendar.findById(gujarat._id).lean<{ isDefault: boolean }>())!.isDefault).toBe(false);
+
+    // Back to the default for both, and tidy up.
+    await assignCalendar(ctx, { employeeIds: [String(a._id), String(b._id)], calendarId: null });
+    await Holiday.deleteMany({ businessId, calendarId: { $in: [gujarat._id, maharashtra._id] } });
+    await HolidayCalendar.deleteMany({ _id: { $in: [gujarat._id, maharashtra._id, paused._id] } });
+    for (const e of [a, b]) await Employee.updateOne({ _id: e._id }, { holidayCalendarId: e.holidayCalendarId ?? null });
+  });
 });

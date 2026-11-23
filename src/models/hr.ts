@@ -90,15 +90,34 @@ export const Shift = defineMasterModel("Shift", {
   notes: { type: String, trim: true },
 });
 
+/**
+ * A set of holidays for a group of employees, e.g. a state or a site. An
+ * employee follows their own calendar (Employee.holidayCalendarId) or, with
+ * none, the default one. Holidays on no calendar apply to everyone.
+ */
+export const HolidayCalendar = defineMasterModel(
+  "HolidayCalendar",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    /** Followed by employees who have no calendar of their own; at most one. */
+    isDefault: { type: Boolean, default: false },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "code" }
+);
+
 export const Holiday = defineMasterModel(
   "Holiday",
   {
     name: { type: String, required: true, trim: true },
     date: { type: Date, required: true },
     holidayType: { type: String, enum: HOLIDAY_TYPES, default: "PUBLIC" },
+    /** The calendar it belongs to; null = every employee gets it. */
+    calendarId: { type: Schema.Types.ObjectId, ref: "HolidayCalendar", default: null },
     description: { type: String, trim: true },
   },
-  { indexes: [{ date: 1 }] }
+  { indexes: [{ date: 1 }, { calendarId: 1, date: 1 }] }
 );
 
 export const LeaveType = defineMasterModel(
@@ -190,6 +209,8 @@ export const Employee = defineMasterModel(
     gradeId: { type: Schema.Types.ObjectId, ref: "HrGrade", default: null },
     reportingManagerId: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
     shiftId: { type: Schema.Types.ObjectId, ref: "Shift", default: null },
+    /** Whose holidays they get; null = the default holiday calendar. */
+    holidayCalendarId: { type: Schema.Types.ObjectId, ref: "HolidayCalendar", default: null },
     branchId: { type: Schema.Types.ObjectId, ref: "Branch", default: null },
     workLocation: { type: String, trim: true },
     employmentType: { type: String, enum: EMPLOYMENT_TYPES, default: "FULL_TIME" },
@@ -231,7 +252,7 @@ export const Employee = defineMasterModel(
   },
   {
     uniqueField: "employeeCode",
-    indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }, { gradeId: 1 }],
+    indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }, { gradeId: 1 }, { holidayCalendarId: 1 }],
   }
 );
 

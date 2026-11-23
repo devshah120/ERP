@@ -412,42 +412,68 @@ textarea.input {
   display: flex;
   flex-wrap: wrap;
 }
-.dirFilter {
+/* Labelled filter cell that opens a menu (FilterDropdown) */
+.filterDropdown {
   flex: 1 1 10rem;
   min-width: 0;
   display: grid;
   gap: 0.125rem;
   padding: 0.625rem 1rem;
+  border: 0;
   border-right: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
+  transition: background var(--dur) var(--ease);
 }
-.dirFilter:hover {
+.filterDropdown:hover,
+.filterDropdown[aria-expanded="true"] {
   background: var(--surface-hover);
 }
-.dirFilterLabel {
+.filterDropdown:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-ring);
+}
+.filterDropdownLabel {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
-.dirFilter[data-active] .dirFilterLabel {
+.filterDropdown[data-active] .filterDropdownLabel {
   color: var(--accent-text);
 }
-.dirFilter select {
-  width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
+.filterDropdownValue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   font-size: 0.875rem;
-  cursor: pointer;
-  outline: none;
+  min-width: 0;
 }
-.dirFilter:focus-within {
-  box-shadow: inset 0 0 0 2px var(--accent-ring);
+.filterDropdownValue > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filterDropdownValue > svg {
+  flex: none;
+  color: var(--text-tertiary);
+  transition: transform var(--dur) var(--ease);
+}
+.filterDropdown[aria-expanded="true"] .filterDropdownValue > svg {
+  transform: rotate(180deg);
+}
+.filterDropdownSearch {
+  padding: 0.25rem 0.5rem 0.5rem;
+  list-style: none;
+}
+.filterDropdownSearch .input {
+  height: var(--control-h-sm);
 }
 .dirSearch {
   flex: 2 1 16rem;
@@ -584,6 +610,39 @@ textarea.input {
     height: 4rem;
     font-size: 1.125rem;
   }
+}
+
+/* Holiday calendar chips (hr/holidays/assign): click one to filter by it */
+.hcSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.hcChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.hcChip:hover {
+  border-color: var(--border-strong);
+}
+.hcChip[data-active] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.hcChip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* Photo picker (ImageField) */

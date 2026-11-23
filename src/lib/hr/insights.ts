@@ -138,18 +138,8 @@ export async function hrDashboard(ctx: AuthContext) {
 /* Reports                                                             */
 /* ------------------------------------------------------------------ */
 
-export const HR_REPORTS = [
-  { key: "headcount", label: "Employee master (headcount)", needs: "none" },
-  { key: "attendance-summary", label: "Attendance summary", needs: "month" },
-  { key: "leave-register", label: "Leave register", needs: "year" },
-  { key: "salary-register", label: "Salary register", needs: "month" },
-  { key: "pf-statement", label: "PF statement (ECR)", needs: "month" },
-  { key: "esi-statement", label: "ESI statement", needs: "month" },
-  { key: "bank-transfer", label: "Bank transfer sheet", needs: "month" },
-  { key: "loans-outstanding", label: "Loans outstanding", needs: "none" },
-  { key: "exits", label: "Exits / attrition", needs: "year" },
-] as const;
-export type HrReportKey = (typeof HR_REPORTS)[number]["key"];
+export { HR_REPORTS, type HrReportKey } from "./reportCatalog";
+import type { HrReportKey } from "./reportCatalog";
 
 const money = (v: unknown) => d(v).toFixed(2);
 const fmtDate = (v: unknown) => (v ? dayKey(toDay(v as Date)) : "");

@@ -6,12 +6,14 @@ import { Business } from "@/models/Business";
 import { recordFormWrite } from "@/lib/hr/history";
 import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin";
 import { ensureAttendanceReasons } from "@/lib/hr/regularization";
+import { keepSingleDefault } from "@/lib/hr/holidayCalendars";
 import {
   HrDepartment,
   Designation,
   HrGrade,
   Shift,
   Holiday,
+  HolidayCalendar,
   LeaveType,
   LeaveGroup,
   AttendanceReason,
@@ -168,16 +170,39 @@ const holidays = define("hr-holidays", "Holiday", {
     name: z.string().trim().min(2).max(150),
     date: requiredDate,
     holidayType: z.enum(HOLIDAY_TYPES).default("PUBLIC"),
+    calendarId: optionalRef,
     description: optionalText(500),
     status,
   },
   searchFields: ["name", "description"],
-  filterFields: { name: "name", holidayType: "holidayType" },
+  filterFields: { name: "name", holidayType: "holidayType", calendarId: "calendarId" },
   sortableFields: ["date", "name", "createdAt"],
   defaultSort: "date",
   defaultSortDir: "asc",
-  toDocument: documentConverter({ dates: ["date"] }),
+  toDocument: documentConverter({ dates: ["date"], refs: ["calendarId"] }),
 });
+
+/** Holiday calendars ride on the holiday permissions so existing HR roles can use them at once. */
+const holidayCalendars: ResourceDefinition = {
+  ...define("hr-holiday-calendars", "Holiday calendar", {
+    model: HolidayCalendar,
+    autoCode: { field: "code", prefix: "HC", entityType: "HR_HOLIDAY_CALENDAR" },
+    fields: {
+      code: optionalCode,
+      name: z.string().trim().min(2).max(100),
+      isDefault: z.coerce.boolean().default(false),
+      description: optionalText(500),
+      status,
+    },
+    searchFields: ["name", "code"],
+    filterFields: { code: "code", name: "name" },
+    sortableFields: ["code", "name", "createdAt"],
+    defaultSort: "name",
+    defaultSortDir: "asc",
+    afterWrite: async (ctx, _kind, doc) => keepSingleDefault(ctx.businessId, doc),
+  }),
+  permissions: { view: "hr-holidays.view", create: "hr-holidays.create", edit: "hr-holidays.edit", delete: "hr-holidays.delete" },
+};
 
 const leaveTypes = define("hr-leave-types", "Leave type", {
   model: LeaveType,
@@ -325,6 +350,7 @@ const employees = define("hr-employees", "Employee", {
     gradeId: optionalRef,
     reportingManagerId: optionalRef,
     shiftId: optionalRef,
+    holidayCalendarId: optionalRef,
     branchId: optionalRef,
     workLocation: optionalText(120),
     employmentType: z.enum(EMPLOYMENT_TYPES).default("FULL_TIME"),
@@ -391,7 +417,7 @@ const employees = define("hr-employees", "Employee", {
   },
   toDocument: documentConverter({
     money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"],
-    refs: ["departmentId", "designationId", "gradeId", "reportingManagerId", "shiftId", "branchId"],
+    refs: ["departmentId", "designationId", "gradeId", "reportingManagerId", "shiftId", "holidayCalendarId", "branchId"],
     dates: ["dateOfBirth", "dateOfJoining", "probationEndDate", "confirmationDate", "dateOfExit"],
   }),
 });
@@ -538,6 +564,7 @@ export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-grades": grades,
   "hr-shifts": shifts,
   "hr-holidays": holidays,
+  "hr-holiday-calendars": holidayCalendars,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
   "hr-attendance-reasons": attendanceReasons,

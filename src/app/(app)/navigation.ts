@@ -1,4 +1,5 @@
 import type { SVGProps, ComponentType } from "react";
+import { HR_REPORTS } from "@/lib/hr/reportCatalog";
 import {
   IconDashboard,
   IconSales,
@@ -120,7 +121,9 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr-leave-groups", label: "Leave Groups", enabled: true, createHref: "/hr-leave-groups/new", keywords: "leave group policy entitlement days per year" },
           { href: "/hr/leaves/grade-groups", label: "Assign Grade to Group", enabled: true, keywords: "assign grade leave group entitlement band" },
           { href: "/hr-shifts", label: "Shifts", enabled: true, createHref: "/hr-shifts/new", keywords: "shift timing weekly off roster" },
-          { href: "/hr-holidays", label: "Holiday Calendar", enabled: true, createHref: "/hr-holidays/new", keywords: "holiday festival public holiday list" },
+          { href: "/hr-holidays", label: "Holidays", enabled: true, createHref: "/hr-holidays/new", keywords: "holiday festival public holiday list" },
+          { href: "/hr-holiday-calendars", label: "Holiday Calendars", enabled: true, createHref: "/hr-holiday-calendars/new", keywords: "holiday calendar state location list" },
+          { href: "/hr/holidays/assign", label: "Assign Holiday Calendar", enabled: true, keywords: "assign holiday calendar employees location state" },
         ],
       },
       {
@@ -158,7 +161,13 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr-appraisals", label: "Appraisals", enabled: true, createHref: "/hr-appraisals/new", keywords: "performance review rating increment kra" },
         ],
       },
-      { key: "hr-reports", label: "HR Reports", icon: IconClipboard, href: "/hr/reports", keywords: "salary register pf esi statement headcount attendance report bank transfer" },
+      {
+        key: "hr-reports",
+        label: "HR Reports",
+        keywords: "hr report salary register pf esi statement headcount attendance bank transfer",
+        icon: IconClipboard,
+        children: HR_REPORTS.map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
+      },
     ],
   },
   {
@@ -605,6 +614,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/leaves/grade-groups": "hr-leave-types.view",
   "/hr-shifts": "hr-shifts.view",
   "/hr-holidays": "hr-holidays.view",
+  "/hr-holiday-calendars": "hr-holidays.view",
+  "/hr/holidays/assign": "hr-holidays.view",
   "/hr/payroll": "hr-payroll.view",
   "/hr/payroll/variables": "hr-payroll.view",
   "/hr/payroll/variables/import": "hr-payroll.process",
@@ -625,6 +636,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-candidates": "hr-candidates.view",
   "/hr-appraisals": "hr-appraisals.view",
   "/hr/reports": "hr-reports.view",
+  ...Object.fromEntries(HR_REPORTS.map((r) => [`/hr/reports/${r.key}`, "hr-reports.view"])),
 };
 
 export function getRequiredPermission(href: string): string | null {
@@ -683,6 +695,7 @@ const CREATE_PERMISSIONS: Record<string, string> = {
   "/hr-attendance-reasons/new": "hr-attendance.edit",
   "/hr-shifts/new": "hr-shifts.create",
   "/hr-holidays/new": "hr-holidays.create",
+  "/hr-holiday-calendars/new": "hr-holidays.create",
   "/hr/loans/new": "hr-loans.create",
   "/hr/claims/new": "hr-claims.create",
   "/hr-job-openings/new": "hr-job-openings.create",

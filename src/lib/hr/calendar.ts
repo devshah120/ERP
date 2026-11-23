@@ -1,5 +1,5 @@
 import type { Types } from "mongoose";
-import { Holiday, Shift, Employee, WEEKDAYS, WORKING_STATUSES } from "@/models/hr";
+import { Holiday, HolidayCalendar, Shift, Employee, WEEKDAYS, WORKING_STATUSES } from "@/models/hr";
 import { AppError } from "@/lib/errors/AppError";
 
 /**
@@ -74,6 +74,11 @@ export interface ShiftRule {
   halfDayHours: number;
   fullDayHours: number;
   weeklyOffs: string[];
+  /**
+   * Holidays (day key → name) of the employee this rule was made for, from
+   * their holiday calendar. Absent: the calendar's holidays for everyone.
+   */
+  holidays?: Map<string, string>;
 }
 
 const FALLBACK_SHIFT: ShiftRule = {
@@ -90,21 +95,49 @@ const FALLBACK_SHIFT: ShiftRule = {
 /**
  * Everything needed to classify days for a date range: holidays by day and
  * each shift's rules, plus the shift an employee without one falls back to.
+ * Holidays on no calendar (`holidays`) apply to everyone; `calendarHolidays`
+ * adds each holiday calendar's own, and an employee without a calendar
+ * follows `defaultCalendarId`.
  */
 export interface HrCalendar {
   holidays: Map<string, string>;
+  calendarHolidays?: Map<string, Map<string, string>>;
+  defaultCalendarId?: string | null;
   shifts: Map<string, ShiftRule>;
   defaultShift: ShiftRule;
+}
+
+/** One employee's holidays: everyone's plus their calendar's (or the default calendar's). */
+export function holidaysFor(cal: HrCalendar, holidayCalendarId?: unknown): Map<string, string> {
+  const id = holidayCalendarId ? String(holidayCalendarId) : cal.defaultCalendarId ?? null;
+  const own = id ? cal.calendarHolidays?.get(id) : undefined;
+  if (!own || own.size === 0) return cal.holidays;
+  return new Map([...cal.holidays, ...own]);
 }
 
 export async function loadCalendar(businessId: Types.ObjectId, from: Date, to: Date): Promise<HrCalendar> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type Row = any;
-  const [holidayRows, shiftRows] = await Promise.all([
+  const [holidayRows, shiftRows, calendars] = await Promise.all([
     Holiday.find({ businessId, deletedAt: null, status: "ACTIVE", holidayType: { $ne: "OPTIONAL" }, date: { $gte: from, $lte: to } }).lean<Row[]>(),
     Shift.find({ businessId, deletedAt: null }).lean<Row[]>(),
+    HolidayCalendar.find({ businessId, deletedAt: null, status: "ACTIVE" }, { isDefault: 1 }).lean<Row[]>(),
   ]);
-  const holidays = new Map<string, string>(holidayRows.map((h) => [dayKey(toDay(h.date)), h.name]));
+  // Holidays of a deleted or inactive calendar apply to no one.
+  const liveCalendars = new Set(calendars.map((c) => String(c._id)));
+  const holidays = new Map<string, string>();
+  const calendarHolidays = new Map<string, Map<string, string>>();
+  for (const h of holidayRows) {
+    if (!h.calendarId) {
+      holidays.set(dayKey(toDay(h.date)), h.name);
+      continue;
+    }
+    const id = String(h.calendarId);
+    if (!liveCalendars.has(id)) continue;
+    if (!calendarHolidays.has(id)) calendarHolidays.set(id, new Map());
+    calendarHolidays.get(id)!.set(dayKey(toDay(h.date)), h.name);
+  }
+  const defaultCalendar = calendars.find((c) => c.isDefault);
   const shifts = new Map<string, ShiftRule>();
   for (const s of shiftRows) {
     shifts.set(String(s._id), {
@@ -119,18 +152,28 @@ export async function loadCalendar(businessId: Types.ObjectId, from: Date, to: D
     });
   }
   const def = shiftRows.find((s) => s.isDefault && s.status === "ACTIVE") ?? shiftRows.find((s) => s.status === "ACTIVE");
-  return { holidays, shifts, defaultShift: (def && shifts.get(String(def._id))) || FALLBACK_SHIFT };
+  return {
+    holidays,
+    calendarHolidays,
+    defaultCalendarId: defaultCalendar ? String(defaultCalendar._id) : null,
+    shifts,
+    defaultShift: (def && shifts.get(String(def._id))) || FALLBACK_SHIFT,
+  };
 }
 
-export function shiftFor(cal: HrCalendar, shiftId: unknown): ShiftRule {
+/**
+ * The day rules for one employee: their shift (or the default shift) and,
+ * when their holiday calendar is given, that calendar's holidays.
+ */
+export function shiftFor(cal: HrCalendar, shiftId: unknown, holidayCalendarId?: unknown): ShiftRule {
   const own = shiftId ? cal.shifts.get(String(shiftId)) : undefined;
-  return own ?? cal.defaultShift;
+  return { ...(own ?? cal.defaultShift), holidays: holidaysFor(cal, holidayCalendarId) };
 }
 
 export type DayKind = "WORKING" | "WEEKLY_OFF" | "HOLIDAY";
 
 export function dayKind(cal: HrCalendar, shift: ShiftRule, d: Date): DayKind {
-  if (cal.holidays.has(dayKey(d))) return "HOLIDAY";
+  if ((shift.holidays ?? cal.holidays).has(dayKey(d))) return "HOLIDAY";
   if (shift.weeklyOffs.includes(weekdayName(d))) return "WEEKLY_OFF";
   return "WORKING";
 }

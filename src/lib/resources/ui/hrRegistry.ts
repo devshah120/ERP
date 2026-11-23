@@ -236,6 +236,17 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
     {
       label: "Personal details",
       fields: [
+        {
+          name: "userId",
+          label: "Existing user",
+          type: "reference",
+          reference: { resource: "users", labelField: "name", url: "/api/admin/users", detailField: "email", searchable: true },
+          hint: "from Team Members; links their login to this employee",
+          placeholder: "Search …",
+          fullWidth: true,
+          sendBlank: true,
+          permissions: ["users.view", "users.edit"],
+        },
         { name: "name", label: "Full name", type: "text", required: true, placeholder: "Asha Rao" },
         { name: "employeeCode", label: "Employee code", type: "text", hint: "Leave blank to number automatically" },
         { name: "gender", label: "Gender", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(GENDER_LABELS)] },
@@ -303,17 +314,6 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
         { name: "ifscCode", label: "IFSC", type: "text", placeholder: "HDFC0001234", showWhen: { field: "salaryPaymentMode", values: ["BANK"] } },
         statusField,
         { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
-      ],
-    },
-    {
-      label: "Sign-in",
-      description: "Optional. Give them a login now with a role; they sign in with the temporary password and must change it. Leave the email blank to skip — you can add it later from the profile.",
-      createOnly: true,
-      permissions: ["users.create", "roles.view"],
-      fields: [
-        { name: "loginEmail", label: "Email", type: "email", hint: "used to sign in", placeholder: "asha@company.com" },
-        { name: "loginRoleId", label: "Role", type: "reference", reference: { resource: "roles", labelField: "name", url: "/api/admin/roles", defaultLabel: "Employee (Self Service)" } },
-        { name: "loginPassword", label: "Temporary password", type: "text", generate: "password" },
       ],
     },
   ],

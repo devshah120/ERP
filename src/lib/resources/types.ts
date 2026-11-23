@@ -62,12 +62,16 @@ export interface ResourceDefinition {
   afterWrite?: (ctx: AuthContext, kind: "CREATE" | "UPDATE", doc: any, before?: any, side?: Record<string, unknown>) => Promise<void>;
 
   /**
-   * Inputs validated by the schema but not stored on the record nor written to
-   * the audit log (e.g. a temporary password); handed to `validateCreate` and
-   * `afterWrite` instead.
+   * Inputs validated by the schema but not written by the generic handlers nor
+   * to their audit entry (e.g. a link that needs its own checks); handed to
+   * `validateCreate` / `validateUpdate` and `afterWrite` instead.
    */
   sideFields?: string[];
 
   /** Checks run before a single create through the form, with the side fields. Throw an AppError to refuse. */
   validateCreate?: (ctx: AuthContext, side: Record<string, unknown>) => Promise<void>;
+
+  /** Checks run before an update through the form, with the side fields and the record as it is now. Throw an AppError to refuse. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  validateUpdate?: (ctx: AuthContext, side: Record<string, unknown>, before: any) => Promise<void>;
 }

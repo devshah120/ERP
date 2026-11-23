@@ -11,6 +11,7 @@ import { getPath, setPath } from "@/lib/resources/ui/paths";
 import type { ResourceUi, FieldConfig } from "@/lib/resources/ui/types";
 import VariantsEditor, { type VariantRow } from "./VariantsEditor";
 import LinesEditor, { type LineRow, type ReferenceOption } from "./LinesEditor";
+import SearchSelect from "./SearchSelect";
 import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
@@ -118,7 +119,7 @@ function buildPayload(config: ResourceUi, state: FormState): Record<string, unkn
         payload = setPath(payload, field.name, value ?? []);
         continue;
       }
-      if (typeof value === "string" && value.trim() === "" && !field.required) {
+      if (typeof value === "string" && value.trim() === "" && !field.required && !field.sendBlank) {
         continue; // omit blank optional fields entirely
       }
       payload = setPath(payload, field.name, value);
@@ -139,11 +140,17 @@ export default function ResourceFormView({
   const searchParams = useSearchParams();
   const isEdit = Boolean(recordId);
   const { hasPermission } = useAuth();
-  /** The sections this form shows: create-only sections are left out of an edit, permission-gated ones without the permission. */
-  const view = useMemo<ResourceUi>(
-    () => ({ ...config, sections: config.sections.filter((s) => (!s.createOnly || !isEdit) && (s.permissions ?? []).every((p) => hasPermission(p))) }),
-    [config, isEdit, hasPermission]
-  );
+  /** The sections this form shows: create-only sections are left out of an edit, permission-gated sections and fields without the permission. */
+  const view = useMemo<ResourceUi>(() => {
+    const allowed = (perms?: string[]) => (perms ?? []).every((p) => hasPermission(p));
+    return {
+      ...config,
+      sections: config.sections
+        .filter((s) => (!s.createOnly || !isEdit) && allowed(s.permissions))
+        .map((s) => ({ ...s, fields: s.fields.filter((f) => allowed(f.permissions)) }))
+        .filter((s) => s.fields.length > 0),
+    };
+  }, [config, isEdit, hasPermission]);
   /** Copy: prefill a new record from an existing one of the same type. */
   const copyFromId = searchParams.get("copyFrom");
 
@@ -251,7 +258,7 @@ export default function ResourceFormView({
   useEffect(() => {
     // Top-level reference fields, plus reference columns inside "lines" fields
     // (keyed "<field>.<column>").
-    const refs: { key: string; reference: { resource: string; labelField: string; url?: string; defaultLabel?: string } }[] = [];
+    const refs: { key: string; reference: NonNullable<FieldConfig["reference"]> }[] = [];
     for (const field of view.sections.flatMap((s) => s.fields)) {
       if (field.type === "reference" && field.reference) refs.push({ key: field.name, reference: field.reference });
       for (const col of field.columns ?? []) {
@@ -273,7 +280,9 @@ export default function ResourceFormView({
         const res = await cache.get(url)!;
         return [
           key,
-          res.items.filter((item) => item.isActive !== false).map((item): ReferenceOption => {
+          res.items
+            .filter((item) => item.isActive !== false)
+            .map((item): ReferenceOption => {
             const variants = Array.isArray(item.variants)
               ? (item.variants as { sku: string; color?: string; size?: string; isActive?: boolean }[])
                   .filter((v) => v.isActive !== false)
@@ -283,6 +292,7 @@ export default function ResourceFormView({
             return {
               value: String(item.id),
               label: `${reference.resource === "items" ? code : ""}${String(item[reference.labelField] ?? item.id)}`,
+              detail: reference.detailField && item[reference.detailField] ? String(item[reference.detailField]) : undefined,
               variants: variants && variants.length > 0 ? variants : undefined,
             };
           }),
@@ -463,6 +473,18 @@ export default function ResourceFormView({
             </select>
           );
         case "reference":
+          if (field.reference?.searchable) {
+            return (
+              <SearchSelect
+                id={`f-${field.name}`}
+                value={String(value ?? "")}
+                options={referenceOptions[field.name] ?? []}
+                onChange={(next) => updateField(field.name, next)}
+                placeholder={field.placeholder}
+                invalid={Boolean(error)}
+              />
+            );
+          }
           return (
             <select
               id={`f-${field.name}`}

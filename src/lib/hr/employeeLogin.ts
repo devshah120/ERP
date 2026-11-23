@@ -11,11 +11,12 @@ import { selfServiceRole } from "./setup";
 import type { AnyDoc } from "./common";
 
 /*
- * A sign-in for an employee: created with a chosen role (default "Employee
- * (Self Service)") and a temporary password they must change, or, when the
- * email already has a login (e.g. the HR manager is also on payroll), that
- * login is linked and keeps its role. Used by the New employee form and by
- * "Give portal access" on the profile.
+ * An employee's sign-in. Two ways in:
+ *  - the employee form's "Existing user" picker links a team member who
+ *    already has a login (they keep their own role and password);
+ *  - "Give portal access" on the profile creates a login with a chosen role
+ *    (default "Employee (Self Service)") and a temporary password they must
+ *    change, or links the login that email already has.
  */
 
 export interface LoginRequest {
@@ -24,11 +25,58 @@ export interface LoginRequest {
   password?: string;
 }
 
-/** The sign-in fields of the employee form, normalised; null when no email was given. */
-export function loginRequestFrom(side: Record<string, unknown> | undefined): LoginRequest | null {
-  const email = String(side?.loginEmail ?? "").trim().toLowerCase();
-  if (!email) return null;
-  return { email, roleId: String(side?.loginRoleId ?? "").trim() || undefined, password: String(side?.loginPassword ?? "") || undefined };
+/**
+ * What the employee form asked for its "Existing user" field: a user id to
+ * link, "" to unlink, or undefined when the field was not sent (left alone).
+ */
+export function linkedUserFrom(side: Record<string, unknown> | undefined): string | undefined {
+  if (!side || !("userId" in side) || side.userId === undefined) return undefined;
+  return String(side.userId ?? "").trim();
+}
+
+/**
+ * Everything that could make linking a team member fail, checked before the
+ * employee is saved. `employeeId` is the employee being edited, if any.
+ */
+export async function checkUserLink(ctx: AuthContext, userId: string, employeeId?: Types.ObjectId) {
+  if (!hasPermission(ctx, "users.view") || !hasPermission(ctx, "users.edit")) {
+    throw AppError.forbidden("Linking a team member needs permission to view and edit team members (users.view, users.edit).");
+  }
+  if (!userId) return null;
+  if (!Types.ObjectId.isValid(userId)) throw AppError.badRequest("Choose a team member from the list", "USER_NOT_FOUND");
+  const user = await User.findOne({ _id: userId, businessId: ctx.businessId }).lean<AnyDoc>();
+  if (!user) throw AppError.badRequest("Choose a team member from the list", "USER_NOT_FOUND");
+  const linked = await Employee.findOne(
+    { businessId: ctx.businessId, userId: user._id, deletedAt: null, ...(employeeId ? { _id: { $ne: employeeId } } : {}) },
+    { name: 1 }
+  ).lean<AnyDoc>();
+  if (linked) throw AppError.conflict(`${user.name} is already linked to ${linked.name}`, "LOGIN_ALREADY_LINKED");
+  return user;
+}
+
+/**
+ * Links the chosen team member to the employee (or unlinks with ""). The login
+ * itself is untouched: role, password and status stay as Team Members set them.
+ */
+export async function linkUser(ctx: AuthContext, emp: AnyDoc, userId: string) {
+  const current = emp.userId ? String(emp.userId) : "";
+  if (current === userId) return;
+  const user = await checkUserLink(ctx, userId, emp._id);
+  await Employee.updateOne(
+    { _id: emp._id, businessId: ctx.businessId },
+    { userId: user ? user._id : null, updatedBy: ctx.userId, ...(user?.email && !emp.workEmail ? { workEmail: user.email } : {}) }
+  );
+  await recordAudit({
+    businessId: ctx.businessId,
+    userId: ctx.userId,
+    action: "UPDATE",
+    module: "hr.employees",
+    documentType: "Employee",
+    documentId: emp._id,
+    oldValue: current ? { linkedUserId: current } : undefined,
+    newValue: user ? { linkedUserId: String(user._id), portalEmail: user.email } : { linkedUserId: null },
+    reason: user ? "Team member linked" : "Team member unlinked",
+  });
 }
 
 async function roleFor(businessId: Types.ObjectId, roleId?: string) {

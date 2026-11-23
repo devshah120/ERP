@@ -659,53 +659,74 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(report.rows.every((r) => !r.eligible)).toBe(true);
   });
 
-  it("creates an employee's sign-in with a chosen role from the New employee form", async () => {
+  it("links an existing team member from the employee form", async () => {
     const { NextRequest } = await import("next/server");
-    const { createHandler } = await import("@/lib/resources/handlers");
+    const { createHandler, updateHandler } = await import("@/lib/resources/handlers");
     const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
     const { signAccessToken } = await import("@/lib/auth/tokens");
     const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
     const { Employee } = await import("@/models/hr");
     const { User } = await import("@/models/User");
     const { Role } = await import("@/models/Role");
-    const { AuditLog } = await import("@/models/AuditLog");
     const { Business } = await import("@/models/Business");
     await Business.updateOne({ _id: businessId }, { maxEmployees: 50 });
 
     const hrManager = await Role.findOne({ businessId, name: "HR Manager" }).lean<{ _id: Types.ObjectId }>();
+    const member = await User.create({
+      businessId,
+      name: "Kiran Mehta",
+      username: "kiran.member",
+      email: "kiran@peoplefirst.test",
+      passwordHash: "x",
+      roleId: hrManager!._id,
+      status: "ACTIVE",
+    });
     const tokenFor = (permissions: string[]) =>
       signAccessToken({ sub: String(ctx.userId), businessId, roleId: String(ctx.roleId), permissions, branchIds: [], warehouseIds: [], products: ["HRMS"] });
+    const request = (url: string, method: string, body: Record<string, unknown>, permissions: string[]) =>
+      new NextRequest(url, {
+        method,
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${tokenFor(permissions)}` },
+      });
     const create = (body: Record<string, unknown>, permissions = ["*"]) =>
-      createHandler(HR_RESOURCES["hr-employees"])(
-        new NextRequest("http://localhost/api/masters/hr-employees", {
-          method: "POST",
-          body: JSON.stringify(body),
-          headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${tokenFor(permissions)}` },
-        })
-      );
+      createHandler(HR_RESOURCES["hr-employees"])(request("http://localhost/api/masters/hr-employees", "POST", body, permissions));
+    const update = (id: Types.ObjectId, body: Record<string, unknown>, permissions = ["*"]) =>
+      updateHandler(HR_RESOURCES["hr-employees"])(request(`http://localhost/api/masters/hr-employees/${id}`, "PATCH", body, permissions), String(id));
     const base = { name: "Kiran Mehta", employeeCode: "EMP-000101", dateOfJoining: "2027-01-10", basic: "10000" };
     const count = () => Employee.countDocuments({ businessId, name: "Kiran Mehta" });
 
-    // A weak password or a missing permission refuses before anything is saved.
-    await expect(create({ ...base, loginEmail: "kiran@peoplefirst.test", loginRoleId: String(hrManager!._id), loginPassword: "short" })).rejects.toMatchObject({ code: "WEAK_PASSWORD" });
-    await expect(create({ ...base, loginEmail: "kiran@peoplefirst.test", loginPassword: "Temp!Pass9x" }, ["hr-employees.create"])).rejects.toMatchObject({ statusCode: 403 });
+    // Without permission to edit team members, or with an unknown user, nothing is saved.
+    await expect(create({ ...base, userId: String(member._id) }, ["hr-employees.create"])).rejects.toMatchObject({ statusCode: 403 });
+    await expect(create({ ...base, userId: String(new Types.ObjectId()) })).rejects.toMatchObject({ code: "USER_NOT_FOUND" });
     expect(await count()).toBe(0);
 
-    const res = await create({ ...base, loginEmail: "Kiran@PeopleFirst.test", loginRoleId: String(hrManager!._id), loginPassword: "Temp!Pass9x" });
+    const res = await create({ ...base, userId: String(member._id) });
     expect(res.status).toBe(201);
     const kiran = await Employee.findOne({ businessId, name: "Kiran Mehta" }).lean<{ _id: Types.ObjectId; userId: Types.ObjectId; workEmail: string }>();
-    const user = await User.findById(kiran!.userId).lean<{ email: string; roleId: Types.ObjectId; mustChangePassword: boolean }>();
-    expect(user).toMatchObject({ email: "kiran@peoplefirst.test", mustChangePassword: true });
-    expect(String(user!.roleId)).toBe(String(hrManager!._id));
+    expect(String(kiran!.userId)).toBe(String(member._id));
     expect(kiran!.workEmail).toBe("kiran@peoplefirst.test");
-    // The temporary password is never stored on the employee or written to the audit log.
-    expect(JSON.stringify(await Employee.findById(kiran!._id).lean())).not.toContain("Temp!Pass9x");
-    expect(JSON.stringify(await AuditLog.find({ businessId }).lean())).not.toContain("Temp!Pass9x");
+    // The login keeps its own role.
+    expect(String((await User.findById(member._id).lean<{ roleId: Types.ObjectId }>())!.roleId)).toBe(String(hrManager!._id));
 
-    // The same email can't sign in as a second employee; no email means no sign-in.
-    await expect(create({ ...base, name: "Kiran Two", employeeCode: "EMP-000102", loginEmail: "kiran@peoplefirst.test" })).rejects.toMatchObject({ code: "LOGIN_ALREADY_LINKED" });
-    await create({ ...base, name: "Meera Iyer", employeeCode: "EMP-000103" });
-    expect((await Employee.findOne({ businessId, name: "Meera Iyer" }).lean<{ userId: unknown }>())!.userId).toBeNull();
+    // The same team member can't be a second employee; a blank picker links no one.
+    await expect(create({ ...base, name: "Kiran Two", employeeCode: "EMP-000102", userId: String(member._id) })).rejects.toMatchObject({ code: "LOGIN_ALREADY_LINKED" });
+    await create({ ...base, name: "Meera Iyer", employeeCode: "EMP-000103", userId: "" });
+    const meera = await Employee.findOne({ businessId, name: "Meera Iyer" }).lean<{ _id: Types.ObjectId; userId: unknown }>();
+    expect(meera!.userId).toBeNull();
+
+    // Editing: clearing unlinks, choosing links; leaving the field out changes nothing.
+    await update(kiran!._id, { ...base, userId: "" });
+    expect((await Employee.findById(kiran!._id).lean<{ userId: unknown }>())!.userId).toBeNull();
+    await update(meera!._id, { ...base, name: "Meera Iyer", employeeCode: "EMP-000103", userId: String(member._id) });
+    await update(meera!._id, { ...base, name: "Meera Iyer", employeeCode: "EMP-000103" }, ["hr-employees.edit"]);
+    expect(String((await Employee.findById(meera!._id).lean<{ userId: Types.ObjectId }>())!.userId)).toBe(String(member._id));
+    await expect(update(kiran!._id, { ...base, userId: String(member._id) })).rejects.toMatchObject({ code: "LOGIN_ALREADY_LINKED" });
+
+    // Moved back: later tests rely on Kiran's login being Kiran.
+    await update(meera!._id, { ...base, name: "Meera Iyer", employeeCode: "EMP-000103", userId: "" });
+    await update(kiran!._id, { ...base, userId: String(member._id) });
+    expect(String((await Employee.findById(kiran!._id).lean<{ userId: Types.ObjectId }>())!.userId)).toBe(String(member._id));
   });
 
   it("lets people file and decide only leave that is not their own (except the Owner)", async () => {

@@ -45,9 +45,22 @@ export interface FieldConfig {
   /**
    * For type "reference": which master to load options from. `url` loads from
    * another endpoint returning `{ items }` instead of the master; `defaultLabel`
-   * preselects the option with that label on a new record.
+   * preselects the option with that label on a new record. `detailField` adds
+   * secondary text to each option (shown and searched), and `searchable`
+   * renders a type-to-search box instead of a dropdown.
    */
-  reference?: { resource: string; labelField: string; url?: string; defaultLabel?: string };
+  reference?: {
+    resource: string;
+    labelField: string;
+    url?: string;
+    defaultLabel?: string;
+    detailField?: string;
+    searchable?: boolean;
+  };
+  /** Sent even when blank, so clearing it on an edit reaches the server (e.g. unlinking a team member). */
+  sendBlank?: boolean;
+  /** Shown (and submitted) only when the signed-in user holds all of these permissions. */
+  permissions?: string[];
   /** For text fields: fill with a generated value on a new record and offer a "New" button. */
   generate?: "password";
   fullWidth?: boolean;

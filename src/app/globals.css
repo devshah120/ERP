@@ -401,6 +401,87 @@ textarea.input {
   font-family: var(--font-mono);
 }
 
+/* Type-to-search reference picker (SearchSelect) */
+.searchSelect {
+  position: relative;
+  width: 100%;
+}
+.searchSelectBox {
+  display: flex;
+}
+.searchSelectBox .input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.searchSelectBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 1px solid var(--border-strong);
+  border-left: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.searchSelectBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.searchSelectList {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.searchSelectItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.875rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.searchSelectItem.isActive {
+  background: var(--surface-hover);
+}
+.searchSelectItem.isSelected {
+  color: var(--accent-text);
+  font-weight: 500;
+}
+.searchSelectDetail {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.searchSelectClear {
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  margin-bottom: 0.25rem;
+}
+.searchSelectEmpty {
+  padding: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
 .checkboxRow {
   display: flex;
   align-items: center;

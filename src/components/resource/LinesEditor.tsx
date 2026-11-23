@@ -8,6 +8,8 @@ export type LineRow = Record<string, unknown>;
 export interface ReferenceOption {
   value: string;
   label: string;
+  /** Secondary text shown and searched beside the label, e.g. a team member's email. */
+  detail?: string;
   /** Item SKUs, when the reference is to items — feeds "variant" columns. */
   variants?: { sku: string; label: string }[];
 }

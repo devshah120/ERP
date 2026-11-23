@@ -177,19 +177,20 @@ export function updateHandler(def: ResourceDefinition) {
 
     const body = await req.json();
     const input = def.updateSchema.parse(body) as Record<string, unknown>;
-    takeSideFields(def, input); // create-only inputs are never stored or logged on an edit
+    const side = takeSideFields(def, input);
     const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
     update.updatedBy = ctx.userId;
 
     const repo = new TenantRepository(def.model);
     const before = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
     if (!before) throw AppError.notFound(`${def.label} not found`);
+    if (def.validateUpdate) await def.validateUpdate(ctx, side, before);
 
     const doc = await repo.findByIdAndUpdate(ctx.businessId, id, update);
     if (!doc) throw AppError.notFound(`${def.label} not found`);
 
     await auditWrite(ctx, def, "UPDATE", doc._id, serializeDoc(before), update);
-    if (def.afterWrite) await def.afterWrite(ctx, "UPDATE", doc, before);
+    if (def.afterWrite) await def.afterWrite(ctx, "UPDATE", doc, before, side);
 
     return ok(serializeDoc(doc), `${def.label} updated successfully`);
   };

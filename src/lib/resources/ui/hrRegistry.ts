@@ -12,6 +12,9 @@ const statusColumn = { key: "status", label: "Status", type: "badge" as const };
 const EMPLOYEE_REF = { resource: "hr-employees", labelField: "name" };
 const DEPARTMENT_REF = { resource: "hr-departments", labelField: "name" };
 const DESIGNATION_REF = { resource: "hr-designations", labelField: "name" };
+const GRADE_REF = { resource: "hr-grades", labelField: "name" };
+const LEAVE_GROUP_REF = { resource: "hr-leave-groups", labelField: "name" };
+const LEAVE_TYPE_REF = { resource: "hr-leave-types", labelField: "name" };
 
 function opts(labels: Record<string, string>) {
   return Object.entries(labels).map(([value, label]) => ({ value, label }));
@@ -89,7 +92,6 @@ const designations = master("hr-designations", "Designations", "Designation", {
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Designation", filterParam: "name", sortField: "name" },
-    { key: "grade", label: "Grade", filterParam: "grade", sortField: "grade" },
     statusColumn,
   ],
   sections: [
@@ -98,7 +100,28 @@ const designations = master("hr-designations", "Designations", "Designation", {
       fields: [
         { name: "name", label: "Designation", type: "text", required: true, placeholder: "Senior Executive" },
         { name: "code", label: "Code", type: "text", hint: "Leave blank to number automatically" },
-        { name: "grade", label: "Grade / band", type: "text", placeholder: "L4" },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
+const grades = master("hr-grades", "Grades", "Grade", {
+  permissions: { create: "hr-designations.create", edit: "hr-designations.edit", delete: "hr-designations.delete" },
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Grade", filterParam: "name", sortField: "name" },
+    { key: "leaveGroupId", label: "Leave group", type: "reference", reference: LEAVE_GROUP_REF },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Grade",
+      description: "Its leave group is chosen on Assign Grade to Group.",
+      fields: [
+        { name: "code", label: "Code", type: "text", required: true, placeholder: "L4" },
+        { name: "name", label: "Name", type: "text", required: true, placeholder: "Executive" },
         statusField,
         { name: "description", label: "Description", type: "textarea", fullWidth: true },
       ],
@@ -195,6 +218,44 @@ const leaveTypes = master("hr-leave-types", "Leave Types", "Leave type", {
   ],
 });
 
+const leaveGroups = master("hr-leave-groups", "Leave Groups", "Leave group", {
+  permissions: { create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Leave group", filterParam: "name", sortField: "name" },
+    { key: "leaveTypes", label: "Leave types", type: "count" },
+    { key: "description", label: "Description" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Group",
+      fields: [
+        { name: "name", label: "Group name", type: "text", required: true, placeholder: "Staff" },
+        { name: "code", label: "Code", type: "text", hint: "Leave blank to number automatically" },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true },
+      ],
+    },
+    {
+      label: "Leave types in this group",
+      description: "Days a year each leave type grants to grades assigned to this group. A leave type left out grants them none.",
+      fields: [
+        {
+          name: "leaveTypes",
+          label: "Leave types",
+          type: "lines",
+          addLabel: "Add leave type",
+          columns: [
+            { name: "leaveTypeId", label: "Leave type", type: "reference", reference: LEAVE_TYPE_REF, required: true },
+            { name: "annualQuota", label: "Days per year", type: "number", width: "10rem", defaultValue: 0 },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
 const announcements = master("hr-announcements", "Announcements", "Announcement", {
   titleField: "title",
   columns: [
@@ -225,6 +286,7 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
     { key: "name", label: "Name", filterParam: "name", sortField: "name" },
     { key: "departmentId", label: "Department", type: "reference", reference: DEPARTMENT_REF },
     { key: "designationId", label: "Designation", type: "reference", reference: DESIGNATION_REF },
+    { key: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF },
     { key: "phone", label: "Phone", filterParam: "phone" },
     { key: "dateOfJoining", label: "Joined", type: "date", sortField: "dateOfJoining" },
     { key: "employmentType", label: "Type", type: "label", labels: EMPLOYMENT_TYPE_LABELS },
@@ -236,17 +298,6 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
     {
       label: "Personal details",
       fields: [
-        {
-          name: "userId",
-          label: "Existing user",
-          type: "reference",
-          reference: { resource: "users", labelField: "name", url: "/api/admin/users", detailField: "email", searchable: true },
-          hint: "from Team Members; links their login to this employee",
-          placeholder: "Search …",
-          fullWidth: true,
-          sendBlank: true,
-          permissions: ["users.view", "users.edit"],
-        },
         { name: "name", label: "Full name", type: "text", required: true, placeholder: "Asha Rao" },
         { name: "employeeCode", label: "Employee code", type: "text", hint: "Leave blank to number automatically" },
         { name: "gender", label: "Gender", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(GENDER_LABELS)] },
@@ -274,6 +325,7 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
         { name: "dateOfJoining", label: "Date of joining", type: "date", required: true },
         { name: "departmentId", label: "Department", type: "reference", reference: DEPARTMENT_REF },
         { name: "designationId", label: "Designation", type: "reference", reference: DESIGNATION_REF },
+        { name: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF, hint: "Sets leave days through its leave group", sendBlank: true },
         { name: "reportingManagerId", label: "Reports to", type: "reference", reference: EMPLOYEE_REF },
         { name: "shiftId", label: "Shift", type: "reference", reference: { resource: "hr-shifts", labelField: "name" }, hint: "Blank uses the default shift" },
         { name: "workLocation", label: "Work location", type: "text" },
@@ -314,6 +366,21 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
         { name: "ifscCode", label: "IFSC", type: "text", placeholder: "HDFC0001234", showWhen: { field: "salaryPaymentMode", values: ["BANK"] } },
         statusField,
         { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
+      ],
+    },
+    {
+      label: "Login",
+      description: "Optional. Link a person from Team Members; they sign in with their own login and role.",
+      permissions: ["users.view", "users.edit"],
+      fields: [
+        {
+          name: "userId",
+          label: "Existing user",
+          type: "reference",
+          reference: { resource: "users", labelField: "name", url: "/api/admin/users", detailField: "email", searchable: true },
+          placeholder: "Search …",
+          sendBlank: true,
+        },
       ],
     },
   ],
@@ -485,9 +552,11 @@ export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-pay-components": payComponents,
   "hr-departments": departments,
   "hr-designations": designations,
+  "hr-grades": grades,
   "hr-shifts": shifts,
   "hr-holidays": holidays,
   "hr-leave-types": leaveTypes,
+  "hr-leave-groups": leaveGroups,
   "hr-announcements": announcements,
   "hr-employees": employees,
   "hr-job-openings": jobOpenings,

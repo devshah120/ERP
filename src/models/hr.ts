@@ -53,10 +53,25 @@ export const Designation = defineMasterModel(
   {
     code: { type: String, required: true, trim: true, uppercase: true },
     name: { type: String, required: true, trim: true },
-    grade: { type: String, trim: true },
     description: { type: String, trim: true },
   },
   { uniqueField: "code" }
+);
+
+/**
+ * An employee grade or band (L1, L2…). The grade decides the employee's leave
+ * entitlement through the leave group it is assigned to ("Assign Grade to
+ * Group"); `leaveGroupId` is set only from that screen.
+ */
+export const HrGrade = defineMasterModel(
+  "HrGrade",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    leaveGroupId: { type: Schema.Types.ObjectId, ref: "LeaveGroup", default: null },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "code", indexes: [{ leaveGroupId: 1 }] }
 );
 
 export const Shift = defineMasterModel("Shift", {
@@ -108,6 +123,33 @@ export const LeaveType = defineMasterModel(
   { uniqueField: "code" }
 );
 
+/**
+ * A set of leave types with the days a year each one grants. Employees whose
+ * grade is assigned to the group get these days instead of each leave type's
+ * own quota; a leave type left out of the group grants them none.
+ */
+export const LeaveGroup = defineMasterModel(
+  "LeaveGroup",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    leaveTypes: {
+      type: [
+        new Schema(
+          {
+            leaveTypeId: { type: Schema.Types.ObjectId, ref: "LeaveType", required: true },
+            annualQuota: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "code" }
+);
+
 export const Announcement = defineMasterModel(
   "Announcement",
   {
@@ -144,6 +186,8 @@ export const Employee = defineMasterModel(
 
     departmentId: { type: Schema.Types.ObjectId, ref: "HrDepartment", default: null },
     designationId: { type: Schema.Types.ObjectId, ref: "Designation", default: null },
+    /** Grade / band; its leave group sets the employee's leave entitlement. */
+    gradeId: { type: Schema.Types.ObjectId, ref: "HrGrade", default: null },
     reportingManagerId: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
     shiftId: { type: Schema.Types.ObjectId, ref: "Shift", default: null },
     branchId: { type: Schema.Types.ObjectId, ref: "Branch", default: null },
@@ -185,7 +229,7 @@ export const Employee = defineMasterModel(
   },
   {
     uniqueField: "employeeCode",
-    indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }],
+    indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }, { gradeId: 1 }],
   }
 );
 

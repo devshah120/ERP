@@ -1,6 +1,6 @@
 import type { ClientSession, Types } from "mongoose";
 import { Role } from "@/models/Role";
-import { HrDepartment, Designation, Shift, LeaveType, PayComponent } from "@/models/hr";
+import { HrDepartment, Designation, HrGrade, Shift, LeaveType, PayComponent } from "@/models/hr";
 import { DEFAULT_PAY_COMPONENTS } from "./variables";
 import { HR_PERMISSION_KEYS, HR_SELF_SERVICE_PERMISSIONS } from "@/lib/auth/permissionCatalog";
 
@@ -16,12 +16,21 @@ const DEPARTMENTS = [
 ];
 
 const DESIGNATIONS = [
-  { code: "DIR", name: "Director", grade: "L1" },
-  { code: "MGR", name: "Manager", grade: "L2" },
-  { code: "TL", name: "Team Lead", grade: "L3" },
-  { code: "EXEC", name: "Executive", grade: "L4" },
-  { code: "ASSOC", name: "Associate", grade: "L5" },
-  { code: "INTERN", name: "Intern", grade: "L6" },
+  { code: "DIR", name: "Director" },
+  { code: "MGR", name: "Manager" },
+  { code: "TL", name: "Team Lead" },
+  { code: "EXEC", name: "Executive" },
+  { code: "ASSOC", name: "Associate" },
+  { code: "INTERN", name: "Intern" },
+];
+
+const GRADES = [
+  { code: "L1", name: "Leadership" },
+  { code: "L2", name: "Senior management" },
+  { code: "L3", name: "Middle management" },
+  { code: "L4", name: "Executive" },
+  { code: "L5", name: "Associate" },
+  { code: "L6", name: "Trainee" },
 ];
 
 const LEAVE_TYPES = [
@@ -33,7 +42,7 @@ const LEAVE_TYPES = [
 
 /**
  * Starter HR setup for a workspace that has just been given HRMS: a general
- * shift, the common Indian leave types, a few departments and designations,
+ * shift, the common Indian leave types, a few departments, designations and grades,
  * and the HR Manager / self-service roles. Idempotent — each kind of master
  * is only seeded when the workspace has none yet, and roles are matched by
  * name, so enabling HRMS again never duplicates anything.
@@ -59,6 +68,9 @@ export async function seedHrDefaults(businessId: Types.ObjectId, session?: Clien
   }
   if ((await Designation.countDocuments(live, opts)) === 0) {
     await Designation.create(DESIGNATIONS.map((d) => ({ businessId, ...d })), { ...opts, ordered: true });
+  }
+  if ((await HrGrade.countDocuments(live, opts)) === 0) {
+    await HrGrade.create(GRADES.map((g) => ({ businessId, ...g })), { ...opts, ordered: true });
   }
 
   await ensureRole(businessId, HR_MANAGER_ROLE, "Runs HR: employees, attendance, leave approvals, payroll and reports.", [...HR_PERMISSION_KEYS, "users.view"], false, session);

@@ -795,4 +795,43 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     const upgraded = (await Role.findById(hrRole!._id).lean<{ permissions: string[] }>())!.permissions;
     expect(upgraded.filter((p) => p === "hr-leaves.approve-all")).toHaveLength(1);
   });
+
+  it("grants leave by the leave group of the employee's grade", async () => {
+    const { balancesFor } = await import("@/lib/hr/leave");
+    const { gradeAssignments, assignGrades } = await import("@/lib/hr/leaveGroups");
+    const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
+    const { Employee, LeaveType, LeaveGroup, HrGrade, Designation } = await import("@/models/hr");
+    const types = new Map((await LeaveType.find({ businessId }).lean<{ _id: Types.ObjectId; code: string }[]>()).map((t) => [t.code, t._id]));
+    const l4 = await HrGrade.findOne({ businessId, code: "L4" }).lean<{ _id: Types.ObjectId }>();
+    // The starter setup seeds grades; designations no longer carry one.
+    expect(await HrGrade.countDocuments({ businessId })).toBe(6);
+    expect(Designation.schema.path("grade")).toBeUndefined();
+
+    // A leave type can't be listed twice in a group, on create or on edit.
+    const dupe = { name: "Dupes", leaveTypes: [{ leaveTypeId: String(types.get("CL")), annualQuota: 1 }, { leaveTypeId: String(types.get("CL")), annualQuota: 2 }] };
+    expect(HR_RESOURCES["hr-leave-groups"].createSchema.safeParse(dupe).success).toBe(false);
+    expect(HR_RESOURCES["hr-leave-groups"].updateSchema.safeParse(dupe).success).toBe(false);
+
+    const staff = await LeaveGroup.create({ businessId, code: "LG-STAFF", name: "Staff", leaveTypes: [{ leaveTypeId: types.get("CL"), annualQuota: 20 }, { leaveTypeId: types.get("SL"), annualQuota: 5 }] });
+    const paused = await LeaveGroup.create({ businessId, code: "LG-OLD", name: "Old policy", status: "INACTIVE", leaveTypes: [] });
+    await Employee.updateOne({ _id: emp.asha }, { gradeId: l4!._id });
+    const days = async () => Object.fromEntries((await balancesFor(new Types.ObjectId(businessId), [emp.asha], 2031)).get(String(emp.asha))!.map((b) => [b.code, b.allocated]));
+
+    // No group on the grade yet: each leave type's own days.
+    expect(await days()).toMatchObject({ CL: 12, SL: 7, EL: 15 });
+
+    await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(staff._id) }] });
+    // The group's days; a type left out of the group grants none.
+    expect(await days()).toMatchObject({ CL: 20, SL: 5, EL: 0, LOP: 0 });
+    const screen = await gradeAssignments(ctx);
+    expect(screen.grades.find((g) => g.code === "L4")).toMatchObject({ leaveGroupId: String(staff._id), employees: 1 });
+
+    // An inactive group can't be chosen; clearing the group goes back to the leave types' days.
+    await expect(assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(paused._id) }] })).rejects.toMatchObject({ code: "LEAVE_GROUP_INACTIVE" });
+    expect((await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(staff._id) }] })).updated).toBe(0);
+    await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: null }] });
+    expect(await days()).toMatchObject({ CL: 12, SL: 7, EL: 15 });
+
+    await Employee.updateOne({ _id: emp.asha }, { gradeId: null });
+  });
 });

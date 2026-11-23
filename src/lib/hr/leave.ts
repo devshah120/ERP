@@ -1,7 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Attendance, LeaveApplication, LeaveAllocation, LeaveType, Employee } from "@/models/hr";
+import { Attendance, LeaveApplication, LeaveAllocation, LeaveType, LeaveGroup, HrGrade, Employee } from "@/models/hr";
 import { recordAudit } from "@/lib/services/auditService";
 import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
@@ -72,10 +72,31 @@ function yearRange(year: number) {
 }
 
 /**
+ * Days a year per leave type for each employee whose grade is assigned to an
+ * active leave group (employee id → leave type id → days). Employees missing
+ * here use each leave type's own quota.
+ */
+async function groupQuotas(businessId: Types.ObjectId, emps: AnyDoc[]): Promise<Map<string, Map<string, number>>> {
+  const gradeIds = [...new Set(emps.map((e) => e.gradeId && String(e.gradeId)).filter(Boolean))];
+  const out = new Map<string, Map<string, number>>();
+  if (gradeIds.length === 0) return out;
+  const grades = await HrGrade.find({ businessId, _id: { $in: gradeIds }, deletedAt: null, status: "ACTIVE", leaveGroupId: { $ne: null } }, { leaveGroupId: 1 }).lean<AnyDoc[]>();
+  const groups = await LeaveGroup.find({ businessId, _id: { $in: grades.map((g) => g.leaveGroupId) }, deletedAt: null, status: "ACTIVE" }, { leaveTypes: 1 }).lean<AnyDoc[]>();
+  const byGroup = new Map(groups.map((g) => [String(g._id), new Map(((g.leaveTypes ?? []) as AnyDoc[]).map((l) => [String(l.leaveTypeId), Number(l.annualQuota) || 0]))]));
+  const byGrade = new Map(grades.map((g) => [String(g._id), byGroup.get(String(g.leaveGroupId))]));
+  for (const e of emps) {
+    const quotas = e.gradeId ? byGrade.get(String(e.gradeId)) : undefined;
+    if (quotas) out.set(String(e._id), quotas);
+  }
+  return out;
+}
+
+/**
  * Every leave type's balance for a set of employees in a calendar year:
- * granted (the year's allocation, or the type's annual quota when none has
- * been set) plus carry-forward, less approved days; pending requests are
- * shown separately and held against what can still be applied for.
+ * granted (the year's allocation, or else the quota: the days set for the type
+ * in the leave group of the employee's grade, or the type's own annual quota
+ * when the grade has no group) plus carry-forward, less approved days; pending
+ * requests are shown separately and held against what can still be applied for.
  */
 export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types.ObjectId[], year: number): Promise<Map<string, LeaveBalance[]>> {
   const { start, end } = yearRange(year);
@@ -86,8 +107,9 @@ export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types
       { $match: { businessId, employeeId: { $in: employeeIds }, status: { $in: ["APPROVED", "PENDING"] }, fromDate: { $gte: start, $lte: end } } },
       { $group: { _id: { e: "$employeeId", t: "$leaveTypeId", s: "$status" }, days: { $sum: "$days" } } },
     ]),
-    Employee.find({ businessId, _id: { $in: employeeIds } }, { dateOfJoining: 1 }).lean<AnyDoc[]>(),
+    Employee.find({ businessId, _id: { $in: employeeIds } }, { dateOfJoining: 1, gradeId: 1 }).lean<AnyDoc[]>(),
   ]);
+  const fromGroup = await groupQuotas(businessId, emps);
   const joinedOn = new Map(emps.map((e) => [String(e._id), e.dateOfJoining as Date]));
   const alloc = new Map(allocations.map((a) => [`${a.employeeId}:${a.leaveTypeId}`, a]));
   const usage = new Map<string, number>(apps.map((a: AnyDoc) => [`${a._id.e}:${a._id.t}:${a._id.s}`, a.days as number]));
@@ -98,7 +120,8 @@ export async function balancesFor(businessId: Types.ObjectId, employeeIds: Types
       String(eid),
       types.map((t) => {
         const a = alloc.get(`${eid}:${t._id}`);
-        const quota = t.annualQuota ?? 0;
+        const group = fromGroup.get(String(eid));
+        const quota = group ? group.get(String(t._id)) ?? 0 : t.annualQuota ?? 0;
         const byHand = a && a.allocated !== null && a.allocated !== undefined;
         const fromQuota = t.prorateForJoiners === false ? quota : proratedQuota(quota, year, joinedOn.get(String(eid)));
         const allocated = byHand ? a.allocated : fromQuota;

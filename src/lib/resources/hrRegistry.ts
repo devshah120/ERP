@@ -8,9 +8,11 @@ import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin"
 import {
   HrDepartment,
   Designation,
+  HrGrade,
   Shift,
   Holiday,
   LeaveType,
+  LeaveGroup,
   Announcement,
   Employee,
   JobOpening,
@@ -107,16 +109,34 @@ const designations = define("hr-designations", "Designation", {
   fields: {
     code: optionalCode,
     name: z.string().trim().min(2).max(150),
-    grade: optionalText(30),
     description: optionalText(500),
     status,
   },
-  searchFields: ["name", "code", "grade"],
-  filterFields: { code: "code", name: "name", grade: "grade" },
-  sortableFields: ["code", "name", "grade", "createdAt"],
+  searchFields: ["name", "code"],
+  filterFields: { code: "code", name: "name" },
+  sortableFields: ["code", "name", "createdAt"],
   defaultSort: "name",
   defaultSortDir: "asc",
 });
+
+/** Grades ride on the designation permissions so existing HR roles can use them at once. */
+const grades: ResourceDefinition = {
+  ...define("hr-grades", "Grade", {
+    model: HrGrade,
+    fields: {
+      code: z.string().trim().toUpperCase().min(1, "Enter a code").max(10),
+      name: z.string().trim().min(1).max(100),
+      description: optionalText(500),
+      status,
+    },
+    searchFields: ["code", "name"],
+    filterFields: { code: "code", name: "name" },
+    sortableFields: ["code", "name", "createdAt"],
+    defaultSort: "code",
+    defaultSortDir: "asc",
+  }),
+  permissions: { view: "hr-designations.view", create: "hr-designations.create", edit: "hr-designations.edit", delete: "hr-designations.delete" },
+};
 
 const shifts = define("hr-shifts", "Shift", {
   model: Shift,
@@ -179,6 +199,44 @@ const leaveTypes = define("hr-leave-types", "Leave type", {
   defaultSort: "code",
   defaultSortDir: "asc",
 });
+
+const leaveGroupLine = z.object({
+  leaveTypeId: z.string().trim().regex(/^[a-f\d]{24}$/i, "Choose a leave type"),
+  annualQuota: z.coerce.number().min(0, "Days can't be negative").max(365),
+});
+
+/** Leave groups are leave policy, so they ride on the leave-type permissions. */
+const leaveGroups: ResourceDefinition = {
+  ...define("hr-leave-groups", "Leave group", {
+    model: LeaveGroup,
+    autoCode: { field: "code", prefix: "LG", entityType: "HR_LEAVE_GROUP" },
+    fields: {
+      code: optionalCode,
+      name: z.string().trim().min(2).max(100),
+      // Checked on the array itself so edits are held to it too (refine runs on create only).
+      leaveTypes: z
+        .array(leaveGroupLine)
+        .max(50)
+        .default([])
+        .superRefine((lines, ctx) => {
+          const seen = new Set<string>();
+          lines.forEach((line, i) => {
+            if (seen.has(line.leaveTypeId)) ctx.addIssue({ code: "custom", path: [i, "leaveTypeId"], message: "This leave type is already in the group" });
+            seen.add(line.leaveTypeId);
+          });
+        }),
+      description: optionalText(500),
+      status,
+    },
+    searchFields: ["code", "name"],
+    filterFields: { code: "code", name: "name" },
+    sortableFields: ["code", "name", "createdAt"],
+    defaultSort: "name",
+    defaultSortDir: "asc",
+    toDocument: documentConverter({ lines: { leaveTypes: { refs: ["leaveTypeId"] } } }),
+  }),
+  permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+};
 
 const announcements = define("hr-announcements", "Announcement", {
   model: Announcement,
@@ -243,6 +301,7 @@ const employees = define("hr-employees", "Employee", {
 
     departmentId: optionalRef,
     designationId: optionalRef,
+    gradeId: optionalRef,
     reportingManagerId: optionalRef,
     shiftId: optionalRef,
     branchId: optionalRef,
@@ -311,7 +370,7 @@ const employees = define("hr-employees", "Employee", {
   },
   toDocument: documentConverter({
     money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"],
-    refs: ["departmentId", "designationId", "reportingManagerId", "shiftId", "branchId"],
+    refs: ["departmentId", "designationId", "gradeId", "reportingManagerId", "shiftId", "branchId"],
     dates: ["dateOfBirth", "dateOfJoining", "probationEndDate", "confirmationDate", "dateOfExit"],
   }),
 });
@@ -455,9 +514,11 @@ export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-pay-components": payComponents,
   "hr-departments": departments,
   "hr-designations": designations,
+  "hr-grades": grades,
   "hr-shifts": shifts,
   "hr-holidays": holidays,
   "hr-leave-types": leaveTypes,
+  "hr-leave-groups": leaveGroups,
   "hr-announcements": announcements,
   "hr-employees": employees,
   "hr-job-openings": jobOpenings,

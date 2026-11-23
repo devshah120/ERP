@@ -612,6 +612,17 @@ textarea.input {
   }
 }
 
+/* Monthly attendance (hr/attendance/employee) */
+.attBulkBar {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.table tr[data-off] td {
+  background: var(--surface-subtle);
+}
+
 /* Holiday calendar chips (hr/holidays/assign): click one to filter by it */
 .hcSummary {
   display: flex;

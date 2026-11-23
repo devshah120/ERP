@@ -180,7 +180,7 @@ export default function ResourceFormView({
       .then((record) => {
         if (cancelled) return;
         setState(stateFromRecord(config, record));
-        const codeKey = config.columns[0]?.key;
+        const codeKey = config.columns[0]?.type === "reference" ? undefined : config.columns[0]?.key;
         if (codeKey) setHeaderCode(String(getPath(record, codeKey) ?? ""));
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load record"))

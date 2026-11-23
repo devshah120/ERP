@@ -71,10 +71,18 @@ export interface ResourceDefinition {
    */
   sideFields?: string[];
 
-  /** Checks run before a single create through the form, with the side fields. Throw an AppError to refuse. */
-  validateCreate?: (ctx: AuthContext, side: Record<string, unknown>) => Promise<void>;
+  /** Checks run before a single create through the form, with the side fields and the validated input. Throw an AppError to refuse. */
+  validateCreate?: (ctx: AuthContext, side: Record<string, unknown>, input: Record<string, unknown>) => Promise<void>;
 
-  /** Checks run before an update through the form, with the side fields and the record as it is now. Throw an AppError to refuse. */
+  /** Checks run before an update through the form, with the side fields, the record as it is now and the validated input. Throw an AppError to refuse. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  validateUpdate?: (ctx: AuthContext, side: Record<string, unknown>, before: any) => Promise<void>;
+  validateUpdate?: (ctx: AuthContext, side: Record<string, unknown>, before: any, input: Record<string, unknown>) => Promise<void>;
+
+  /**
+   * Column filters on a referenced record's name: query param → the id field
+   * here, plus the referenced model and the field searched on it, e.g.
+   * `grade: { path: "gradeId", model: HrGrade, field: "name" }`.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  refFilters?: Record<string, { path: string; model: Model<any>; field: string }>;
 }

@@ -36,7 +36,7 @@ function buildListSchema(def: ResourceDefinition) {
     sortBy: z.string().trim().max(60).optional(),
     sortDir: z.enum(["asc", "desc"]).optional(),
   };
-  for (const param of Object.keys(def.filterFields)) {
+  for (const param of [...Object.keys(def.filterFields), ...Object.keys(def.refFilters ?? {})]) {
     shape[param] = z.string().trim().max(200).optional();
   }
   return z.object(shape);
@@ -72,6 +72,15 @@ export async function queryResource(
     const value = parsed[param];
     if (typeof value === "string" && value.length > 0) {
       filter[path] = { $regex: escapeRegex(value), $options: "i" };
+    }
+  }
+
+  // Filters typed against a referenced record's name match the ids of those records.
+  for (const [param, ref] of Object.entries(def.refFilters ?? {})) {
+    const value = parsed[param];
+    if (typeof value === "string" && value.length > 0) {
+      const ids = await ref.model.find({ businessId, [ref.field]: { $regex: escapeRegex(value), $options: "i" } }, { _id: 1 }).lean<{ _id: unknown }[]>();
+      filter[ref.path] = { $in: ids.map((d) => d._id) };
     }
   }
 
@@ -143,7 +152,7 @@ export function createHandler(def: ResourceDefinition) {
     const side = takeSideFields(def, input);
     const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
     if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
-    if (def.validateCreate) await def.validateCreate(ctx, side);
+    if (def.validateCreate) await def.validateCreate(ctx, side, input);
 
     if (def.autoCode) {
       const existing = payload[def.autoCode.field];
@@ -185,7 +194,7 @@ export function updateHandler(def: ResourceDefinition) {
     const repo = new TenantRepository(def.model);
     const before = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
     if (!before) throw AppError.notFound(`${def.label} not found`);
-    if (def.validateUpdate) await def.validateUpdate(ctx, side, before);
+    if (def.validateUpdate) await def.validateUpdate(ctx, side, before, input);
 
     const doc = await repo.findByIdAndUpdate(ctx.businessId, id, update);
     if (!doc) throw AppError.notFound(`${def.label} not found`);

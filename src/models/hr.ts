@@ -60,18 +60,29 @@ export const Designation = defineMasterModel(
 
 /**
  * An employee grade or band (L1, L2…). The grade decides the employee's leave
- * entitlement through the leave group it is assigned to ("Assign Grade to
- * Group"); `leaveGroupId` is set only from that screen.
+ * entitlement through the leave group assigned to it (GradeLeaveGroup).
  */
 export const HrGrade = defineMasterModel(
   "HrGrade",
   {
     code: { type: String, required: true, trim: true, uppercase: true },
     name: { type: String, required: true, trim: true },
+    /** Legacy: where a grade's leave group was kept before GradeLeaveGroup; moved there and cleared on first use. */
     leaveGroupId: { type: Schema.Types.ObjectId, ref: "LeaveGroup", default: null },
     description: { type: String, trim: true },
   },
   { uniqueField: "code", indexes: [{ leaveGroupId: 1 }] }
+);
+
+/** "Assign Leave Group to Grade": the leave group a grade follows. One live row per grade. */
+export const GradeLeaveGroup = defineMasterModel(
+  "GradeLeaveGroup",
+  {
+    gradeId: { type: Schema.Types.ObjectId, ref: "HrGrade", required: true },
+    leaveGroupId: { type: Schema.Types.ObjectId, ref: "LeaveGroup", required: true },
+    notes: { type: String, trim: true },
+  },
+  { uniqueField: "gradeId", indexes: [{ leaveGroupId: 1 }] }
 );
 
 export const Shift = defineMasterModel("Shift", {

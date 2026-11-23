@@ -798,9 +798,22 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
   it("grants leave by the leave group of the employee's grade", async () => {
     const { balancesFor } = await import("@/lib/hr/leave");
-    const { gradeAssignments, assignGrades } = await import("@/lib/hr/leaveGroups");
+    const { NextRequest } = await import("next/server");
+    const { createHandler, listHandler, deleteHandler } = await import("@/lib/resources/handlers");
     const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
-    const { Employee, LeaveType, LeaveGroup, HrGrade, Designation } = await import("@/models/hr");
+    const { signAccessToken } = await import("@/lib/auth/tokens");
+    const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
+    const { Employee, LeaveType, LeaveGroup, HrGrade, GradeLeaveGroup, Designation } = await import("@/models/hr");
+    const def = HR_RESOURCES["hr-grade-leave-groups"];
+    const token = signAccessToken({ sub: String(ctx.userId), businessId, roleId: String(ctx.roleId), permissions: ["*"], branchIds: [], warehouseIds: [], products: ["HRMS"] });
+    const call = (method: string, path: string, body?: unknown) =>
+      new NextRequest(`http://localhost/api/masters/hr-grade-leave-groups${path}`, {
+        method,
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${token}` },
+      });
+    const assign = async (gradeId: unknown, leaveGroupId: unknown) => (await (await createHandler(def)(call("POST", "", { gradeId: String(gradeId), leaveGroupId: String(leaveGroupId) }))).json()).data;
+    const list = async (q: string) => (await (await listHandler(def)(call("GET", `?${q}`))).json()).data as { items: { id: string; gradeId: string }[]; total: number };
     const types = new Map((await LeaveType.find({ businessId }).lean<{ _id: Types.ObjectId; code: string }[]>()).map((t) => [t.code, t._id]));
     const l4 = await HrGrade.findOne({ businessId, code: "L4" }).lean<{ _id: Types.ObjectId }>();
     // The starter setup seeds grades; designations no longer carry one.
@@ -820,18 +833,31 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     // No group on the grade yet: each leave type's own days.
     expect(await days()).toMatchObject({ CL: 12, SL: 7, EL: 15 });
 
-    await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(staff._id) }] });
+    const row = await assign(l4!._id, staff._id);
     // The group's days; a type left out of the group grants none.
     expect(await days()).toMatchObject({ CL: 20, SL: 5, EL: 0, LOP: 0 });
-    const screen = await gradeAssignments(ctx);
-    expect(screen.grades.find((g) => g.code === "L4")).toMatchObject({ leaveGroupId: String(staff._id), employees: 1 });
 
-    // An inactive group can't be chosen; clearing the group goes back to the leave types' days.
-    await expect(assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(paused._id) }] })).rejects.toMatchObject({ code: "LEAVE_GROUP_INACTIVE" });
-    expect((await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: String(staff._id) }] })).updated).toBe(0);
-    await assignGrades(ctx, { assignments: [{ gradeId: String(l4!._id), leaveGroupId: null }] });
+    // A grade follows one group; an inactive group can't be chosen.
+    await expect(assign(l4!._id, staff._id)).rejects.toMatchObject({ code: "GRADE_ALREADY_ASSIGNED" });
+    const l3 = await HrGrade.findOne({ businessId, code: "L3" }).lean<{ _id: Types.ObjectId }>();
+    await expect(assign(l3!._id, paused._id)).rejects.toMatchObject({ code: "LEAVE_GROUP_INACTIVE" });
+
+    // The list filters by the leave group's and the grade's names.
+    expect((await list("grade=execut")).items.map((r) => r.id)).toEqual([row.id]);
+    expect((await list("leaveGroup=staff")).total).toBe(1);
+    expect((await list("leaveGroup=nothing-like-this")).total).toBe(0);
+
+    // Assignments kept on the grade by the earlier screen move into the list the first time it is opened.
+    const l5 = await HrGrade.findOne({ businessId, code: "L5" }).lean<{ _id: Types.ObjectId }>();
+    await HrGrade.updateOne({ _id: l5!._id }, { leaveGroupId: staff._id });
+    expect((await list("")).items.map((r) => r.gradeId)).toContain(String(l5!._id));
+    expect((await HrGrade.findById(l5!._id).lean<{ leaveGroupId: unknown }>())!.leaveGroupId).toBeNull();
+
+    // Deleting the assignment goes back to the leave types' days.
+    await deleteHandler(def)(call("DELETE", `/${row.id}`), row.id);
     expect(await days()).toMatchObject({ CL: 12, SL: 7, EL: 15 });
 
+    await GradeLeaveGroup.deleteMany({ businessId });
     await Employee.updateOne({ _id: emp.asha }, { gradeId: null });
   });
 
@@ -1023,5 +1049,49 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await Holiday.deleteMany({ businessId, calendarId: { $in: [gujarat._id, maharashtra._id] } });
     await HolidayCalendar.deleteMany({ _id: { $in: [gujarat._id, maharashtra._id, paused._id] } });
     for (const e of [a, b]) await Employee.updateOne({ _id: e._id }, { holidayCalendarId: e.holidayCalendarId ?? null });
+  });
+
+  it("marks one employee's whole month at once", async () => {
+    const { employeeMonthSheet, saveEmployeeMonth, saveMonthSchema } = await import("@/lib/hr/attendance");
+    const { applyLeave, approveLeave } = await import("@/lib/hr/leave");
+    const { Attendance, LeaveType } = await import("@/models/hr");
+    const at = (date: string) => Attendance.findOne({ businessId, employeeId: emp.asha, date: new Date(`${date}T00:00:00Z`) }).lean<{ status: string; workedMinutes: number; checkIn: string; source: string }>();
+
+    const empty = await employeeMonthSheet(ctx, { year: 2027, month: 2 });
+    expect(empty.employee).toBeNull();
+    expect(empty.employees.map((e) => e.id)).toContain(String(emp.asha));
+
+    // A paid leave day in the month stays as it is.
+    const lop = await LeaveType.findOne({ businessId, code: "LOP" }).lean<{ _id: Types.ObjectId }>();
+    const leave = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(lop!._id), fromDate: "2027-02-10", toDate: "2027-02-10", halfDay: false, reason: "" }, { self: false });
+    await approveLeave(ctx, leave.id, "");
+
+    const sheet = await employeeMonthSheet(ctx, { employeeId: String(emp.asha), year: 2027, month: 2 });
+    expect(sheet.days).toHaveLength(28);
+    expect(sheet.days.find((d) => d.date === "2027-02-07")).toMatchObject({ dayKind: "WEEKLY_OFF", suggested: "WEEKLY_OFF" });
+    expect(sheet.days.find((d) => d.date === "2027-02-10")!.record).toMatchObject({ fromLeave: true });
+
+    const row = (date: string, status: string, checkIn = "", checkOut = "") => ({ date, status, checkIn, checkOut, notes: "" });
+    const res = await saveEmployeeMonth(
+      ctx,
+      saveMonthSchema.parse({
+        employeeId: String(emp.asha),
+        year: 2027,
+        month: 2,
+        rows: [row("2027-02-01", "PRESENT", "09:30", "18:30"), row("2027-02-02", "ABSENT"), row("2027-02-07", "WEEKLY_OFF"), row("2027-02-10", "PRESENT")],
+      })
+    );
+    expect(res).toEqual({ saved: 3, skipped: 1 });
+    expect(await at("2027-02-01")).toMatchObject({ status: "PRESENT", workedMinutes: 540, checkIn: "09:30", source: "MANUAL" });
+    expect(await at("2027-02-02")).toMatchObject({ status: "ABSENT", workedMinutes: 0 });
+    expect((await at("2027-02-10"))!.status).toBe("LEAVE");
+    const after = await employeeMonthSheet(ctx, { employeeId: String(emp.asha), year: 2027, month: 2 });
+    expect(after.summary).toMatchObject({ absent: 1 });
+
+    // Refused: a day outside the month, leave set by hand, and a payroll-locked month.
+    const base = { employeeId: String(emp.asha), year: 2027, month: 2 };
+    await expect(saveEmployeeMonth(ctx, saveMonthSchema.parse({ ...base, rows: [row("2027-03-01", "PRESENT")] }))).rejects.toMatchObject({ code: "OUTSIDE_MONTH" });
+    expect(saveMonthSchema.safeParse({ ...base, rows: [row("2027-02-03", "LEAVE")] }).success).toBe(false);
+    await expect(saveEmployeeMonth(ctx, saveMonthSchema.parse({ ...base, year: 2026, month: 10, rows: [row("2026-10-05", "PRESENT")] }))).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
   });
 });

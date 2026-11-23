@@ -7,6 +7,7 @@ import { recordFormWrite } from "@/lib/hr/history";
 import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin";
 import { ensureAttendanceReasons } from "@/lib/hr/regularization";
 import { keepSingleDefault } from "@/lib/hr/holidayCalendars";
+import { migrateLegacyGradeGroups, assertGradeGroupAllowed } from "@/lib/hr/leaveGroups";
 import {
   HrDepartment,
   Designation,
@@ -16,6 +17,7 @@ import {
   HolidayCalendar,
   LeaveType,
   LeaveGroup,
+  GradeLeaveGroup,
   AttendanceReason,
   Announcement,
   Employee,
@@ -261,6 +263,36 @@ const leaveGroups: ResourceDefinition = {
     defaultSort: "name",
     defaultSortDir: "asc",
     toDocument: documentConverter({ lines: { leaveTypes: { refs: ["leaveTypeId"] } } }),
+  }),
+  permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+};
+
+const idRef = (message: string) => z.string().trim().regex(/^[a-f\d]{24}$/i, message);
+
+/** "Assign Leave Group to Grade": leave policy, so it rides on the leave-type permissions. */
+const gradeLeaveGroups: ResourceDefinition = {
+  ...define("hr-grade-leave-groups", "Leave group assignment", {
+    model: GradeLeaveGroup,
+    fields: {
+      leaveGroupId: idRef("Choose a leave group"),
+      gradeId: idRef("Choose a grade"),
+      notes: optionalText(300),
+      status,
+    },
+    searchFields: ["notes"],
+    filterFields: {},
+    refFilters: {
+      leaveGroup: { path: "leaveGroupId", model: LeaveGroup, field: "name" },
+      grade: { path: "gradeId", model: HrGrade, field: "name" },
+    },
+    sortableFields: ["createdAt"],
+    defaultSort: "createdAt",
+    defaultSortDir: "asc",
+    beforeList: migrateLegacyGradeGroups,
+    validateCreate: async (ctx, _side, input) => assertGradeGroupAllowed(ctx, input.gradeId, input.leaveGroupId),
+    validateUpdate: async (ctx, _side, before, input) =>
+      assertGradeGroupAllowed(ctx, input.gradeId && String(input.gradeId) !== String(before.gradeId) ? input.gradeId : null, input.leaveGroupId, before._id),
+    toDocument: documentConverter({ refs: ["gradeId", "leaveGroupId"] }),
   }),
   permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
 };
@@ -567,6 +599,7 @@ export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-holiday-calendars": holidayCalendars,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
+  "hr-grade-leave-groups": gradeLeaveGroups,
   "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,

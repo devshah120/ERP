@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Attendance, ATTENDANCE_STATUSES, PayrollRun, LeaveApplication } from "@/models/hr";
+import { Attendance, ATTENDANCE_STATUSES, PayrollRun, LeaveApplication, Employee } from "@/models/hr";
 import { recordAudit } from "@/lib/services/auditService";
 import type { AuthContext } from "@/lib/auth/context";
 import {
@@ -241,6 +241,39 @@ export async function dailySheet(ctx: AuthContext, dateStr: string) {
   };
 }
 
+const hhmm = z.string().trim().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/, "Use HH:mm").optional().default("");
+const WORKING_MARKS = new Set(["PRESENT", "HALF_DAY", "ON_DUTY"]);
+
+/**
+ * The write for one marked day (a bulkWrite op): times are worked out from the
+ * employee's shift for working statuses and cleared otherwise. Days on
+ * approved leave are never passed here.
+ */
+function markDayOp(ctx: AuthContext, emp: AnyDoc, shift: ShiftRule, date: Date, row: { status: string; checkIn: string; checkOut: string; notes: string }) {
+  const working = WORKING_MARKS.has(row.status);
+  const times = working ? computeTimes(shift, row.checkIn, row.checkOut) : { workedMinutes: 0, lateMinutes: 0, overtimeMinutes: 0 };
+  return {
+    updateOne: {
+      filter: { businessId: ctx.businessId, employeeId: emp._id, date },
+      update: {
+        $set: {
+          status: row.status,
+          checkIn: working ? row.checkIn : "",
+          checkOut: working ? row.checkOut : "",
+          ...times,
+          source: "MANUAL",
+          leaveApplicationId: null,
+          leaveIsPaid: true,
+          notes: row.notes,
+          updatedBy: ctx.userId,
+        },
+        $setOnInsert: { createdBy: ctx.userId },
+      },
+      upsert: true,
+    },
+  };
+}
+
 export const saveSheetSchema = z.object({
   date: z.string().trim().min(1, "Choose a date"),
   rows: z
@@ -285,29 +318,7 @@ export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof sav
       skipped += 1;
       continue;
     }
-    const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
-    const working = row.status === "PRESENT" || row.status === "HALF_DAY" || row.status === "ON_DUTY";
-    const times = working ? computeTimes(shift, row.checkIn, row.checkOut) : { workedMinutes: 0, lateMinutes: 0, overtimeMinutes: 0 };
-    ops.push({
-      updateOne: {
-        filter: { businessId: ctx.businessId, employeeId: emp._id, date },
-        update: {
-          $set: {
-            status: row.status,
-            checkIn: working ? row.checkIn : "",
-            checkOut: working ? row.checkOut : "",
-            ...times,
-            source: "MANUAL",
-            leaveApplicationId: null,
-            leaveIsPaid: true,
-            notes: row.notes,
-            updatedBy: ctx.userId,
-          },
-          $setOnInsert: { createdBy: ctx.userId },
-        },
-        upsert: true,
-      },
-    });
+    ops.push(markDayOp(ctx, emp, shiftFor(cal, emp.shiftId, emp.holidayCalendarId), date, row));
     saved += 1;
   }
   if (ops.length > 0) await Attendance.bulkWrite(ops);
@@ -322,6 +333,142 @@ export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof sav
   });
 
   return { date: dayKey(date), saved, skipped };
+}
+
+/* ------------------------------------------------------------------ */
+/* One employee, whole month                                           */
+/* ------------------------------------------------------------------ */
+
+export const monthSheetQuery = z.object({
+  employeeId: z.string().trim().regex(/^([a-f\d]{24})?$/i).optional(),
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+});
+
+export const saveMonthSchema = z.object({
+  employeeId: objectId,
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  rows: z
+    .array(
+      z.object({
+        date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use yyyy-mm-dd"),
+        status: z.enum(ATTENDANCE_STATUSES).refine((s) => s !== "LEAVE", "Leave is recorded through a leave request"),
+        checkIn: hhmm,
+        checkOut: hhmm,
+        notes: z.string().trim().max(300).optional().default(""),
+      })
+    )
+    .min(1, "Nothing to save")
+    .max(31),
+});
+
+/**
+ * One employee's whole month, day by day, for marking it in one go: each
+ * day's kind (working, weekly off, holiday from their calendar), what is
+ * recorded, whether they were employed, and the month's totals. Also lists
+ * everyone on the rolls that month, for the employee picker.
+ */
+export async function employeeMonthSheet(ctx: AuthContext, query: z.infer<typeof monthSheetQuery>) {
+  const { start, end } = monthRange(query.year, query.month);
+  const emps = await employeesDuring(ctx.businessId, start, end);
+  const employees = emps.map((e) => ({ id: String(e._id), name: e.name as string, code: e.employeeCode as string }));
+  const emp = query.employeeId ? emps.find((e) => String(e._id) === query.employeeId) : undefined;
+  if (!emp) return { year: query.year, month: query.month, employees, employee: null, locked: false, days: [], summary: null };
+
+  const days = eachDay(start, end);
+  const [cal, records, locked, labels] = await Promise.all([
+    loadCalendar(ctx.businessId, start, end),
+    Attendance.find({ businessId: ctx.businessId, employeeId: emp._id, date: { $gte: start, $lte: end } }).lean<AnyDoc[]>(),
+    PayrollRun.exists({ businessId: ctx.businessId, year: query.year, month: query.month, status: { $in: ["APPROVED", "PAID"] } }),
+    employeeLabels(ctx.businessId, [emp._id]),
+  ]);
+  const byDay = new Map(records.map((r) => [dayKey(toDay(r.date)), r]));
+  const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
+  const joined = toDay(emp.dateOfJoining);
+  const exited = emp.dateOfExit ? toDay(emp.dateOfExit) : null;
+  const { summary } = summarizeMonth(emp, cal, days, byDay);
+  const label = labels.get(String(emp._id));
+
+  return {
+    year: query.year,
+    month: query.month,
+    employees,
+    employee: {
+      id: String(emp._id),
+      name: emp.name as string,
+      code: emp.employeeCode as string,
+      department: label?.department ?? "",
+      designation: label?.designation ?? "",
+      shift: { name: shift.name, startTime: shift.startTime, endTime: shift.endTime },
+    },
+    locked: Boolean(locked),
+    days: days.map((d) => {
+      const kind = dayKind(cal, shift, d);
+      const rec = byDay.get(dayKey(d));
+      return {
+        date: dayKey(d),
+        weekday: d.getUTCDay(),
+        dayKind: kind,
+        holiday: shift.holidays?.get(dayKey(d)) ?? null,
+        employed: d >= joined && (!exited || d <= exited),
+        suggested: kind === "HOLIDAY" ? "HOLIDAY" : kind === "WEEKLY_OFF" ? "WEEKLY_OFF" : "PRESENT",
+        record: rec
+          ? {
+              status: rec.status as string,
+              checkIn: (rec.checkIn as string) ?? "",
+              checkOut: (rec.checkOut as string) ?? "",
+              workedMinutes: rec.workedMinutes ?? 0,
+              lateMinutes: rec.lateMinutes ?? 0,
+              notes: (rec.notes as string) ?? "",
+              source: rec.source as string,
+              fromLeave: Boolean(rec.leaveApplicationId),
+            }
+          : null,
+      };
+    }),
+    summary,
+  };
+}
+
+/**
+ * Saves the days changed on the month sheet. Days on approved leave are left
+ * alone (counted as skipped); days before joining or after the last working
+ * day, or outside the month, are refused, as is a payroll-locked month.
+ */
+export async function saveEmployeeMonth(ctx: AuthContext, input: z.infer<typeof saveMonthSchema>) {
+  const { start, end } = monthRange(input.year, input.month);
+  const emp = await Employee.findOne({ _id: input.employeeId, businessId: ctx.businessId, deletedAt: null }).lean<AnyDoc>();
+  if (!emp) throw AppError.notFound("Employee not found");
+  const dates = input.rows.map((r) => toDay(r.date));
+  if (new Set(input.rows.map((r) => r.date)).size !== input.rows.length) throw AppError.badRequest("A day is listed twice", "DUPLICATE_DAY");
+  if (dates.some((d) => d < start || d > end)) throw AppError.badRequest("Every day must be in the chosen month", "OUTSIDE_MONTH");
+  const joined = toDay(emp.dateOfJoining);
+  const exited = emp.dateOfExit ? toDay(emp.dateOfExit) : null;
+  if (dates.some((d) => d < joined || (exited && d > exited))) {
+    throw AppError.badRequest(`${emp.name} was not on the rolls on some of these days`, "EMPLOYEE_NOT_EMPLOYED");
+  }
+  await assertPayrollOpen(ctx.businessId, dates);
+
+  const [cal, onLeave] = await Promise.all([
+    loadCalendar(ctx.businessId, start, end),
+    Attendance.find({ businessId: ctx.businessId, employeeId: emp._id, date: { $in: dates }, leaveApplicationId: { $ne: null } }, { date: 1 }).lean<AnyDoc[]>(),
+  ]);
+  const leaveDays = new Set(onLeave.map((r) => dayKey(toDay(r.date))));
+  const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
+  const rows = input.rows.filter((r) => !leaveDays.has(r.date));
+  if (rows.length > 0) await Attendance.bulkWrite(rows.map((r) => markDayOp(ctx, emp, shift, toDay(r.date), r)));
+
+  await recordAudit({
+    businessId: ctx.businessId,
+    userId: ctx.userId,
+    action: "UPDATE",
+    module: "hr.attendance",
+    documentType: "Attendance",
+    documentId: emp._id,
+    newValue: { employee: emp.employeeCode, month: `${input.year}-${String(input.month).padStart(2, "0")}`, saved: rows.length, skipped: input.rows.length - rows.length },
+  });
+  return { saved: rows.length, skipped: input.rows.length - rows.length };
 }
 
 /* ------------------------------------------------------------------ */

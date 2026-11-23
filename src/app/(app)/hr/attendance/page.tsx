@@ -153,6 +153,9 @@ export default function DailyAttendancePage() {
         }
         actions={
           <>
+            <Link href="/hr/attendance/employee" className="button buttonSecondary" title="Mark one employee's whole month">
+              Mark a month
+            </Link>
             <Link href="/hr/attendance/register" className="button buttonSecondary">
               Monthly register
             </Link>

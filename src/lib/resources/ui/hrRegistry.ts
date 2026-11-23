@@ -112,13 +112,12 @@ const grades = master("hr-grades", "Grades", "Grade", {
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Grade", filterParam: "name", sortField: "name" },
-    { key: "leaveGroupId", label: "Leave group", type: "reference", reference: LEAVE_GROUP_REF },
     statusColumn,
   ],
   sections: [
     {
       label: "Grade",
-      description: "Its leave group is chosen on Assign Grade to Group.",
+      description: "Its leave group is chosen on Assign Leave Group to Grade.",
       fields: [
         { name: "code", label: "Code", type: "text", required: true, placeholder: "L4" },
         { name: "name", label: "Name", type: "text", required: true, placeholder: "Executive" },
@@ -279,6 +278,27 @@ const leaveGroups = master("hr-leave-groups", "Leave Groups", "Leave group", {
             { name: "annualQuota", label: "Days per year", type: "number", width: "10rem", defaultValue: 0 },
           ],
         },
+      ],
+    },
+  ],
+});
+
+const gradeLeaveGroups = master("hr-grade-leave-groups", "Assign Leave Group to Grade", "Leave group assignment", {
+  permissions: { create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+  columns: [
+    { key: "leaveGroupId", label: "Leave group", type: "reference", reference: LEAVE_GROUP_REF, filterParam: "leaveGroup" },
+    { key: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF, filterParam: "grade" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Assignment",
+      description: "Employees of this grade get the days set in the leave group. A grade can follow one leave group.",
+      fields: [
+        { name: "leaveGroupId", label: "Leave group", type: "reference", reference: LEAVE_GROUP_REF, required: true },
+        { name: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF, required: true },
+        statusField,
+        { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
       ],
     },
   ],
@@ -614,6 +634,7 @@ export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-holiday-calendars": holidayCalendars,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
+  "hr-grade-leave-groups": gradeLeaveGroups,
   "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,

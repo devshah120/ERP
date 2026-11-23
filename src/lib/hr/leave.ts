@@ -1,7 +1,8 @@
 import mongoose, { Types } from "mongoose";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Attendance, LeaveApplication, LeaveAllocation, LeaveType, LeaveGroup, HrGrade, Employee } from "@/models/hr";
+import { Attendance, LeaveApplication, LeaveAllocation, LeaveType, LeaveGroup, HrGrade, GradeLeaveGroup, Employee } from "@/models/hr";
+import { migrateLegacyGradeGroups } from "./leaveGroups";
 import { recordAudit } from "@/lib/services/auditService";
 import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
@@ -80,10 +81,17 @@ async function groupQuotas(businessId: Types.ObjectId, emps: AnyDoc[]): Promise<
   const gradeIds = [...new Set(emps.map((e) => e.gradeId && String(e.gradeId)).filter(Boolean))];
   const out = new Map<string, Map<string, number>>();
   if (gradeIds.length === 0) return out;
-  const grades = await HrGrade.find({ businessId, _id: { $in: gradeIds }, deletedAt: null, status: "ACTIVE", leaveGroupId: { $ne: null } }, { leaveGroupId: 1 }).lean<AnyDoc[]>();
-  const groups = await LeaveGroup.find({ businessId, _id: { $in: grades.map((g) => g.leaveGroupId) }, deletedAt: null, status: "ACTIVE" }, { leaveTypes: 1 }).lean<AnyDoc[]>();
+  await migrateLegacyGradeGroups(businessId);
+  // Only active grades with an active assignment to an active group count.
+  const [grades, assignments] = await Promise.all([
+    HrGrade.find({ businessId, _id: { $in: gradeIds }, deletedAt: null, status: "ACTIVE" }, { _id: 1 }).lean<AnyDoc[]>(),
+    GradeLeaveGroup.find({ businessId, gradeId: { $in: gradeIds }, deletedAt: null, status: "ACTIVE" }, { gradeId: 1, leaveGroupId: 1 }).lean<AnyDoc[]>(),
+  ]);
+  const activeGrades = new Set(grades.map((g) => String(g._id)));
+  const live = assignments.filter((a) => activeGrades.has(String(a.gradeId)));
+  const groups = await LeaveGroup.find({ businessId, _id: { $in: live.map((a) => a.leaveGroupId) }, deletedAt: null, status: "ACTIVE" }, { leaveTypes: 1 }).lean<AnyDoc[]>();
   const byGroup = new Map(groups.map((g) => [String(g._id), new Map(((g.leaveTypes ?? []) as AnyDoc[]).map((l) => [String(l.leaveTypeId), Number(l.annualQuota) || 0]))]));
-  const byGrade = new Map(grades.map((g) => [String(g._id), byGroup.get(String(g.leaveGroupId))]));
+  const byGrade = new Map(live.map((a) => [String(a.gradeId), byGroup.get(String(a.leaveGroupId))]));
   for (const e of emps) {
     const quotas = e.gradeId ? byGrade.get(String(e.gradeId)) : undefined;
     if (quotas) out.set(String(e._id), quotas);

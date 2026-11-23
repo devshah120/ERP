@@ -15,12 +15,12 @@ import { useToast } from "@/components/ui/Toast";
 import SimpleField from "@/components/forms/SimpleField";
 import { IconAlertCircle, IconArrowLeft, IconInfo } from "@/components/icons";
 
-/** One settings section as an editable form. Read-only without settings.edit. */
+/** One settings section as an editable form. Read-only without settings.edit (or the section's own edit permission). */
 export default function SettingsFormView({ sectionKey }: { sectionKey: string }) {
   const section = SETTINGS_SECTIONS[sectionKey];
   const { hasPermission } = useAuth();
   const toast = useToast();
-  const canEdit = hasPermission("settings.edit");
+  const canEdit = hasPermission(section.editPermission ?? "settings.edit");
 
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [options, setOptions] = useState<Record<string, { value: string; label: string }[]>>({});
@@ -89,8 +89,8 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
     <>
       <PageHeader
         eyebrow={
-          <Link href="/settings" className="textLink" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-            <IconArrowLeft /> Settings
+          <Link href={section.back?.href ?? "/settings"} className="textLink" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+            <IconArrowLeft /> {section.back?.label ?? "Settings"}
           </Link>
         }
         title={section.title}
@@ -106,7 +106,7 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
         </div>
         {!canEdit && (
           <div className="banner bannerLocked" style={{ marginBottom: "1rem" }}>
-            <span>You can view these settings. Changing them needs the Settings · edit permission.</span>
+            <span>You can view these settings. Changing them needs {section.editPermission ? `the ${section.editPermission} permission` : "the Settings · edit permission"}.</span>
           </div>
         )}
         {error && (

@@ -106,6 +106,7 @@ export function listHandler(def: ResourceDefinition) {
   return async (req: NextRequest) => {
     const ctx = getAuthContext(req);
     requirePermission(ctx, def.permissions.view);
+    if (def.beforeList) await def.beforeList(ctx.businessId);
 
     const result = await queryResource(
       def,

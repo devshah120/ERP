@@ -834,4 +834,81 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     await Employee.updateOne({ _id: emp.asha }, { gradeId: null });
   });
+
+  it("applies the attendance regularization policy and reasons", async () => {
+    const { assertRegularizationAllowed, regularizationPolicy } = await import("@/lib/hr/regularization");
+    const { requestCorrection, approveCorrection, listAllCorrections } = await import("@/lib/hr/corrections");
+    const { applyLeave, approveLeave } = await import("@/lib/hr/leave");
+    const { updateSettings } = await import("@/lib/settings/service");
+    const { findEmployee } = await import("@/lib/hr/common");
+    const { AttendanceReason, Attendance, Holiday, LeaveType } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const bid = new Types.ObjectId(businessId);
+    const setPolicy = (v: Record<string, unknown>) => updateSettings(bid, ctx.userId, "attendance-regularization", v);
+    const asha = await findEmployee(bid, emp.asha);
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    const marked = { status: "ABSENT" };
+    const check = async (policy: Record<string, unknown>, ask: Partial<{ date: string; status: string; checkIn: string; checkOut: string }>, current: Record<string, unknown> | null = marked) => {
+      await setPolicy(policy);
+      return assertRegularizationAllowed(bid, await regularizationPolicy(bid), asha, { status: "PRESENT", checkIn: "", checkOut: "", ...ask, date: d(ask.date ?? "2027-01-06") }, { today: d("2027-01-08"), current });
+    };
+
+    // The starter setup seeds the system reasons.
+    expect((await AttendanceReason.find({ businessId }).lean<{ name: string; reasonType: string }[]>()).filter((r) => r.reasonType === "SYSTEM").map((r) => r.name)).toContain("Forgot to Punch");
+
+    // Defaults keep the old rules: past, blank, weekly-off days and times are fine; future days are not.
+    await expect(check({}, { date: "2027-01-03" }, null)).resolves.toBeUndefined();
+    await expect(check({}, { date: "2027-01-09" })).rejects.toMatchObject({ code: "FUTURE_DATE" });
+
+    await expect(check({ applicable: false }, {})).rejects.toMatchObject({ code: "REGULARIZATION_OFF" });
+    await expect(check({ pastDaysLimit: 3 }, { date: "2027-01-04" })).rejects.toMatchObject({ code: "PAST_LIMIT" });
+    await expect(check({ pastDaysLimit: 3 }, { date: "2027-01-05" })).resolves.toBeUndefined();
+    await expect(check({ futureApplicable: true, futureBlankAttendance: true, futureDaysLimit: 2 }, { date: "2027-01-11" }, null)).rejects.toMatchObject({ code: "FUTURE_LIMIT" });
+    await expect(check({ futureApplicable: true, futureBlankAttendance: true, futureDaysLimit: 2 }, { date: "2027-01-10" }, null)).resolves.toBeUndefined();
+    await expect(check({ futureApplicable: true }, { date: "2027-01-10" }, null)).rejects.toMatchObject({ code: "BLANK_ATTENDANCE" });
+    await expect(check({ pastBlankAttendance: false }, {}, null)).rejects.toMatchObject({ code: "BLANK_ATTENDANCE" });
+    // Sunday 3 January is the general shift's weekly off; 7 January is made a holiday.
+    await expect(check({ allowOnWeeklyOffs: false }, { date: "2027-01-03" })).rejects.toMatchObject({ code: "WEEKLY_OFF" });
+    await Holiday.create({ businessId, name: "Founders Day", date: d("2027-01-07") });
+    await expect(check({ allowOnHolidays: false }, { date: "2027-01-07" })).rejects.toMatchObject({ code: "HOLIDAY" });
+    await expect(check({ punchApplicable: false }, { checkIn: "09:30" })).rejects.toMatchObject({ code: "PUNCH_OFF" });
+    await expect(check({ punchPastDaysLimit: 1 }, { checkIn: "09:30" })).rejects.toMatchObject({ code: "PUNCH_LIMIT" });
+    await expect(check({ punchPastDaysLimit: 1 }, {})).resolves.toBeUndefined();
+    // Half-day leave: only with the switch on, and only for the worked half.
+    const halfLeave = { status: "HALF_DAY", leaveApplicationId: new Types.ObjectId() };
+    await expect(check({}, { status: "HALF_DAY" }, halfLeave)).rejects.toMatchObject({ code: "ON_LEAVE" });
+    await expect(check({ applyOnHalfDayLeave: true }, { status: "PRESENT" }, halfLeave)).rejects.toMatchObject({ code: "HALF_DAY_LEAVE" });
+    await expect(check({ applyOnHalfDayLeave: true }, { status: "HALF_DAY" }, halfLeave)).resolves.toBeUndefined();
+    await expect(check({ applyOnHalfDayLeave: true }, { status: "HALF_DAY" }, { status: "LEAVE", leaveApplicationId: new Types.ObjectId() })).rejects.toMatchObject({ code: "ON_LEAVE" });
+    // Asha has one approved request in November 2026 (rejected and withdrawn ones do not count).
+    await expect(check({ maxDaysPerMonth: 1 }, { date: "2026-11-25" })).rejects.toMatchObject({ code: "MONTH_LIMIT" });
+    await expect(check({ maxDaysPerMonth: 2 }, { date: "2026-11-25" })).resolves.toBeUndefined();
+
+    // End to end: a reason is stored with its name; approval re-checks the policy unless told not to.
+    const ashaUser = await User.findOne({ businessId, email: "asha@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const self = { ...ctx, userId: ashaUser!._id, roleId: ashaUser!.roleId, permissions: ["hr-self.view"] };
+    const forgot = await AttendanceReason.findOne({ businessId, name: "Forgot to Punch" }).lean<{ _id: Types.ObjectId }>();
+    await setPolicy({});
+    await expect(requestCorrection(self, { date: "2026-11-20", status: "PRESENT", checkIn: "", checkOut: "", reasonId: String(new Types.ObjectId()) })).rejects.toMatchObject({ code: "REASON_NOT_FOUND" });
+    const req = await requestCorrection(self, { date: "2026-11-20", status: "PRESENT", checkIn: "", checkOut: "", reasonId: String(forgot!._id) });
+    const listed = (await listAllCorrections(ctx, { page: 1, pageSize: 50 })).items.find((r) => r.id === req.id)!;
+    expect(listed).toMatchObject({ reasonName: "Forgot to Punch", reason: "" });
+    await setPolicy({ pastBlankAttendance: false });
+    await expect(approveCorrection(ctx, req.id, "")).rejects.toMatchObject({ code: "BLANK_ATTENDANCE" });
+    await setPolicy({ pastBlankAttendance: false, skipPolicyOnApproval: true });
+    await approveCorrection(ctx, req.id, "");
+
+    // The worked half of a half-day leave: the times change, the leave stays on the day.
+    await setPolicy({ applyOnHalfDayLeave: true });
+    const lop = await LeaveType.findOne({ businessId, code: "LOP" }).lean<{ _id: Types.ObjectId }>();
+    const half = await applyLeave(ctx, { employeeId: String(emp.asha), leaveTypeId: String(lop!._id), fromDate: "2026-11-12", toDate: "2026-11-12", halfDay: true, reason: "" }, { self: false });
+    await approveLeave(ctx, half.id, "");
+    const halfReq = await requestCorrection(self, { date: "2026-11-12", status: "HALF_DAY", checkIn: "09:30", checkOut: "13:30", reasonId: String(forgot!._id) });
+    await approveCorrection(ctx, halfReq.id, "");
+    const day = await Attendance.findOne({ businessId, employeeId: emp.asha, date: d("2026-11-12") }).lean<{ status: string; checkIn: string; leaveApplicationId: Types.ObjectId }>();
+    expect(day).toMatchObject({ status: "HALF_DAY", checkIn: "09:30" });
+    expect(String(day!.leaveApplicationId)).toBe(half.id);
+
+    await setPolicy({});
+  });
 });

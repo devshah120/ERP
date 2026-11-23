@@ -5,6 +5,7 @@ import { AppError } from "@/lib/errors/AppError";
 import { Business } from "@/models/Business";
 import { recordFormWrite } from "@/lib/hr/history";
 import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin";
+import { ensureAttendanceReasons } from "@/lib/hr/regularization";
 import {
   HrDepartment,
   Designation,
@@ -13,6 +14,7 @@ import {
   Holiday,
   LeaveType,
   LeaveGroup,
+  AttendanceReason,
   Announcement,
   Employee,
   JobOpening,
@@ -236,6 +238,25 @@ const leaveGroups: ResourceDefinition = {
     toDocument: documentConverter({ lines: { leaveTypes: { refs: ["leaveTypeId"] } } }),
   }),
   permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+};
+
+/** Reasons for attendance correction requests; they ride on the attendance permissions. */
+const attendanceReasons: ResourceDefinition = {
+  ...define("hr-attendance-reasons", "Attendance reason", {
+    model: AttendanceReason,
+    fields: {
+      name: z.string().trim().min(2).max(100),
+      description: optionalText(300),
+      status,
+    },
+    searchFields: ["name"],
+    filterFields: { name: "name", reasonType: "reasonType" },
+    sortableFields: ["name", "reasonType", "createdAt"],
+    defaultSort: "name",
+    defaultSortDir: "asc",
+    beforeList: ensureAttendanceReasons,
+  }),
+  permissions: { view: "hr-attendance.view", create: "hr-attendance.edit", edit: "hr-attendance.edit", delete: "hr-attendance.edit" },
 };
 
 const announcements = define("hr-announcements", "Announcement", {
@@ -519,6 +540,7 @@ export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-holidays": holidays,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
+  "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,
   "hr-job-openings": jobOpenings,

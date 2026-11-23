@@ -54,9 +54,9 @@ export function minutesOf(time: string | undefined | null): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-/** Today's calendar day in the business's time zone (India by default). */
-export function todayIn(timeZone = "Asia/Kolkata"): Date {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+/** Today's calendar day in the business's time zone (India by default), or the day of `at` there. */
+export function todayIn(timeZone = "Asia/Kolkata", at: Date = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
   return toDay(parts);
 }
 

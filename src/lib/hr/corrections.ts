@@ -7,24 +7,33 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, todayIn, loadCalendar, shiftFor } from "./calendar";
 import { computeTimes, assertPayrollOpen } from "./attendance";
 import { directReports } from "./leave";
+import { regularizationPolicy, assertRegularizationAllowed, reasonFor } from "./regularization";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, businessTimeZone, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
 /*
  * Attendance correction (regularization) requests: an employee asks for one
- * day to be set to present, half day or on duty, optionally with times. Their
- * reporting manager or HR approves, which writes the day to the attendance
- * sheet. Approved leave and payroll-locked months cannot be corrected here.
+ * day to be set to present, half day or on duty, optionally with times, and
+ * picks a reason. Their reporting manager or HR approves, which writes the day
+ * to the attendance sheet. Which days may be asked for is the workspace's
+ * regularization policy (regularization.ts); full-day leave and
+ * payroll-locked months can never be corrected here.
  */
 
 const hhmm = z.string().trim().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/, "Use HH:mm").optional().default("");
 
-export const correctionSchema = z.object({
-  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date"),
-  status: z.enum(CORRECTION_STATUSES),
-  checkIn: hhmm,
-  checkOut: hhmm,
-  reason: z.string().trim().min(3, "Say what should be corrected and why").max(500),
-});
+export const correctionSchema = z
+  .object({
+    date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date"),
+    status: z.enum(CORRECTION_STATUSES),
+    checkIn: hhmm,
+    checkOut: hhmm,
+    /** A reason from Attendance Reg. Reasons; `reason` then holds optional remarks. */
+    reasonId: z.string().trim().regex(/^([a-f\d]{24})?$/i, "Choose a reason from the list").optional().default(""),
+    reason: z.string().trim().max(500).optional().default(""),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.reasonId && v.reason.length < 3) ctx.addIssue({ code: "custom", path: ["reason"], message: "Choose a reason or say what should be corrected and why" });
+  });
 
 export const correctionListSchema = z.object({
   query: z.string().trim().max(100).optional(),
@@ -45,25 +54,25 @@ async function loadRequest(ctx: AuthContext, id: string) {
 }
 
 /** The signed-in employee asks for one day of their attendance to be corrected. */
-export async function requestCorrection(ctx: AuthContext, input: z.infer<typeof correctionSchema>) {
+export async function requestCorrection(ctx: AuthContext, raw: z.input<typeof correctionSchema>) {
+  const input = correctionSchema.parse(raw);
   const emp = await selfEmployee(ctx);
   const date = toDay(input.date);
   const today = todayIn(await businessTimeZone(ctx.businessId));
-  if (date > today) throw AppError.badRequest("You can only correct today or an earlier day.", "FUTURE_DATE");
   if (date < toDay(emp.dateOfJoining) || (emp.dateOfExit && date > toDay(emp.dateOfExit))) {
     throw AppError.badRequest("You were not on the rolls on that day.", "EMPLOYEE_NOT_EMPLOYED");
   }
   await assertPayrollOpen(ctx.businessId, [date]);
 
   const current = await Attendance.findOne({ businessId: ctx.businessId, employeeId: emp._id, date }).lean<AnyDoc>();
-  if (current?.leaveApplicationId) {
-    throw AppError.badRequest("That day is covered by approved leave. Withdraw the leave or ask HR to cancel it instead.", "ON_LEAVE");
-  }
   if (current && current.status === input.status && (current.checkIn ?? "") === input.checkIn && (current.checkOut ?? "") === input.checkOut) {
     throw AppError.badRequest("Your attendance for that day already shows this.", "NOTHING_TO_CHANGE");
   }
   const open = await AttendanceRequest.findOne({ businessId: ctx.businessId, employeeId: emp._id, date, status: "PENDING" }).lean<AnyDoc>();
   if (open) throw AppError.conflict(`You already have a pending request for that day (${open.requestNumber}).`, "CORRECTION_PENDING");
+  const policy = await regularizationPolicy(ctx.businessId);
+  await assertRegularizationAllowed(ctx.businessId, policy, emp, { date, status: input.status, checkIn: input.checkIn, checkOut: input.checkOut }, { today, current });
+  const reason = await reasonFor(ctx.businessId, input.reasonId || undefined);
 
   const requestNumber = await nextHrNumber(ctx.businessId, "HR_ATTENDANCE_REQUEST", "AR");
   const doc = await AttendanceRequest.create({
@@ -74,6 +83,8 @@ export async function requestCorrection(ctx: AuthContext, input: z.infer<typeof 
     requestedStatus: input.status,
     checkIn: input.checkIn,
     checkOut: input.checkOut,
+    reasonId: reason?.id ?? null,
+    reasonName: reason?.name ?? "",
     reason: input.reason,
     previous: { status: current?.status ?? "", checkIn: current?.checkIn ?? "", checkOut: current?.checkOut ?? "" },
     appliedByUserId: ctx.userId,
@@ -87,7 +98,7 @@ export async function requestCorrection(ctx: AuthContext, input: z.infer<typeof 
     module: "hr.attendance",
     documentType: "AttendanceRequest",
     documentId: doc._id,
-    newValue: { requestNumber, date: dayKey(date), status: input.status, checkIn: input.checkIn, checkOut: input.checkOut },
+    newValue: { requestNumber, date: dayKey(date), status: input.status, checkIn: input.checkIn, checkOut: input.checkOut, reason: reason?.name ?? "" },
   });
   return { id: String(doc._id), requestNumber };
 }
@@ -95,7 +106,9 @@ export async function requestCorrection(ctx: AuthContext, input: z.infer<typeof 
 /**
  * Approves a pending request: the day is written to the attendance sheet with
  * times worked out from the employee's shift, in the same transaction that
- * closes the request.
+ * closes the request. The regularization policy is checked again (its day
+ * limits counted from the day the request was raised) unless it says not to.
+ * On a half-day leave only the times change; the leave stays on the day.
  */
 export async function approveCorrection(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const req = await loadRequest(ctx, id);
@@ -105,8 +118,20 @@ export async function approveCorrection(ctx: AuthContext, id: string, note: stri
 
   const emp = await findEmployee(ctx.businessId, req.employeeId);
   const current = await Attendance.findOne({ businessId: ctx.businessId, employeeId: emp._id, date }).lean<AnyDoc>();
-  if (current?.leaveApplicationId) {
+  const halfDayLeave = Boolean(current?.leaveApplicationId) && current?.status === "HALF_DAY" && req.requestedStatus === "HALF_DAY";
+  if (current?.leaveApplicationId && !halfDayLeave) {
     throw AppError.badRequest("That day has since been covered by approved leave, so it cannot be corrected here.", "ON_LEAVE");
+  }
+  const policy = await regularizationPolicy(ctx.businessId);
+  if (!policy.skipPolicyOnApproval) {
+    const raisedOn = todayIn(await businessTimeZone(ctx.businessId), req.createdAt ?? new Date());
+    await assertRegularizationAllowed(
+      ctx.businessId,
+      policy,
+      emp,
+      { date, status: req.requestedStatus, checkIn: req.checkIn ?? "", checkOut: req.checkOut ?? "" },
+      { today: raisedOn, current, excludeRequestId: req._id }
+    );
   }
 
   const cal = await loadCalendar(ctx.businessId, date, date);
@@ -124,8 +149,8 @@ export async function approveCorrection(ctx: AuthContext, id: string, note: stri
             checkOut: req.checkOut,
             ...times,
             source: "REQUEST",
-            leaveApplicationId: null,
-            leaveIsPaid: true,
+            // A half-day leave keeps its link (and pay) on the day; anything else replaces the day.
+            ...(halfDayLeave ? {} : { leaveApplicationId: null, leaveIsPaid: true }),
             notes: `Correction ${req.requestNumber}`,
             updatedBy: ctx.userId,
           },
@@ -219,7 +244,8 @@ async function listCorrections(ctx: AuthContext, params: z.infer<typeof correcti
         checkIn: r.checkIn ?? "",
         checkOut: r.checkOut ?? "",
         previous: { status: r.previous?.status ?? "", checkIn: r.previous?.checkIn ?? "", checkOut: r.previous?.checkOut ?? "" },
-        reason: r.reason,
+        reasonName: r.reasonName ?? "",
+        reason: r.reason ?? "",
         status: r.status,
         decidedAs: r.decidedAs ?? "",
         decisionNote: r.decisionNote ?? "",

@@ -256,6 +256,26 @@ const leaveGroups = master("hr-leave-groups", "Leave Groups", "Leave group", {
   ],
 });
 
+const attendanceReasons = master("hr-attendance-reasons", "Attendance Reg. Reasons", "Reason", {
+  permissions: { create: "hr-attendance.edit", edit: "hr-attendance.edit", delete: "hr-attendance.edit" },
+  columns: [
+    { key: "name", label: "Reason", filterParam: "name", sortField: "name" },
+    { key: "reasonType", label: "Reason type", type: "label", labels: { SYSTEM: "System Defined", USER: "User Defined" }, sortField: "reasonType" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Reason",
+      description: "Employees pick one of these when they ask for an attendance correction.",
+      fields: [
+        { name: "name", label: "Reason", type: "text", required: true, placeholder: "Forgot to Punch" },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
 const announcements = master("hr-announcements", "Announcements", "Announcement", {
   titleField: "title",
   columns: [
@@ -557,6 +577,7 @@ export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-holidays": holidays,
   "hr-leave-types": leaveTypes,
   "hr-leave-groups": leaveGroups,
+  "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,
   "hr-job-openings": jobOpenings,

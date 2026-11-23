@@ -53,6 +53,9 @@ export interface ResourceDefinition {
    */
   beforeCreate?: (businessId: Types.ObjectId, count: number) => Promise<void>;
 
+  /** Runs before the list is read, e.g. to seed built-in rows for a workspace that predates them. */
+  beforeList?: (businessId: Types.ObjectId) => Promise<void>;
+
   /**
    * Runs after a single create or update through the form (not bulk import),
    * with the saved document and, for an update, the document before it.

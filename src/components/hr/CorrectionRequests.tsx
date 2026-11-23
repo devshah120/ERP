@@ -24,6 +24,9 @@ export interface CorrectionRow {
   checkIn: string;
   checkOut: string;
   previous: { status: string; checkIn: string; checkOut: string };
+  /** The reason picked from Attendance Reg. Reasons ("" on older requests). */
+  reasonName: string;
+  /** The employee's remarks. */
   reason: string;
   status: string;
   decidedAs: string;
@@ -197,7 +200,8 @@ export default function CorrectionRequests({
                   <div>→ {dayLabel(r.requestedStatus, r.checkIn, r.checkOut)}</div>
                 </td>
                 <td style={{ maxWidth: "16rem" }}>
-                  {r.reason}
+                  {r.reasonName && <strong>{r.reasonName}</strong>}
+                  {r.reason && <div className={r.reasonName ? "hrMuted" : undefined}>{r.reason}</div>}
                   {r.decisionNote && <div className="hrMuted">Note: {r.decisionNote}</div>}
                 </td>
                 <td>

@@ -68,6 +68,30 @@ export const printFormatSettingsSchema = z.object(
   )
 );
 
+/**
+ * Attendance regularization (correction requests) policy. Read by
+ * src/lib/hr/regularization.ts when a request is raised and again when it is
+ * approved. Defaults keep the rules that applied before this screen existed:
+ * past days, blank days, weekly offs, holidays and punch times allowed;
+ * future days and half-day-leave days not. 0 in a limit means no limit.
+ */
+const flag = (def: boolean) => z.coerce.boolean().default(def);
+export const attendanceRegularizationSchema = z.object({
+  applicable: flag(true),
+  pastDaysLimit: days(0),
+  futureApplicable: flag(false),
+  futureDaysLimit: days(0),
+  pastBlankAttendance: flag(true),
+  futureBlankAttendance: flag(false),
+  allowOnWeeklyOffs: flag(true),
+  allowOnHolidays: flag(true),
+  maxDaysPerMonth: z.coerce.number().int().min(0).max(31).default(0),
+  punchApplicable: flag(true),
+  punchPastDaysLimit: days(0),
+  applyOnHalfDayLeave: flag(false),
+  skipPolicyOnApproval: flag(false),
+});
+
 /** Dashboard insight keys each notification switch controls. */
 export const NOTIFICATION_INSIGHTS: Record<keyof z.infer<typeof notificationSettingsSchema>, string[]> = {
   alertReceivables: ["receivables-aging", "collection"],
@@ -84,6 +108,10 @@ export interface SettingsSection {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   schema: z.ZodObject<any>;
   fields: FieldConfig[];
+  /** Permission to change it, when not settings.edit (e.g. an HR policy edited by HR). */
+  editPermission?: string;
+  /** Where the screen's back link goes, when not the Settings page. */
+  back?: { href: string; label: string };
 }
 
 const ITEM_TYPES = [
@@ -198,6 +226,31 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
       { name: "alertTrends", label: "Sales trends and concentration warnings", type: "checkbox", fullWidth: true },
     ],
   },
+  "attendance-regularization": {
+    key: "attendance-regularization",
+    title: "Attendance Regularization",
+    description: "Which days employees may ask to have their attendance corrected, and how many.",
+    usedBy:
+      "Checked when an employee raises a correction request and again when a manager or HR approves it. Limits count days back (or ahead) from the day the request is raised; 0 means no limit.",
+    schema: attendanceRegularizationSchema,
+    editPermission: "hr-attendance.edit",
+    back: { href: "/hr/attendance/requests", label: "Attendance corrections" },
+    fields: [
+      { name: "applicable", label: "Attendance regularization applicable", type: "checkbox", fullWidth: true, hint: "Off: employees cannot raise correction requests" },
+      { name: "pastDaysLimit", label: "Past days limit (in days)", type: "number", hint: "0 = no limit" },
+      { name: "maxDaysPerMonth", label: "Max. regularization days in a month", type: "number", hint: "Pending and approved requests; 0 = no limit" },
+      { name: "futureApplicable", label: "Future days regularization applicable", type: "checkbox", fullWidth: true, hint: "e.g. on duty or travel planned ahead" },
+      { name: "futureDaysLimit", label: "Future days limit (in days)", type: "number", hint: "0 = no limit" },
+      { name: "punchPastDaysLimit", label: "Punch past days limit (in days)", type: "number", hint: "How far back check-in / check-out times can be corrected; 0 = no limit" },
+      { name: "pastBlankAttendance", label: "Regularization for past days (blank attendance)", type: "checkbox", fullWidth: true, hint: "Past days with nothing marked" },
+      { name: "futureBlankAttendance", label: "Regularization for future days (blank attendance)", type: "checkbox", fullWidth: true, hint: "Future days are usually blank, so turn this on with future days" },
+      { name: "allowOnWeeklyOffs", label: "Allow regularization on weekly offs", type: "checkbox", fullWidth: true },
+      { name: "allowOnHolidays", label: "Allow regularization on holidays", type: "checkbox", fullWidth: true },
+      { name: "punchApplicable", label: "Punch regularization applicable", type: "checkbox", fullWidth: true, hint: "Requests may include check-in / check-out times" },
+      { name: "applyOnHalfDayLeave", label: "Apply request on half day leave", type: "checkbox", fullWidth: true, hint: "Correct the worked half of a half-day leave; the leave stays" },
+      { name: "skipPolicyOnApproval", label: "Do not check attendance policy while approving AR", type: "checkbox", fullWidth: true, hint: "Approval then only refuses full-day leave and locked payroll months" },
+    ],
+  },
 };
 
 export type ItemSettings = z.infer<typeof itemSettingsSchema>;
@@ -205,4 +258,5 @@ export type SalesSettings = z.infer<typeof salesSettingsSchema>;
 export type PurchaseSettings = z.infer<typeof purchaseSettingsSchema>;
 export type PosSettings = z.infer<typeof posSettingsSchema>;
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
+export type AttendanceRegularizationSettings = z.infer<typeof attendanceRegularizationSchema>;
 export type PrintFormatSettings = Record<string, string>;

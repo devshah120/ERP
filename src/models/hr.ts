@@ -638,6 +638,20 @@ const leaveAllocationSchema = new Schema(
 leaveAllocationSchema.index({ businessId: 1, employeeId: 1, leaveTypeId: 1, year: 1 }, { unique: true });
 export const LeaveAllocation = defineModel("LeaveAllocation", leaveAllocationSchema);
 
+export const ATTENDANCE_REASON_TYPES = ["SYSTEM", "USER"] as const;
+
+/** A reason an employee picks when asking for an attendance correction ("Forgot to Punch", "On Client Visit"…). */
+export const AttendanceReason = defineMasterModel(
+  "AttendanceReason",
+  {
+    name: { type: String, required: true, trim: true },
+    /** SYSTEM = seeded with the workspace; USER = added by HR. */
+    reasonType: { type: String, enum: ATTENDANCE_REASON_TYPES, default: "USER" },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "name" }
+);
+
 /** What an employee can ask a day to be corrected to. Absence and leave go through HR or a leave request. */
 export const CORRECTION_STATUSES = ["PRESENT", "HALF_DAY", "ON_DUTY"] as const;
 export const ATTENDANCE_REQUEST_STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
@@ -653,7 +667,11 @@ const attendanceRequestSchema = new Schema(
     requestedStatus: { type: String, enum: CORRECTION_STATUSES, required: true },
     checkIn: { type: String, default: "" },
     checkOut: { type: String, default: "" },
-    reason: { type: String, trim: true, required: true },
+    /** The reason picked from Attendance Reg. Reasons, and its name as it was then. */
+    reasonId: { type: Schema.Types.ObjectId, ref: "AttendanceReason", default: null },
+    reasonName: { type: String, trim: true, default: "" },
+    /** The employee's own words (remarks). */
+    reason: { type: String, trim: true, default: "" },
     /** The day as it stood when the request was raised, for the approver and the audit trail. */
     previous: {
       status: { type: String, default: "" },

@@ -1,6 +1,7 @@
 import type { ClientSession, Types } from "mongoose";
 import { Role } from "@/models/Role";
-import { HrDepartment, Designation, HrGrade, Shift, LeaveType, PayComponent } from "@/models/hr";
+import { HrDepartment, Designation, HrGrade, Shift, LeaveType, PayComponent, AttendanceReason } from "@/models/hr";
+import { SYSTEM_ATTENDANCE_REASONS } from "./regularization";
 import { DEFAULT_PAY_COMPONENTS } from "./variables";
 import { HR_PERMISSION_KEYS, HR_SELF_SERVICE_PERMISSIONS } from "@/lib/auth/permissionCatalog";
 
@@ -71,6 +72,9 @@ export async function seedHrDefaults(businessId: Types.ObjectId, session?: Clien
   }
   if ((await HrGrade.countDocuments(live, opts)) === 0) {
     await HrGrade.create(GRADES.map((g) => ({ businessId, ...g })), { ...opts, ordered: true });
+  }
+  if ((await AttendanceReason.countDocuments({ businessId }, opts)) === 0) {
+    await AttendanceReason.create(SYSTEM_ATTENDANCE_REASONS.map((name) => ({ businessId, name, reasonType: "SYSTEM" })), { ...opts, ordered: true });
   }
 
   await ensureRole(businessId, HR_MANAGER_ROLE, "Runs HR: employees, attendance, leave approvals, payroll and reports.", [...HR_PERMISSION_KEYS, "users.view"], false, session);

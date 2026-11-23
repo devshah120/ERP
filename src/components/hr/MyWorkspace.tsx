@@ -717,12 +717,39 @@ function MyCorrections({
   );
 }
 
+interface CorrectionOptions {
+  applicable: boolean;
+  minDate: string | null;
+  maxDate: string | null;
+  punchApplicable: boolean;
+  punchPastDaysLimit: number;
+  reasons: { id: string; name: string }[];
+}
+
 function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate: string; maxDate: string; onClose: () => void; onDone: (requestNumber: string) => void }) {
-  const [form, setForm] = useState({ date: initialDate, status: "PRESENT", checkIn: "", checkOut: "", reason: "" });
+  const [form, setForm] = useState({ date: initialDate, status: "PRESENT", checkIn: "", checkOut: "", reasonId: "", reason: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [options, setOptions] = useState<CorrectionOptions | null>(null);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
-  const canSubmit = Boolean(form.date) && form.reason.trim().length >= 3 && !busy;
+
+  // The workspace's regularization policy: reasons to pick from and the days allowed.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<CorrectionOptions>("/api/hr/self/attendance-requests/options")
+      .then((o) => !cancelled && setOptions(o))
+      .catch(() => {
+        /* the server still checks the policy when the request is sent */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasReasons = (options?.reasons.length ?? 0) > 0;
+  const allowed = options?.applicable !== false;
+  const canSubmit = allowed && Boolean(form.date) && (hasReasons ? Boolean(form.reasonId) : form.reason.trim().length >= 3) && !busy;
+  const latest = options ? options.maxDate : maxDate;
 
   async function submit() {
     if (!canSubmit) return;
@@ -755,6 +782,11 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
         </>
       }
     >
+      {!allowed && (
+        <div className="banner bannerLocked" style={{ marginBottom: "0.75rem" }}>
+          <span>Attendance regularization is turned off. Ask HR to correct the day.</span>
+        </div>
+      )}
       {error && (
         <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
           <span>{error}</span>
@@ -763,7 +795,7 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
       <div className="formGrid">
         <div className="field">
           <label htmlFor="corr-date">Day</label>
-          <input id="corr-date" type="date" className="input" value={form.date} max={maxDate || undefined} onChange={(e) => set({ date: e.target.value })} />
+          <input id="corr-date" type="date" className="input" value={form.date} min={options?.minDate || undefined} max={latest || undefined} onChange={(e) => set({ date: e.target.value })} />
         </div>
         <div className="field">
           <label htmlFor="corr-status">Should be</label>
@@ -775,17 +807,37 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
             ))}
           </select>
         </div>
-        <div className="field">
-          <label htmlFor="corr-in">Check-in (optional)</label>
-          <input id="corr-in" type="time" className="input" value={form.checkIn} onChange={(e) => set({ checkIn: e.target.value })} />
-        </div>
-        <div className="field">
-          <label htmlFor="corr-out">Check-out (optional)</label>
-          <input id="corr-out" type="time" className="input" value={form.checkOut} onChange={(e) => set({ checkOut: e.target.value })} />
-        </div>
+        {options?.punchApplicable !== false && (
+          <>
+            <div className="field">
+              <label htmlFor="corr-in">
+                Check-in (optional)
+                {options && options.punchPastDaysLimit > 0 && <span className="hint"> · up to {options.punchPastDaysLimit} day(s) back</span>}
+              </label>
+              <input id="corr-in" type="time" className="input" value={form.checkIn} onChange={(e) => set({ checkIn: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="corr-out">Check-out (optional)</label>
+              <input id="corr-out" type="time" className="input" value={form.checkOut} onChange={(e) => set({ checkOut: e.target.value })} />
+            </div>
+          </>
+        )}
+        {hasReasons && (
+          <div className="field fieldSpanFull">
+            <label htmlFor="corr-reason-id">Reason</label>
+            <select id="corr-reason-id" className="select" value={form.reasonId} onChange={(e) => set({ reasonId: e.target.value })}>
+              <option value="">— choose —</option>
+              {options!.reasons.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div className="field" style={{ marginTop: "0.75rem" }}>
-        <label htmlFor="corr-reason">Reason</label>
+        <label htmlFor="corr-reason">{hasReasons ? "Remarks (optional)" : "Reason"}</label>
         <textarea id="corr-reason" className="input" rows={3} value={form.reason} onChange={(e) => set({ reason: e.target.value })} placeholder="e.g. Forgot to check out; left at 18:30 after the client call" />
       </div>
     </Modal>

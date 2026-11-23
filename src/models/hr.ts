@@ -225,12 +225,34 @@ export const Employee = defineMasterModel(
 
     /** Login for the self-service portal, when one has been granted. */
     userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    /** When the photo (EmployeePhoto) was last set; null = no photo. Also versions the image URL. */
+    photoUpdatedAt: { type: Date, default: null },
     notes: { type: String, trim: true },
   },
   {
     uniqueField: "employeeCode",
     indexes: [{ departmentId: 1 }, { employmentStatus: 1 }, { userId: 1 }, { reportingManagerId: 1 }, { gradeId: 1 }],
   }
+);
+
+/**
+ * An employee's photo, one per employee. The bytes live here rather than on
+ * the Employee so lists and exports never carry them; `data` is only read
+ * when the image itself is asked for.
+ */
+export const EmployeePhoto = defineHrModel(
+  "EmployeePhoto",
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      mimeType: { type: String, required: true },
+      size: { type: Number, required: true },
+      data: { type: Buffer, required: true, select: false },
+      updatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    { timestamps: true }
+  ).index({ businessId: 1, employeeId: 1 }, { unique: true })
 );
 
 /* ------------------------------------------------------------------ */

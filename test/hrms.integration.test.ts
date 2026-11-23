@@ -911,4 +911,70 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     await setPolicy({});
   });
+
+  it("draws the organization tree from reporting managers", async () => {
+    const { orgTree } = await import("@/lib/hr/orgTree");
+    const { Employee } = await import("@/models/hr");
+    const working = { businessId, deletedAt: null, employmentStatus: { $in: ["PROBATION", "CONFIRMED", "ON_NOTICE"] } };
+    const [boss, report] = await Employee.find(working).sort({ employeeCode: 1 }).limit(2).lean<{ _id: Types.ObjectId }[]>();
+    const before = await Employee.find({ _id: { $in: [boss._id, report._id] } }, { reportingManagerId: 1 }).lean<{ _id: Types.ObjectId; reportingManagerId: Types.ObjectId | null }[]>();
+    await Employee.updateOne({ _id: boss._id }, { reportingManagerId: null });
+    await Employee.updateOne({ _id: report._id }, { reportingManagerId: boss._id });
+    // Someone who has left is not drawn, and anyone reporting to them goes to the top.
+    const left = await Employee.findOne({ businessId, deletedAt: null, employmentStatus: { $nin: ["PROBATION", "CONFIRMED", "ON_NOTICE"] } }).lean<{ _id: Types.ObjectId }>();
+
+    const tree = await orgTree(ctx);
+    expect(tree.items.find((x) => x.id === String(report._id))!.managerId).toBe(String(boss._id));
+    expect(tree.items.find((x) => x.id === String(boss._id))!.managerId).toBeNull();
+    expect(tree.items).toHaveLength(await Employee.countDocuments(working));
+    if (left) expect(tree.items.some((x) => x.id === String(left._id) || x.managerId === String(left._id))).toBe(false);
+
+    for (const b of before) await Employee.updateOne({ _id: b._id }, { reportingManagerId: b.reportingManagerId ?? null });
+  });
+
+  it("keeps employee photos and filters the directory", async () => {
+    const { savePhoto, removePhoto, readPhoto } = await import("@/lib/hr/photos");
+    const { directory, directorySchema } = await import("@/lib/hr/people");
+    const { Employee, HrDepartment } = await import("@/models/hr");
+    const { User } = await import("@/models/User");
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])], "me.png", { type: "image/png" });
+    const fake = new File(["not really a picture"], "me.png", { type: "image/png" });
+    const pdf = new File(["%PDF-1.7 ..."], "me.jpg", { type: "image/jpeg" });
+
+    // Only real JPG/PNG bytes are kept, whatever the name or type claims.
+    await expect(savePhoto(ctx, String(emp.asha), fake)).rejects.toMatchObject({ code: "UNSUPPORTED_FILE" });
+    await expect(savePhoto(ctx, String(emp.asha), pdf)).rejects.toMatchObject({ code: "UNSUPPORTED_FILE" });
+    const saved = await savePhoto(ctx, String(emp.asha), png);
+    expect(saved.photoUrl).toMatch(new RegExp(`^/api/hr/employees/${emp.asha}/photo\\?v=\\d+$`));
+    expect((await Employee.findById(emp.asha).lean<{ photoUpdatedAt: Date | null }>())!.photoUpdatedAt).toBeInstanceOf(Date);
+    expect(await readPhoto(ctx, String(emp.asha))).toMatchObject({ mimeType: "image/png" });
+
+    // With self-service only, Asha sees her own photo and nobody else's; adding employees doesn't let you change others' photos.
+    const ashaUser = await User.findOne({ businessId, email: "asha@peoplefirst.test" }).lean<{ _id: Types.ObjectId; roleId: Types.ObjectId }>();
+    const self = { ...ctx, userId: ashaUser!._id, roleId: ashaUser!.roleId, permissions: ["hr-self.view"] };
+    expect((await readPhoto(self, String(emp.asha))).data.length).toBe(12);
+    const other = await Employee.findOne({ businessId, _id: { $ne: emp.asha } }).lean<{ _id: Types.ObjectId }>();
+    await expect(readPhoto(self, String(other!._id))).rejects.toMatchObject({ statusCode: 403 });
+    await expect(savePhoto({ ...ctx, permissions: ["hr-employees.view", "hr-employees.create"] }, String(emp.asha), png)).rejects.toMatchObject({ statusCode: 403 });
+
+    // The directory carries the photo and offers filters from the employees themselves.
+    const dept = await HrDepartment.findOne({ businessId }).lean<{ _id: Types.ObjectId; name: string }>();
+    await HrDepartment.updateOne({ _id: dept!._id }, { costCenter: "CC-HR" });
+    await Employee.updateOne({ _id: emp.asha }, { workLocation: "Ahmedabad-Gujarat", departmentId: dept!._id });
+    const list = (q: Record<string, string>) => directory(ctx, directorySchema.parse({ scope: "all", pageSize: "100", ...q }));
+    const everyone = await list({});
+    expect(everyone.items.find((r) => r.id === String(emp.asha))).toMatchObject({ location: "Ahmedabad-Gujarat", photoUrl: saved.photoUrl });
+    expect(everyone.facets.locations).toContain("Ahmedabad-Gujarat");
+    expect(everyone.facets.costCenters).toContain("CC-HR");
+    expect(everyone.all).toBe(everyone.total);
+    const atLocation = await list({ location: "ahmedabad-gujarat" });
+    expect(atLocation.items.map((r) => r.id)).toContain(String(emp.asha));
+    expect(atLocation.all).toBe(everyone.all);
+    expect((await list({ costCenter: "CC-HR" })).items.every((r) => r.department === dept!.name)).toBe(true);
+    expect((await list({ costCenter: "NO-SUCH" })).total).toBe(0);
+
+    await removePhoto(ctx, String(emp.asha));
+    expect((await Employee.findById(emp.asha).lean<{ photoUpdatedAt: Date | null }>())!.photoUpdatedAt).toBeNull();
+    await expect(readPhoto(ctx, String(emp.asha))).rejects.toMatchObject({ statusCode: 404 });
+  });
 });

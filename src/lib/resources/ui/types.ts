@@ -10,7 +10,8 @@ export type FieldType =
   | "checkbox"
   | "variants"
   | "date"
-  | "lines";
+  | "lines"
+  | "image";
 
 /** One column of a "lines" field — a small inline table of sub-rows. */
 export interface LineColumnConfig {
@@ -61,6 +62,13 @@ export interface FieldConfig {
   sendBlank?: boolean;
   /** Shown (and submitted) only when the signed-in user holds all of these permissions. */
   permissions?: string[];
+  /**
+   * For type "image": the photo is not part of the record's JSON. It is sent
+   * to `url` (":id" = the record's id) as multipart "file" after the record is
+   * saved, or DELETEd there when removed. `versionField` is the record field
+   * that is set when a photo exists; it versions the image URL.
+   */
+  image?: { url: string; versionField: string; fallbackFrom?: string };
   /** For text fields: fill with a generated value on a new record and offer a "New" button. */
   generate?: "password";
   fullWidth?: boolean;

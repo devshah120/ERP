@@ -9,11 +9,12 @@ import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchBox from "@/components/ui/SearchBox";
 import Pagination from "@/components/ui/Pagination";
-import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
+import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
-import { fmtDate, useMasterOptions } from "@/components/hr/HrKit";
-import { EMPLOYMENT_STATUS_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/lib/resources/ui/hrRegistry";
-import { IconPlus, IconRefresh, IconUpload } from "@/components/icons";
+import RowActions from "@/components/table/RowActions";
+import EmployeeTabs from "@/components/hr/EmployeeTabs";
+import { EMPLOYMENT_STATUS_LABELS } from "@/lib/resources/ui/hrRegistry";
+import { IconClose, IconEdit, IconEye, IconPlus, IconRefresh, IconUpload } from "@/components/icons";
 
 interface Row {
   id: string;
@@ -21,26 +22,62 @@ interface Row {
   name: string;
   department: string;
   designation: string;
-  manager: string;
+  location: string;
   phone: string;
   workEmail: string;
-  dateOfJoining: string;
-  employmentType: string;
+  photoUrl: string | null;
   employmentStatus: string;
-  hasPortal: boolean;
+}
+
+interface Facets {
+  departments: { id: string; name: string }[];
+  branches: { id: string; name: string }[];
+  locations: string[];
+  costCenters: string[];
+}
+
+interface Result {
+  items: Row[];
+  total: number;
+  all: number;
+  facets: Facets;
+}
+
+const EMPTY_FILTERS = { branchId: "", departmentId: "", location: "", costCenter: "" };
+const WORKING = ["PROBATION", "CONFIRMED", "ON_NOTICE"];
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+/** A labelled dropdown in the filter bar, like "DEPARTMENT / Customer Success". */
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <label className="dirFilter" data-active={value ? true : undefined}>
+      <span className="dirFilterLabel">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        <option value="">All</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
   const { hasPermission } = useAuth();
-  const departments = useMasterOptions("hr-departments", (r) => String(r.name));
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [scope, setScope] = useState<"current" | "former" | "all">("current");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [result, setResult] = useState<{ items: Row[]; total: number } | null>(null);
+  const [pageSize, setPageSize] = useState(50);
+  const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -59,14 +96,14 @@ export default function EmployeeDirectoryPage() {
     try {
       const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize), scope });
       if (applied) p.set("query", applied);
-      if (departmentId) p.set("departmentId", departmentId);
-      setResult(await apiFetch(`/api/hr/employees?${p.toString()}`));
+      for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
+      setResult(await apiFetch<Result>(`/api/hr/employees?${p.toString()}`));
     } catch (err) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, applied, departmentId, scope]);
+  }, [page, pageSize, applied, filters, scope]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -74,19 +111,26 @@ export default function EmployeeDirectoryPage() {
   }, [load]);
 
   const canCreate = hasPermission("hr-employees.create");
+  const canEdit = hasPermission("hr-employees.edit");
   useShortcutScope({
     onNew: canCreate ? () => router.push("/hr-employees/new") : undefined,
     onSearch: () => searchRef.current?.focus(),
     onRefresh: load,
   });
 
+  const setFilter = (key: keyof typeof EMPTY_FILTERS, value: string) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
+  const filtered = Boolean(applied) || Object.values(filters).some(Boolean);
+  const facets = result?.facets;
+
   if (isForbidden(error)) return <AccessDenied detail={(error as Error).message} />;
 
   return (
     <>
       <PageHeader
-        title="Employees"
-        count={result?.total ?? null}
+        title="Employee Directory"
         description="Everyone on your rolls. Open a person for their profile, leave, payslips and portal login."
         actions={
           <>
@@ -101,102 +145,141 @@ export default function EmployeeDirectoryPage() {
           </>
         }
       />
+      <EmployeeTabs active="directory" />
 
-      <div className="toolbar">
-        <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search name, code, email, phone…" width="18rem" />
-        <select className="select" style={{ width: "auto" }} value={departmentId} onChange={(e) => (setDepartmentId(e.target.value), setPage(1))} aria-label="Department">
-          <option value="">All departments</option>
-          {departments?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.label}
-            </option>
-          ))}
-        </select>
-        <select className="select" style={{ width: "auto" }} value={scope} onChange={(e) => (setScope(e.target.value as typeof scope), setPage(1))} aria-label="Who">
-          <option value="current">Current employees</option>
-          <option value="former">Former employees</option>
-          <option value="all">Everyone</option>
-        </select>
-        <div className="toolbarRight">
-          <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
+      <section className="dirFilters">
+        <div className="dirFilterRow">
+          {(facets?.branches.length ?? 0) > 0 && (
+            <FilterSelect label="Business unit" value={filters.branchId} onChange={(v) => setFilter("branchId", v)} options={facets!.branches.map((b) => ({ value: b.id, label: b.name }))} />
+          )}
+          <FilterSelect label="Department" value={filters.departmentId} onChange={(v) => setFilter("departmentId", v)} options={(facets?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
+          <FilterSelect label="Location" value={filters.location} onChange={(v) => setFilter("location", v)} options={(facets?.locations ?? []).map((l) => ({ value: l, label: l }))} />
+          {(facets?.costCenters.length ?? 0) > 0 && (
+            <FilterSelect label="Cost centre" value={filters.costCenter} onChange={(v) => setFilter("costCenter", v)} options={facets!.costCenters.map((c) => ({ value: c, label: c }))} />
+          )}
+          <label className="dirFilter" data-active={scope !== "current" || undefined}>
+            <span className="dirFilterLabel">Employees</span>
+            <select value={scope} onChange={(e) => (setScope(e.target.value as typeof scope), setPage(1))} aria-label="Who">
+              <option value="current">Current</option>
+              <option value="former">Former</option>
+              <option value="all">Everyone</option>
+            </select>
+          </label>
+          <div className="dirSearch">
+            <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search name, code, email, phone…" width="100%" />
+          </div>
+        </div>
+        <div className="dirFilterFoot">
+          {filtered && (
+            <button
+              type="button"
+              className="button buttonGhost buttonSm"
+              onClick={() => {
+                setFilters(EMPTY_FILTERS);
+                setQuery("");
+                setPage(1);
+              }}
+            >
+              <IconClose /> Clear filters
+            </button>
+          )}
+          <span className="hrMuted" style={{ marginLeft: "auto" }}>
+            {result ? `Showing ${result.total} of ${result.all}` : " "}
+          </span>
+          <button type="button" className="button buttonGhost buttonSm buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
             {loading ? <span className="spinner" /> : <IconRefresh />}
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="tableWrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Department</th>
-              <th>Designation</th>
-              <th>Reports to</th>
-              <th>Phone</th>
-              <th>Joined</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Portal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!result && !error && <SkeletonRows columns={10} rows={6} />}
-            {error !== null && (
-              <tr>
-                <td colSpan={10}>
-                  <ErrorState message={error instanceof ApiError ? error.message : "Could not load employees."} onRetry={load} />
-                </td>
-              </tr>
-            )}
-            {result && result.items.length === 0 && (
-              <tr>
-                <td colSpan={10}>
-                  <EmptyState
-                    variant={applied || departmentId ? "search" : undefined}
-                    title={applied || departmentId ? "Nobody matches these filters" : "No employees yet"}
-                    actions={
-                      canCreate && !applied ? (
-                        <Link href="/hr-employees/new" className="button buttonPrimary">
-                          <IconPlus /> Add employee
-                        </Link>
-                      ) : undefined
-                    }
-                  />
-                </td>
-              </tr>
-            )}
-            {result?.items.map((r) => (
-              <tr key={r.id}>
-                <td className="cellMono">
-                  <Link href={`/hr/employees/${r.id}`} className="cellLink cellMono">
-                    {r.employeeCode}
-                  </Link>
-                </td>
-                <td>
-                  <Link href={`/hr/employees/${r.id}`} className="cellLink">
-                    {r.name}
-                  </Link>
-                  {r.workEmail && <div className="hrMuted">{r.workEmail}</div>}
-                </td>
-                <td>{r.department || <span className="cellMuted">—</span>}</td>
-                <td>{r.designation || <span className="cellMuted">—</span>}</td>
-                <td>{r.manager || <span className="cellMuted">—</span>}</td>
-                <td>{r.phone || <span className="cellMuted">—</span>}</td>
-                <td>{fmtDate(r.dateOfJoining)}</td>
-                <td>{EMPLOYMENT_TYPE_LABELS[r.employmentType] ?? r.employmentType}</td>
-                <td>
-                  <span className={`badge ${["PROBATION", "CONFIRMED"].includes(r.employmentStatus) ? "badgeSuccess" : r.employmentStatus === "ON_NOTICE" ? "badgeWarning" : "badgeNeutral"}`}>
-                    {EMPLOYMENT_STATUS_LABELS[r.employmentStatus] ?? r.employmentStatus}
-                  </span>
-                </td>
-                <td>{r.hasPortal ? <span className="badge badgeSuccess">Yes</span> : <span className="cellMuted">—</span>}</td>
-              </tr>
+      {error !== null && <ErrorState message={error instanceof ApiError ? error.message : "Could not load employees."} onRetry={load} />}
+      {!result && error === null && (
+        <div className="dirGrid">
+          {Array.from({ length: 6 }, (_, i) => (
+            <SkeletonBlock key={i} height="10rem" />
+          ))}
+        </div>
+      )}
+      {result && result.items.length === 0 && (
+        <EmptyState
+          variant={filtered ? "search" : undefined}
+          title={filtered ? "Nobody matches these filters" : "No employees yet"}
+          actions={
+            canCreate && !filtered ? (
+              <Link href="/hr-employees/new" className="button buttonPrimary">
+                <IconPlus /> Add employee
+              </Link>
+            ) : undefined
+          }
+        />
+      )}
+
+      {result && result.items.length > 0 && (
+        <>
+          <div className="dirGrid">
+            {result.items.map((r) => (
+              <article key={r.id} className="dirCard">
+                <Link href={`/hr/employees/${r.id}`} className="dirPhoto" aria-hidden tabIndex={-1}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- authenticated API image */}
+                  {r.photoUrl ? <img src={r.photoUrl} alt="" loading="lazy" /> : <span>{initials(r.name)}</span>}
+                </Link>
+                <div className="dirBody">
+                  <div className="dirNameRow">
+                    <Link href={`/hr/employees/${r.id}`} className="dirName">
+                      {r.name}
+                    </Link>
+                    <RowActions
+                      actions={[
+                        { key: "view", label: "View profile", icon: <IconEye />, href: `/hr/employees/${r.id}` },
+                        ...(canEdit ? [{ key: "edit", label: "Edit record", icon: <IconEdit />, href: `/hr-employees/${r.id}` }] : []),
+                      ]}
+                    />
+                  </div>
+                  <div className="dirRole">
+                    {r.designation || <span className="cellMuted">No designation</span>}
+                    {!WORKING.includes(r.employmentStatus) && <span className="badge badgeNeutral" style={{ marginLeft: "0.5rem" }}>{EMPLOYMENT_STATUS_LABELS[r.employmentStatus] ?? r.employmentStatus}</span>}
+                  </div>
+                  <dl className="dirFacts">
+                    {r.department && (
+                      <div>
+                        <dt>Department</dt>
+                        <dd>{r.department}</dd>
+                      </div>
+                    )}
+                    {r.location && (
+                      <div>
+                        <dt>Location</dt>
+                        <dd>{r.location}</dd>
+                      </div>
+                    )}
+                    {r.workEmail && (
+                      <div>
+                        <dt>Email</dt>
+                        <dd>
+                          <a href={`mailto:${r.workEmail}`}>{r.workEmail}</a>
+                        </dd>
+                      </div>
+                    )}
+                    {r.phone && (
+                      <div>
+                        <dt>Work</dt>
+                        <dd>
+                          <a href={`tel:${r.phone}`}>{r.phone}</a>
+                        </dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>Code</dt>
+                      <dd className="cellMono">{r.employeeCode}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </article>
             ))}
-          </tbody>
-        </table>
-        {result && result.total > 0 && <Pagination page={page} pageSize={pageSize} total={result.total} onPage={setPage} onPageSize={setPageSize} />}
-      </div>
+          </div>
+          {result.total > pageSize && <Pagination page={page} pageSize={pageSize} total={result.total} onPage={setPage} onPageSize={(n) => (setPageSize(n), setPage(1))} />}
+        </>
+      )}
     </>
   );
 }

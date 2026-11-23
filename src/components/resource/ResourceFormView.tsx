@@ -12,6 +12,7 @@ import type { ResourceUi, FieldConfig } from "@/lib/resources/ui/types";
 import VariantsEditor, { type VariantRow } from "./VariantsEditor";
 import LinesEditor, { type LineRow, type ReferenceOption } from "./LinesEditor";
 import SearchSelect from "./SearchSelect";
+import ImageField, { type PendingImage } from "./ImageField";
 import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
@@ -66,7 +67,8 @@ function stateFromRecord(config: ResourceUi, record: Record<string, unknown>): F
   let next = buildInitialState(config);
   for (const section of config.sections) {
     for (const field of section.fields) {
-      let value = getPath(record, field.name);
+      // An image field holds the record's photo stamp (set when a photo exists).
+      let value = field.type === "image" ? getPath(record, field.image?.versionField ?? "") : getPath(record, field.name);
       if (value === undefined || value === null) continue;
       if (field.type === "date" && typeof value === "string") value = value.slice(0, 10);
       next = setPath(next, field.name, value);
@@ -83,6 +85,7 @@ function buildPayload(config: ResourceUi, state: FormState): Record<string, unkn
   for (const section of config.sections) {
     for (const field of section.fields) {
       if (!isShown(field, state)) continue;
+      if (field.type === "image") continue; // uploaded on its own after the record is saved
       const value = getPath(state, field.name);
 
       if (field.type === "lines") {
@@ -165,6 +168,8 @@ export default function ResourceFormView({
   const [referenceOptions, setReferenceOptions] = useState<Record<string, ReferenceOption[]>>({});
   const [headerCode, setHeaderCode] = useState<string>("");
   const [dirty, setDirty] = useState(false);
+  /** Photos chosen or removed on screen, sent once the record is saved (field name → change). */
+  const [pendingImages, setPendingImages] = useState<Record<string, PendingImage>>({});
 
   // Load the record being edited.
   useEffect(() => {
@@ -202,7 +207,9 @@ export default function ResourceFormView({
     apiFetch<Record<string, unknown>>(`${config.apiPath}/${copyFromId}`)
       .then((record) => {
         if (cancelled) return;
-        setState(stateFromRecord(config, record));
+        // A copy starts without the original's photo.
+        const imageFields = config.sections.flatMap((s) => s.fields).filter((f) => f.type === "image");
+        setState(imageFields.reduce((next, f) => setPath(next, f.name, ""), stateFromRecord(config, record)));
         toast.info("Copied", "Change what you need, then save to create a new record.");
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load the record to copy"));
@@ -329,6 +336,36 @@ export default function ResourceFormView({
     };
   }, [view, isEdit]);
 
+  /**
+   * Uploads (or removes) the photos changed on screen, once the record exists.
+   * A failed upload doesn't undo the saved record: it is reported and the
+   * photo stays pending so saving again retries it. Returns the new photo
+   * stamps by field name.
+   */
+  async function sendImages(id: string): Promise<Record<string, string>> {
+    const stamps: Record<string, string> = {};
+    for (const field of view.sections.flatMap((s) => s.fields)) {
+      const change = pendingImages[field.name];
+      if (field.type !== "image" || !field.image || change === undefined) continue;
+      const url = field.image.url.replace(":id", id);
+      try {
+        if (change === "remove") {
+          await apiFetch(url, { method: "DELETE" });
+          stamps[field.name] = "";
+        } else {
+          const body = new FormData();
+          body.append("file", change);
+          await apiFetch(url, { method: "POST", body });
+          stamps[field.name] = new Date().toISOString();
+        }
+        setPendingImages((p) => ({ ...p, [field.name]: undefined }));
+      } catch (err) {
+        toast.error(`${config.singular} saved, but the ${field.label.toLowerCase()} was not`, err instanceof ApiError ? err.message : undefined);
+      }
+    }
+    return stamps;
+  }
+
   async function handleSubmit(e?: FormEvent) {
     e?.preventDefault();
     setError(null);
@@ -340,6 +377,8 @@ export default function ResourceFormView({
 
       if (isEdit) {
         await apiFetch(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        const stamps = await sendImages(recordId!);
+        setState((s) => Object.entries(stamps).reduce((next, [name, stamp]) => setPath(next, name, stamp), s));
         toast.success(`${config.singular} saved`);
         setDirty(false);
       } else {
@@ -347,6 +386,7 @@ export default function ResourceFormView({
           method: "POST",
           body: JSON.stringify(payload),
         });
+        await sendImages(record.id);
         setDirty(false);
         toast.success(`${config.singular} created`);
         router.push(`${config.basePath}/${record.id}`);
@@ -502,6 +542,28 @@ export default function ResourceFormView({
               ))}
             </select>
           );
+        case "image": {
+          const stamp = String(value ?? "");
+          const currentUrl = stamp && recordId && field.image ? `${field.image.url.replace(":id", recordId)}?v=${encodeURIComponent(stamp)}` : null;
+          const nameForInitials = String(getPath(state, field.image?.fallbackFrom ?? "name") ?? "");
+          return (
+            <ImageField
+              id={`f-${field.name}`}
+              currentUrl={currentUrl}
+              pending={pendingImages[field.name]}
+              fallback={nameForInitials
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((w) => w[0]!.toUpperCase())
+                .join("")}
+              onChange={(next) => {
+                setPendingImages((p) => ({ ...p, [field.name]: next }));
+                setDirty(true);
+              }}
+            />
+          );
+        }
         case "checkbox":
           return (
             <label className="checkboxRow">

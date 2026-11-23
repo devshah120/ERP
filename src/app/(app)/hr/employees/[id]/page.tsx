@@ -33,6 +33,7 @@ interface Profile {
   id: string;
   employeeCode: string;
   name: string;
+  photoUpdatedAt?: string | null;
   gender?: string;
   dateOfBirth?: string;
   bloodGroup?: string;
@@ -175,7 +176,10 @@ export default function EmployeeProfilePage() {
         }
         title={
           <span style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
-            <span className="hrAvatar">{p.name.charAt(0).toUpperCase()}</span>
+            <span className="hrAvatar">
+              {/* eslint-disable-next-line @next/next/no-img-element -- authenticated API image */}
+              {p.photoUpdatedAt ? <img src={`/api/hr/employees/${p.id}/photo?v=${new Date(p.photoUpdatedAt).getTime()}`} alt="" /> : p.name.charAt(0).toUpperCase()}
+            </span>
             <span>
               {p.name}
               <span className="hrMuted" style={{ display: "block", fontWeight: 400 }}>

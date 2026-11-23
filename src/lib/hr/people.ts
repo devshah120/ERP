@@ -2,7 +2,9 @@ import { Types } from "mongoose";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Employee, HrAsset, Shift, LeaveApplication, EmployeeLoan, Announcement, Holiday, WORKING_STATUSES } from "@/models/hr";
+import { Employee, HrAsset, HrDepartment, Shift, LeaveApplication, EmployeeLoan, Announcement, Holiday, WORKING_STATUSES } from "@/models/hr";
+import { Branch } from "@/models/Branch";
+import { photoUrl } from "./photos";
 import { User } from "@/models/User";
 import { Role } from "@/models/Role";
 import { Session } from "@/models/Session";
@@ -26,27 +28,51 @@ const d = (v: unknown) => new Decimal(v ? String(v) : "0");
 /* Directory & profile                                                 */
 /* ------------------------------------------------------------------ */
 
+const optionalId = z.string().trim().regex(/^([a-f\d]{24})?$/i).optional();
+
 export const directorySchema = z.object({
   query: z.string().trim().max(100).optional(),
-  departmentId: z.string().trim().optional(),
+  departmentId: optionalId,
+  /** Business unit = the employee's branch. */
+  branchId: optionalId,
+  location: z.string().trim().max(120).optional(),
+  costCenter: z.string().trim().max(60).optional(),
   employmentStatus: z.string().trim().max(20).optional(),
   scope: z.enum(["current", "former", "all"]).default("current"),
   ...pageQuery,
 });
 
+/**
+ * The employee directory, with the choices for its filters: business units
+ * (branches), departments, locations and cost centres that the employees in
+ * the chosen scope actually have. The choices come from here rather than the
+ * masters so an HRMS-only workspace, which can't read ERP branches, gets them
+ * too.
+ */
 export async function directory(ctx: AuthContext, params: z.infer<typeof directorySchema>) {
-  const filter: Record<string, unknown> = { businessId: ctx.businessId, deletedAt: null };
-  if (params.scope === "current") filter.employmentStatus = { $in: WORKING_STATUSES };
-  if (params.scope === "former") filter.employmentStatus = { $nin: WORKING_STATUSES };
-  if (params.employmentStatus) filter.employmentStatus = params.employmentStatus;
-  if (params.departmentId && Types.ObjectId.isValid(params.departmentId)) filter.departmentId = new Types.ObjectId(params.departmentId);
+  const scoped: Record<string, unknown> = { businessId: ctx.businessId, deletedAt: null };
+  if (params.scope === "current") scoped.employmentStatus = { $in: WORKING_STATUSES };
+  if (params.scope === "former") scoped.employmentStatus = { $nin: WORKING_STATUSES };
+  if (params.employmentStatus) scoped.employmentStatus = params.employmentStatus;
+
+  const filter: Record<string, unknown> = { ...scoped };
+  if (params.departmentId) filter.departmentId = new Types.ObjectId(params.departmentId);
+  if (params.branchId) filter.branchId = new Types.ObjectId(params.branchId);
+  if (params.location) filter.workLocation = { $regex: `^${escapeRegex(params.location)}$`, $options: "i" };
+  if (params.costCenter) {
+    const depts = await HrDepartment.find({ businessId: ctx.businessId, deletedAt: null, costCenter: params.costCenter }, { _id: 1 }).lean<AnyDoc[]>();
+    const ids = depts.map((d) => d._id);
+    filter.departmentId = params.departmentId ? (ids.some((id) => String(id) === params.departmentId) ? new Types.ObjectId(params.departmentId) : { $in: [] }) : { $in: ids };
+  }
   if (params.query) {
     const rx = { $regex: escapeRegex(params.query), $options: "i" };
     filter.$or = [{ name: rx }, { employeeCode: rx }, { workEmail: rx }, { phone: rx }];
   }
-  const [rows, total] = await Promise.all([
-    Employee.find(filter).sort({ employeeCode: 1 }).skip((params.page - 1) * params.pageSize).limit(params.pageSize).lean<AnyDoc[]>(),
+  const [rows, total, all, facets] = await Promise.all([
+    Employee.find(filter).sort({ name: 1 }).skip((params.page - 1) * params.pageSize).limit(params.pageSize).lean<AnyDoc[]>(),
     Employee.countDocuments(filter),
+    Employee.countDocuments(scoped),
+    directoryFacets(ctx.businessId, scoped),
   ]);
   const labels = await employeeLabels(ctx.businessId, rows.map((r) => r._id));
   const managers = await employeeLabels(ctx.businessId, rows.map((r) => r.reportingManagerId).filter(Boolean));
@@ -58,14 +84,38 @@ export async function directory(ctx: AuthContext, params: z.infer<typeof directo
       department: labels.get(String(e._id))?.department ?? "",
       designation: labels.get(String(e._id))?.designation ?? "",
       manager: e.reportingManagerId ? managers.get(String(e.reportingManagerId))?.name ?? "" : "",
+      location: e.workLocation ?? "",
       phone: e.phone ?? "",
       workEmail: e.workEmail ?? "",
+      photoUrl: photoUrl(String(e._id), e.photoUpdatedAt),
       dateOfJoining: e.dateOfJoining,
       employmentType: e.employmentType,
       employmentStatus: e.employmentStatus,
       hasPortal: Boolean(e.userId),
     })),
     total,
+    /** Everyone in the scope, before the other filters. */
+    all,
+    facets,
+  };
+}
+
+async function directoryFacets(businessId: Types.ObjectId, scoped: Record<string, unknown>) {
+  const [deptIds, branchIds, locations] = await Promise.all([
+    Employee.distinct("departmentId", scoped),
+    Employee.distinct("branchId", scoped),
+    Employee.distinct("workLocation", scoped),
+  ]);
+  const [depts, branches] = await Promise.all([
+    HrDepartment.find({ businessId, _id: { $in: deptIds.filter(Boolean) } }, { name: 1, costCenter: 1 }).sort({ name: 1 }).lean<AnyDoc[]>(),
+    Branch.find({ businessId, _id: { $in: branchIds.filter(Boolean) } }, { name: 1 }).sort({ name: 1 }).lean<AnyDoc[]>(),
+  ]);
+  const clean = (values: unknown[]) => [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return {
+    departments: depts.map((d) => ({ id: String(d._id), name: d.name as string })),
+    branches: branches.map((b) => ({ id: String(b._id), name: b.name as string })),
+    locations: clean(locations),
+    costCenters: clean(depts.map((d) => d.costCenter)),
   };
 }
 

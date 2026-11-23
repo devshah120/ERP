@@ -94,6 +94,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: IconUsers,
         children: [
           { href: "/hr/employees", label: "Employee Directory", enabled: true, createHref: "/hr-employees/new", keywords: "employee staff people profile directory onboarding" },
+          { href: "/hr/employees/tree", label: "Organization Tree", enabled: true, keywords: "org chart organisation organization tree hierarchy reporting manager reports to" },
           { href: "/hr-employees", label: "Employee Records", enabled: true, keywords: "employee master bulk import export excel salary structure" },
           { href: "/hr-departments", label: "Departments", enabled: true, createHref: "/hr-departments/new", keywords: "hr department team division" },
           { href: "/hr-designations", label: "Designations", enabled: true, createHref: "/hr-designations/new", keywords: "job title designation role" },
@@ -585,6 +586,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/me/claims": "hr-self.view",
   "/hr/me/team": "hr-self.view",
   "/hr/employees": "hr-employees.view",
+  "/hr/employees/tree": "hr-employees.view",
   "/hr-employees": "hr-employees.view",
   "/hr-departments": "hr-departments.view",
   "/hr-designations": "hr-designations.view",

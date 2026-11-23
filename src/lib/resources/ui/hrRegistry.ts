@@ -318,6 +318,13 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
     {
       label: "Personal details",
       fields: [
+        {
+          name: "photo",
+          label: "Photo",
+          type: "image",
+          image: { url: "/api/hr/employees/:id/photo", versionField: "photoUpdatedAt", fallbackFrom: "name" },
+          fullWidth: true,
+        },
         { name: "name", label: "Full name", type: "text", required: true, placeholder: "Asha Rao" },
         { name: "employeeCode", label: "Employee code", type: "text", hint: "Leave blank to number automatically" },
         { name: "gender", label: "Gender", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(GENDER_LABELS)] },

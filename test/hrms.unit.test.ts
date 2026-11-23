@@ -4,6 +4,7 @@ import { productForPermission, productForHref, normalizeProducts, grants, homePa
 import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
 import { eachDay, monthRange, toDay, dayKey, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
+import { toForest } from "@/lib/hr/orgTree";
 
 describe("product gating", () => {
   it("assigns permissions and screens to products", () => {
@@ -324,5 +325,23 @@ describe("gratuity", () => {
     const big = g("1990-01-01", "2025-12-31", "1000000");
     expect(big).toMatchObject({ capped: true });
     expect(big.payable.toFixed(2)).toBe("2000000.00");
+  });
+});
+
+describe("organization tree", () => {
+  const n = (id: string, managerId: string | null) => ({ id, managerId });
+  const managers = (nodes: { id: string; managerId: string | null }[]) => Object.fromEntries(toForest(nodes).map((x) => [x.id, x.managerId]));
+
+  it("keeps reporting lines and puts people without a manager on the rolls at the top", () => {
+    expect(managers([n("ceo", null), n("a", "ceo"), n("b", "a"), n("c", "gone"), n("d", "d")])).toEqual({ ceo: null, a: "ceo", b: "a", c: null, d: null });
+  });
+
+  it("breaks a reporting loop so nobody falls out of the tree", () => {
+    const out = managers([n("a", "b"), n("b", "c"), n("c", "a"), n("x", "a")]);
+    expect(Object.values(out).filter((m) => m === null)).toHaveLength(1);
+    expect(out.x).toBe("a");
+    // Every chain now ends at the top.
+    const top = (id: string): string => (out[id] ? top(out[id]!) : id);
+    expect(new Set(["a", "b", "c", "x"].map(top)).size).toBe(1);
   });
 });

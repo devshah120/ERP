@@ -1363,4 +1363,55 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     const cy = await hrReport(ctx, "yearly-attendance", { year: 2028 });
     expect(cy.rows.find((r) => r.name === "Weekend Worker")).toBeUndefined();
   });
+
+  it("allocates assets, takes them back (returned, damaged or lost) and reports on them", async () => {
+    const { allocateAsset, allocateSchema, returnAsset, returnSchema, listAllocations, allocationListSchema, availableAssets } = await import("@/lib/hr/assets");
+    const { hrReport } = await import("@/lib/hr/insights");
+    const { Employee, HrAsset, AssetAllocation } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+
+    const emp = await Employee.create({ businessId: bId, employeeCode: "EMP-AST-01", name: "Asset Holder", dateOfJoining: new Date("2026-01-01"), employmentStatus: "CONFIRMED", basic: "15000" });
+    const laptop = await HrAsset.create({ businessId: bId, assetTag: "AST-T1", name: "Dell Latitude", category: "Laptop", serialNumber: "SN-1", value: "60000" });
+    const phone = await HrAsset.create({ businessId: bId, assetTag: "AST-T2", name: "Pixel 8", category: "Phone", value: "40000" });
+    // Issued the old way (employee set on the asset, no status yet): picked up as an open allocation.
+    await HrAsset.collection.insertOne({ businessId: bId, assetTag: "AST-T3", name: "ID card", employeeId: emp._id, assignedDate: new Date("2026-02-01"), returnedDate: null, status: "ACTIVE", deletedAt: null, condition: "GOOD" });
+
+    const open = await listAllocations(ctx, allocationListSchema.parse({ status: "ALLOCATED", query: "AST-T3" }));
+    expect(open.items).toHaveLength(1);
+    expect(open.items[0]).toMatchObject({ assetTag: "AST-T3", employeeName: "Asset Holder", allocatedOn: "2026-02-01" });
+    expect((await HrAsset.findOne({ businessId: bId, assetTag: "AST-T3" }).lean<{ assetStatus: string }>())!.assetStatus).toBe("ALLOCATED");
+
+    const give = (assetId: unknown, extra: Record<string, unknown> = {}) =>
+      allocateAsset(ctx, allocateSchema.parse({ assetId: String(assetId), employeeId: String(emp._id), allocatedOn: "2026-03-01", ...extra }));
+    const a1 = await give(laptop._id, { expectedReturnDate: "2026-04-01", condition: "NEW" });
+    expect(await HrAsset.findById(laptop._id).lean()).toMatchObject({ assetStatus: "ALLOCATED", condition: "NEW" });
+    expect(String((await HrAsset.findById(laptop._id).lean<{ employeeId: unknown }>())!.employeeId)).toBe(String(emp._id));
+    await expect(give(laptop._id)).rejects.toMatchObject({ code: "ASSET_NOT_AVAILABLE" });
+    expect((await availableAssets(ctx)).items.map((a) => a.assetTag)).toContain("AST-T2");
+    expect((await availableAssets(ctx)).items.map((a) => a.assetTag)).not.toContain("AST-T1");
+
+    // Back damaged: under repair, not available, with an amount to recover.
+    await expect(returnAsset(ctx, a1.id, returnSchema.parse({ returnedOn: "2026-02-15", outcome: "RETURNED", condition: "GOOD" }))).rejects.toMatchObject({ code: "BAD_RETURN_DATE" });
+    await returnAsset(ctx, a1.id, returnSchema.parse({ returnedOn: "2026-05-01", outcome: "DAMAGED", condition: "DAMAGED", recoveryAmount: "2500", notes: "Cracked screen" }));
+    expect(await HrAsset.findById(laptop._id).lean()).toMatchObject({ assetStatus: "UNDER_REPAIR", employeeId: null, condition: "DAMAGED" });
+    expect(String((await AssetAllocation.findById(a1.id).lean<{ recoveryAmount: unknown }>())!.recoveryAmount)).toBe("2500.00");
+    await expect(returnAsset(ctx, a1.id, returnSchema.parse({ returnedOn: "2026-05-02", outcome: "RETURNED", condition: "GOOD" }))).rejects.toMatchObject({ code: "ALREADY_RETURNED" });
+    await expect(give(laptop._id)).rejects.toMatchObject({ code: "ASSET_NOT_AVAILABLE" });
+
+    // Lost needs a note; then the phone is marked lost.
+    const a2 = await give(phone._id);
+    expect(returnSchema.safeParse({ returnedOn: "2026-06-01", outcome: "LOST" }).success).toBe(false);
+    await returnAsset(ctx, a2.id, returnSchema.parse({ returnedOn: "2026-06-01", outcome: "LOST", recoveryAmount: "40000", notes: "Left in a cab" }));
+    expect((await HrAsset.findById(phone._id).lean<{ assetStatus: string }>())!.assetStatus).toBe("LOST");
+
+    const register = await hrReport(ctx, "asset-register", {});
+    expect(register.rows.find((r) => r.assetTag === "AST-T3")).toMatchObject({ assetStatus: "With employee", heldBy: "EMP-AST-01 · Asset Holder" });
+    const withEmps = await hrReport(ctx, "assets-with-employees", {});
+    expect(withEmps.rows.map((r) => r.assetTag)).toContain("AST-T3");
+    expect(withEmps.rows.map((r) => r.assetTag)).not.toContain("AST-T1");
+    const movement = await hrReport(ctx, "asset-movement", { year: 2026 });
+    const mine = movement.rows.filter((r) => r.employeeName === "Asset Holder");
+    expect(mine.map((r) => r.outcome).sort()).toEqual(["Lost", "Returned damaged", "With employee"]);
+    expect(mine.find((r) => r.outcome === "Lost")).toMatchObject({ recoveryAmount: "40000.00" });
+  });
 });

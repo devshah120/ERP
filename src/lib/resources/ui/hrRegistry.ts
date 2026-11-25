@@ -680,15 +680,25 @@ const candidates = master("hr-candidates", "Candidates", "Candidate", {
   ],
 });
 
-const assets = master("hr-assets", "Assets Issued", "Asset", {
+export const ASSET_STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: "Available",
+  ALLOCATED: "With employee",
+  UNDER_REPAIR: "Under repair",
+  LOST: "Lost",
+  RETIRED: "Retired / written off",
+};
+
+const assets = master("hr-assets", "Asset Register", "Asset", {
   columns: [
     { key: "assetTag", label: "Tag", filterParam: "assetTag", sortField: "assetTag" },
     { key: "name", label: "Asset", filterParam: "name", sortField: "name" },
-    { key: "category", label: "Category", filterParam: "category" },
-    { key: "employeeId", label: "Issued to", type: "reference", reference: EMPLOYEE_REF },
-    { key: "assignedDate", label: "Issued on", type: "date", sortField: "assignedDate" },
-    { key: "returnedDate", label: "Returned", type: "date" },
+    { key: "category", label: "Category", filterParam: "category", sortField: "category" },
+    { key: "serialNumber", label: "Serial no." },
+    { key: "assetStatus", label: "Where", type: "label", labels: ASSET_STATUS_LABELS, filterParam: "assetStatus" },
+    { key: "employeeId", label: "Held by", type: "reference", reference: EMPLOYEE_REF, filterParam: "holder" },
+    { key: "assignedDate", label: "Since", type: "date", sortField: "assignedDate" },
     { key: "condition", label: "Condition", type: "label", labels: CONDITION_LABELS },
+    { key: "value", label: "Value", type: "money" },
   ],
   sections: [
     {
@@ -698,16 +708,23 @@ const assets = master("hr-assets", "Assets Issued", "Asset", {
         { name: "assetTag", label: "Asset tag", type: "text", hint: "Leave blank to number automatically" },
         { name: "category", label: "Category", type: "text", placeholder: "Laptop" },
         { name: "serialNumber", label: "Serial number", type: "text" },
+        { name: "purchaseDate", label: "Purchased on", type: "date" },
         { name: "value", label: "Value", type: "money", defaultValue: "0" },
         { name: "condition", label: "Condition", type: "select", defaultValue: "GOOD", options: opts(CONDITION_LABELS) },
       ],
     },
     {
-      label: "Issued to",
+      label: "Status",
+      description: "Give an asset to an employee on Asset Allocation and take it back on Return Assets.",
       fields: [
-        { name: "employeeId", label: "Employee", type: "reference", reference: EMPLOYEE_REF },
-        { name: "assignedDate", label: "Issued on", type: "date" },
-        { name: "returnedDate", label: "Returned on", type: "date" },
+        {
+          name: "assetStatus",
+          label: "Where it is",
+          type: "select",
+          defaultValue: "AVAILABLE",
+          options: opts(ASSET_STATUS_LABELS),
+          hint: "“With employee” is set by allocation",
+        },
         statusField,
         { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
       ],

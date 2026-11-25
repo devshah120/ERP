@@ -63,12 +63,36 @@ export const HR_REPORTS = [
     description: "Active loans and advances with what is still to be recovered.",
     keywords: "loans advances outstanding recovery emi",
   },
+  {
+    key: "asset-register",
+    label: "Asset register",
+    needs: "none",
+    description: "Every asset with its category, serial number, value, condition, status and who holds it now.",
+    keywords: "asset register list laptop inventory value status",
+  },
+  {
+    key: "assets-with-employees",
+    label: "Assets with employees",
+    needs: "none",
+    description: "Assets currently allocated, with the employee, since when, days held and whether they are overdue.",
+    keywords: "assets with employees allocated held overdue pending return",
+  },
+  {
+    key: "asset-movement",
+    label: "Asset allocation & returns",
+    needs: "period",
+    description: "Assets allocated and returned in a calendar or financial year, with outcome, condition and amounts to recover.",
+    keywords: "asset allocation return movement history issued returned lost damaged recovery",
+  },
   { key: "exits", label: "Exits / attrition", needs: "year", description: "Employees who left in a year, with an approximate attrition rate.", keywords: "exits attrition resigned left turnover" },
 ] as const;
 
 export type HrReportKey = (typeof HR_REPORTS)[number]["key"];
 
 /** Reports listed under "Incentive Reports" in the sidebar instead of "HR Reports". */
+/** Reports listed under "Asset Management" in the sidebar instead of "HR Reports". */
+export const ASSET_REPORT_KEYS: ReadonlySet<string> = new Set(["asset-register", "assets-with-employees", "asset-movement"]);
+
 export const INCENTIVE_REPORT_KEYS: ReadonlySet<string> = new Set(["yearly-attendance", "weekoff-working", "attendance-incentive"]);
 
 export function hrReport(key: string) {

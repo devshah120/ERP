@@ -8,6 +8,7 @@ import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin"
 import { ensureAttendanceReasons } from "@/lib/hr/regularization";
 import { keepSingleDefault } from "@/lib/hr/holidayCalendars";
 import { shiftHours } from "@/lib/hr/shiftHours";
+import { syncLegacyAssets, assertStatusChange } from "@/lib/hr/assets";
 import { migrateLegacyGradeGroups, assertGradeGroupAllowed } from "@/lib/hr/leaveGroups";
 import { assertContractorParent, assertWorkerContractors } from "@/lib/hr/contractLabour";
 import { Contractor, ContractWorker, CONTRACT_STATUSES, SKILL_CATEGORIES, OVERTIME_RATE_TYPES } from "@/models/contractLabour";
@@ -39,6 +40,7 @@ import {
   CANDIDATE_STAGES,
   OPENING_STATUSES,
   ASSET_CONDITIONS,
+  ASSET_STATUSES,
   APPRAISAL_STAGES,
   PayComponent,
   PAY_COMPONENT_KINDS,
@@ -659,21 +661,24 @@ const assets = define("hr-assets", "Asset", {
     name: z.string().trim().min(2).max(150),
     category: optionalText(60),
     serialNumber: optionalText(80),
-    employeeId: optionalRef,
-    assignedDate: optionalDate,
-    returnedDate: optionalDate,
+    purchaseDate: optionalDate,
     condition: z.enum(ASSET_CONDITIONS).default("GOOD"),
+    // Who holds it is set by Asset Allocation and Return Assets, not by this form.
+    assetStatus: z.enum(ASSET_STATUSES).default("AVAILABLE"),
     value: money,
     notes,
     status,
   },
-  refine: dateOrder("assignedDate", "returnedDate", "Return date is before the assigned date"),
   searchFields: ["name", "assetTag", "serialNumber", "category"],
-  filterFields: { assetTag: "assetTag", name: "name", category: "category" },
-  sortableFields: ["assetTag", "name", "assignedDate", "createdAt"],
+  filterFields: { assetTag: "assetTag", name: "name", category: "category", assetStatus: "assetStatus" },
+  refFilters: { holder: { path: "employeeId", model: Employee, field: "name" } },
+  sortableFields: ["assetTag", "name", "category", "assignedDate", "purchaseDate", "createdAt"],
   defaultSort: "assetTag",
   defaultSortDir: "asc",
-  toDocument: documentConverter({ money: ["value"], refs: ["employeeId"], dates: ["assignedDate", "returnedDate"] }),
+  beforeList: syncLegacyAssets,
+  validateCreate: async (_ctx, _side, input) => assertStatusChange({ assetStatus: "AVAILABLE" }, input.assetStatus),
+  validateUpdate: async (_ctx, _side, before, input) => assertStatusChange({ assetStatus: before.assetStatus ?? "AVAILABLE" }, input.assetStatus),
+  toDocument: documentConverter({ money: ["value"], dates: ["purchaseDate"] }),
 });
 
 const appraisals = define("hr-appraisals", "Appraisal", {

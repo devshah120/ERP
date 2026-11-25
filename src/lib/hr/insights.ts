@@ -22,6 +22,7 @@ import type { ExportPayload } from "@/lib/export/exporter";
 import { toDay, dayKey, addDays, monthRange, todayIn } from "./calendar";
 import { monthlyRegister } from "./attendance";
 import { yearAttendance, attendanceIncentive, reportPeriod, restDayWorking } from "./incentive";
+import { assetRegister, listAllocations } from "./assets";
 import { activeAnnouncements } from "./people";
 import { monthLabel } from "./payroll";
 import { employeeLabels, businessTimeZone, type AnyDoc } from "./common";
@@ -575,6 +576,123 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
         ],
         rows,
         totals: sumColumns(rows, ["amount", "repaid", "outstanding"]),
+      };
+    }
+
+    case "asset-register": {
+      const LABEL: Record<string, string> = { AVAILABLE: "Available", ALLOCATED: "With employee", UNDER_REPAIR: "Under repair", LOST: "Lost", RETIRED: "Retired" };
+      const rows = (await assetRegister(ctx)).map((r) => ({ ...r, assetStatus: LABEL[r.assetStatus] ?? r.assetStatus }));
+      const count = (st: string) => String(rows.filter((r) => r.assetStatus === LABEL[st]).length);
+      return {
+        title: "Asset Register",
+        columns: [
+          { key: "assetTag", label: "Tag" },
+          { key: "name", label: "Asset" },
+          { key: "category", label: "Category" },
+          { key: "serialNumber", label: "Serial no." },
+          { key: "purchaseDate", label: "Purchased", type: "date" },
+          { key: "value", label: "Value", type: "money" },
+          { key: "condition", label: "Condition" },
+          { key: "assetStatus", label: "Status" },
+          { key: "heldBy", label: "Held by" },
+          { key: "department", label: "Department" },
+          { key: "since", label: "Since", type: "date" },
+        ],
+        rows,
+        totals: sumColumns(rows, ["value"]),
+        summary: [
+          { label: "Assets", value: String(rows.length) },
+          { label: "With employees", value: count("ALLOCATED") },
+          { label: "Available", value: count("AVAILABLE") },
+          { label: "Under repair", value: count("UNDER_REPAIR") },
+          { label: "Lost", value: count("LOST") },
+        ],
+      };
+    }
+
+    case "assets-with-employees": {
+      const { items } = await listAllocations(ctx, { status: "ALLOCATED", page: 1, pageSize: 1 }, { all: true });
+      const rows = items.map((r) => ({
+        assetTag: r.assetTag,
+        assetName: r.assetName,
+        category: r.category,
+        serialNumber: r.serialNumber,
+        employeeCode: r.employeeCode,
+        employeeName: r.employeeName,
+        department: r.department,
+        allocatedOn: r.allocatedOn,
+        expectedReturnDate: r.expectedReturnDate ?? "",
+        daysHeld: r.daysHeld,
+        overdue: r.overdue ? "Overdue" : "",
+        value: r.value,
+      }));
+      return {
+        title: "Assets with Employees",
+        columns: [
+          { key: "assetTag", label: "Tag" },
+          { key: "assetName", label: "Asset" },
+          { key: "category", label: "Category" },
+          { key: "serialNumber", label: "Serial no." },
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "employeeName", label: "Employee" },
+          { key: "department", label: "Department" },
+          { key: "allocatedOn", label: "Allocated", type: "date" },
+          { key: "expectedReturnDate", label: "Expected back", type: "date" },
+          { key: "daysHeld", label: "Days held", type: "number" },
+          { key: "overdue", label: "Overdue" },
+          { key: "value", label: "Value", type: "money" },
+        ],
+        rows,
+        totals: sumColumns(rows, ["value"]),
+        summary: [
+          { label: "Assets out", value: String(rows.length) },
+          { label: "Overdue", value: String(rows.filter((r) => r.overdue).length) },
+        ],
+      };
+    }
+
+    case "asset-movement": {
+      const p = reportPeriod(year, Boolean(params.financial));
+      const { items } = await listAllocations(ctx, { status: "", from: dayKey(p.start), to: dayKey(p.end), page: 1, pageSize: 1 }, { all: true });
+      const OUTCOME: Record<string, string> = { RETURNED: "Returned", DAMAGED: "Returned damaged", LOST: "Lost" };
+      const rows = items.map((r) => ({
+        allocationNumber: r.allocationNumber,
+        assetTag: r.assetTag,
+        assetName: r.assetName,
+        employeeCode: r.employeeCode,
+        employeeName: r.employeeName,
+        allocatedOn: r.allocatedOn,
+        conditionAtIssue: r.conditionAtIssue,
+        returnedOn: r.returnedOn ?? "",
+        outcome: r.outcome ? OUTCOME[r.outcome] ?? r.outcome : "With employee",
+        conditionAtReturn: r.conditionAtReturn ?? "",
+        daysHeld: r.daysHeld,
+        recoveryAmount: r.recoveryAmount,
+      }));
+      return {
+        title: `Asset Allocation & Returns ${p.label}`,
+        filterNote: "Allocations made or returned in the period.",
+        columns: [
+          { key: "allocationNumber", label: "Allocation" },
+          { key: "assetTag", label: "Tag" },
+          { key: "assetName", label: "Asset" },
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "employeeName", label: "Employee" },
+          { key: "allocatedOn", label: "Allocated", type: "date" },
+          { key: "conditionAtIssue", label: "Condition given" },
+          { key: "returnedOn", label: "Returned", type: "date" },
+          { key: "outcome", label: "Outcome" },
+          { key: "conditionAtReturn", label: "Condition back" },
+          { key: "daysHeld", label: "Days held", type: "number" },
+          { key: "recoveryAmount", label: "To recover", type: "money" },
+        ],
+        rows,
+        totals: sumColumns(rows, ["recoveryAmount"]),
+        summary: [
+          { label: "Allocated", value: String(rows.filter((r) => r.allocatedOn >= dayKey(p.start) && r.allocatedOn <= dayKey(p.end)).length) },
+          { label: "Returned", value: String(rows.filter((r) => r.returnedOn && r.returnedOn >= dayKey(p.start) && r.returnedOn <= dayKey(p.end)).length) },
+          { label: "Lost", value: String(rows.filter((r) => r.outcome === "Lost").length) },
+        ],
       };
     }
 

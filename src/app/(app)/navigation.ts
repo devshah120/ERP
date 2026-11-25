@@ -1,5 +1,5 @@
 import type { SVGProps, ComponentType } from "react";
-import { HR_REPORTS, INCENTIVE_REPORT_KEYS } from "@/lib/hr/reportCatalog";
+import { HR_REPORTS, INCENTIVE_REPORT_KEYS, ASSET_REPORT_KEYS } from "@/lib/hr/reportCatalog";
 import {
   IconDashboard,
   IconSales,
@@ -102,7 +102,6 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr-departments", label: "Departments", enabled: true, createHref: "/hr-departments/new", keywords: "hr department team division" },
           { href: "/hr-designations", label: "Designations", enabled: true, createHref: "/hr-designations/new", keywords: "job title designation role" },
           { href: "/hr-grades", label: "Grades", enabled: true, createHref: "/hr-grades/new", keywords: "grade band level l1 l2 cadre" },
-          { href: "/hr-assets", label: "Assets Issued", enabled: true, createHref: "/hr-assets/new", keywords: "laptop phone asset allocation" },
           { href: "/hr-announcements", label: "Announcements", enabled: true, createHref: "/hr-announcements/new", keywords: "notice circular news" },
         ],
       },
@@ -199,6 +198,18 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
+        key: "hr-assets",
+        label: "Asset Management",
+        keywords: "asset management laptop phone id card company property",
+        icon: IconBox,
+        children: [
+          { href: "/hr-assets", label: "Asset Register", enabled: true, createHref: "/hr-assets/new", keywords: "asset register master laptop phone serial value import" },
+          { href: "/hr/assets/allocation", label: "Asset Allocation", enabled: true, keywords: "allocate issue give asset employee laptop handover" },
+          { href: "/hr/assets/return", label: "Return Assets", enabled: true, keywords: "return asset take back lost damaged recovery exit" },
+          ...HR_REPORTS.filter((r) => ASSET_REPORT_KEYS.has(r.key)).map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
+        ],
+      },
+      {
         key: "hr-incentive-reports",
         label: "Incentive Reports",
         keywords: "incentive matrix reports yearly attendance financial year week off holiday working",
@@ -213,7 +224,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "HR Reports",
         keywords: "hr report salary register pf esi statement headcount attendance bank transfer",
         icon: IconClipboard,
-        children: HR_REPORTS.filter((r) => !INCENTIVE_REPORT_KEYS.has(r.key)).map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
+        children: HR_REPORTS.filter((r) => !INCENTIVE_REPORT_KEYS.has(r.key) && !ASSET_REPORT_KEYS.has(r.key)).map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
       },
     ],
   },
@@ -649,6 +660,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-designations": "hr-designations.view",
   "/hr-grades": "hr-designations.view",
   "/hr-assets": "hr-assets.view",
+  "/hr/assets/allocation": "hr-assets.view",
+  "/hr/assets/return": "hr-assets.view",
   "/hr-announcements": "hr-announcements.view",
   "/hr/attendance": "hr-attendance.view",
   "/hr/attendance/register": "hr-attendance.view",

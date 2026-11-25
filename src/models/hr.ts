@@ -23,6 +23,7 @@ export const HOLIDAY_TYPES = ["PUBLIC", "OPTIONAL", "COMPANY"] as const;
 export const CANDIDATE_STAGES = ["APPLIED", "SCREENING", "INTERVIEW", "OFFERED", "HIRED", "REJECTED", "WITHDRAWN"] as const;
 export const OPENING_STATUSES = ["OPEN", "ON_HOLD", "CLOSED"] as const;
 export const ASSET_CONDITIONS = ["NEW", "GOOD", "FAIR", "DAMAGED"] as const;
+export const ASSET_STATUSES = ["AVAILABLE", "ALLOCATED", "UNDER_REPAIR", "LOST", "RETIRED"] as const;
 export const APPRAISAL_STAGES = ["DRAFT", "SELF_REVIEW", "MANAGER_REVIEW", "COMPLETED"] as const;
 
 const money = { type: Schema.Types.Decimal128, default: "0" };
@@ -621,10 +622,47 @@ export const HrAsset = defineMasterModel(
     returnedDate: { type: Date, default: null },
     condition: { type: String, enum: ASSET_CONDITIONS, default: "GOOD" },
     value: money,
+    /** Where the asset is: free, with an employee (see AssetAllocation), being repaired, lost or written off. */
+    assetStatus: { type: String, enum: ASSET_STATUSES, default: "AVAILABLE" },
+    purchaseDate: { type: Date, default: null },
     notes: { type: String, trim: true },
   },
-  { uniqueField: "assetTag", indexes: [{ employeeId: 1 }] }
+  { uniqueField: "assetTag", indexes: [{ employeeId: 1 }, { assetStatus: 1 }] }
 );
+
+export const ASSET_RETURN_OUTCOMES = ["RETURNED", "DAMAGED", "LOST"] as const;
+
+/**
+ * One handover of an asset to an employee and, once it comes back, its
+ * return. The asset's own employeeId / assignedDate mirror the open one.
+ */
+const assetAllocationSchema = new Schema(
+  {
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+    allocationNumber: { type: String, required: true },
+    assetId: { type: Schema.Types.ObjectId, ref: "HrAsset", required: true },
+    employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+    allocatedOn: { type: Date, required: true },
+    expectedReturnDate: { type: Date, default: null },
+    conditionAtIssue: { type: String, enum: ASSET_CONDITIONS, default: "GOOD" },
+    issueNotes: { type: String, trim: true, default: "" },
+    status: { type: String, enum: ["ALLOCATED", "RETURNED"], default: "ALLOCATED" },
+    returnedOn: { type: Date, default: null },
+    outcome: { type: String, enum: [...ASSET_RETURN_OUTCOMES, null], default: null },
+    conditionAtReturn: { type: String, enum: [...ASSET_CONDITIONS, null], default: null },
+    /** Charged to the employee for damage or loss. */
+    recoveryAmount: { type: Schema.Types.Decimal128, default: "0" },
+    returnNotes: { type: String, trim: true, default: "" },
+    allocatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    returnedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+  },
+  { timestamps: true }
+);
+assetAllocationSchema.index({ businessId: 1, allocationNumber: 1 }, { unique: true });
+assetAllocationSchema.index({ businessId: 1, status: 1, allocatedOn: -1 });
+assetAllocationSchema.index({ businessId: 1, assetId: 1, status: 1 });
+assetAllocationSchema.index({ businessId: 1, employeeId: 1, status: 1 });
+export const AssetAllocation = models.AssetAllocation ?? model("AssetAllocation", assetAllocationSchema);
 
 export const Appraisal = defineMasterModel(
   "Appraisal",

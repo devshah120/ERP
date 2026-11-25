@@ -229,6 +229,22 @@ IMPORTS["hr-contract-workers"] = {
   ],
 };
 
+IMPORTS["hr-assets"] = {
+  resource: "hr-assets",
+  title: "Asset Register",
+  duplicateKey: { path: "serialNumber", header: "Serial Number" },
+  fields: [
+    { header: "Asset Name", path: "name", required: true, example: "Dell Latitude 5440" },
+    { header: "Asset Tag", path: "assetTag", hint: "Leave blank to number automatically", example: "" },
+    { header: "Category", path: "category", example: "Laptop" },
+    { header: "Serial Number", path: "serialNumber", hint: "Used to spot assets already in the register", example: "5CG1234XYZ" },
+    { header: "Purchased On", path: "purchaseDate", hint: "yyyy-mm-dd", example: "2026-04-15" },
+    { header: "Value", path: "value", type: "money", example: "65000" },
+    { header: "Condition", path: "condition", hint: "NEW, GOOD, FAIR or DAMAGED", example: "NEW" },
+    { header: "Notes", path: "notes", example: "" },
+  ],
+};
+
 export function getImportDefinition(resource: string): ImportDefinition | undefined {
   return IMPORTS[resource];
 }

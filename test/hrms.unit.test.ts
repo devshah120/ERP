@@ -5,6 +5,7 @@ import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
 import { eachDay, monthRange, toDay, dayKey, dayKind, shiftFor, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
 import { toForest } from "@/lib/hr/orgTree";
+import { assertStatusChange } from "@/lib/hr/assets";
 import { shiftHours } from "@/lib/hr/shiftHours";
 import { incentiveDaysFor, eligibleDays, incentivePeriod, dayRate } from "@/lib/hr/incentive";
 import { dayOvertimeMinutes, shiftLengthMinutes, overtimeHourlyRate, overtimeAmount, hoursOf } from "@/lib/hr/contractLabour";
@@ -462,5 +463,14 @@ describe("shift hours", () => {
     expect(shiftHours("22:00", "06:00")).toEqual({ fullDayHours: 8, halfDayHours: 4 });
     expect(shiftHours("09:00", "09:00", { fullDayHours: 7, halfDayHours: 3 })).toEqual({ fullDayHours: 7, halfDayHours: 3 });
     expect(shiftHours("9am", "6pm")).toEqual({ fullDayHours: 8, halfDayHours: 4 });
+  });
+});
+
+describe("asset status on the register form", () => {
+  it("keeps allocation to Asset Allocation and Return Assets", () => {
+    expect(() => assertStatusChange({ assetStatus: "AVAILABLE" }, "UNDER_REPAIR")).not.toThrow();
+    expect(() => assertStatusChange({ assetStatus: "ALLOCATED" }, "ALLOCATED")).not.toThrow();
+    expect(() => assertStatusChange({ assetStatus: "AVAILABLE" }, "ALLOCATED")).toThrow(/Asset Allocation/);
+    expect(() => assertStatusChange({ assetStatus: "ALLOCATED" }, "AVAILABLE")).toThrow(/Return Assets/);
   });
 });

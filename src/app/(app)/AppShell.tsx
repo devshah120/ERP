@@ -203,10 +203,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <IconMenu />
         </button>
 
-        <Link href={homePath} className="hdrBrand" title={me.business?.name ?? "NEXORA"}>
-          <span className="hdrBrandText">
-            NEXORA
+        <Link href={homePath} className="hdrBrand" title={me.business?.name ?? "NEXORA"} aria-label="NEXORA home">
+          <span className="hdrBrandMark" aria-hidden>
+            N
           </span>
+          <span className="hdrBrandText">NEXORA</span>
         </Link>
 
         {hasProduct("ERP") && <FinancialYearMenu />}

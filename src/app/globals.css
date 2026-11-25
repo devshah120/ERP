@@ -13750,3 +13750,286 @@ a.hrKpi:hover {
     font-size: 1.125rem;
   }
 }
+
+/* ==================================================================
+   Header v4 — one definition for desktop, tablet and phone. Declared
+   last so it replaces the layered header rules above.
+   Layout: [menu] [brand] [year] [ search (centre) ] [create · pos · alerts | you]
+   ================================================================== */
+
+.appHeader {
+  gap: 0.75rem;
+  padding: 0 1.25rem;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.hdrBrand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: calc(var(--sidebar-w) - 1.25rem);
+  flex-shrink: 0;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.appShell[data-collapsed="true"] .hdrBrand {
+  width: auto;
+}
+
+.hdrBrand .hdrBrandMark {
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hdrBrandText {
+  display: inline;
+  font-size: 1.25rem;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.appHeader .hdrPill {
+  height: 2.375rem;
+  border-radius: 10px;
+}
+
+.hdrCenter {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.hdrCenter .hdrSearch {
+  width: 100%;
+  max-width: 36rem;
+  height: 2.375rem;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  padding: 0 0.375rem 0 0.875rem;
+}
+
+.hdrCenter .hdrSearch:hover,
+.hdrCenter .hdrSearch:focus-visible {
+  background: var(--surface);
+  border-color: var(--accent-soft-strong);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.hdrActions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Icon buttons in the header are quiet until hovered. */
+.appHeader .hdrIconBtn,
+.appHeader .iconButton {
+  width: 2.375rem;
+  height: 2.375rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.appHeader .hdrIconBtn:hover,
+.appHeader .hdrIconBtn[aria-expanded="true"],
+.appHeader .hdrIconBtn[aria-current="page"],
+.appHeader .iconButton:hover,
+.appHeader .iconButton[aria-expanded="true"] {
+  background: var(--surface-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.appHeader .hdrNew {
+  height: 2.375rem;
+  padding: 0 0.875rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  gap: 0.375rem;
+  box-shadow: 0 1px 2px rgba(10, 111, 174, 0.25), 0 2px 8px rgba(29, 155, 224, 0.22);
+}
+
+.hdrDivider {
+  height: 1.5rem;
+  margin: 0 0.25rem;
+}
+
+.appHeader .avatarButton {
+  height: 2.5rem;
+  margin-left: 0.125rem;
+}
+
+.appHeader .notifDot {
+  top: 0.125rem;
+  right: 0.125rem;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  font-size: 0.625rem;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Laptops: the user's name folds into the avatar, the search narrows. */
+@media (max-width: 1280px) {
+  .hdrCenter .hdrSearch {
+    max-width: 28rem;
+  }
+}
+
+/* Tablets and phones: menu button on the left, logo, then the actions on the right. */
+@media (max-width: 900px) {
+  .appHeader {
+    gap: 0.375rem;
+    padding: 0 0.625rem;
+  }
+
+  .hdrMenuBtn {
+    display: inline-flex;
+  }
+
+  .hdrBrand,
+  .appShell[data-collapsed="true"] .hdrBrand {
+    width: auto;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .hdrBrandText {
+    display: none;
+  }
+
+  /* Search becomes an icon that sits with the other actions on the right. */
+  .hdrCenter {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .hdrCenter .hdrSearch {
+    width: 2.375rem;
+    max-width: none;
+    padding: 0;
+    justify-content: center;
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .hdrCenter .hdrSearch:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+
+  .hdrSearch span,
+  .hdrSearch kbd {
+    display: none !important;
+  }
+
+  .hdrActions {
+    margin-left: 0;
+    gap: 0.25rem;
+  }
+
+  .hdrDivider {
+    display: none;
+  }
+
+  /* The create button keeps its colour but shows just the plus. */
+  .appHeader .hdrNew {
+    width: 2.375rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .appHeader .avatarButton {
+    padding: 0.125rem;
+  }
+
+  .hdrUserText {
+    display: none;
+  }
+}
+
+/* Wider phones still have room for the name next to the logo. */
+@media (min-width: 480px) and (max-width: 900px) {
+  .hdrBrandText {
+    display: inline;
+    font-size: 1.125rem;
+  }
+}
+
+/* Small phones: the year picker shows only its icon, the POS shortcut moves to the menu. */
+@media (max-width: 560px) {
+  .appHeader .hdrPill {
+    width: 2.375rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .appHeader .hdrPill > span,
+  .appHeader .hdrPill .hdrPillChevron {
+    display: none;
+  }
+
+  .hdrActions .posToggle {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .appHeader {
+    gap: 0.125rem;
+    padding: 0 0.375rem;
+  }
+
+  .hdrBrand .hdrBrandMark {
+    width: 1.875rem;
+    height: 1.875rem;
+  }
+
+  .appHeader .hdrIconBtn,
+  .appHeader .iconButton,
+  .appHeader .hdrNew,
+  .hdrCenter .hdrSearch,
+  .appHeader .hdrPill {
+    width: 2.125rem;
+    height: 2.125rem;
+  }
+}
+
+/* Popovers never run off a phone screen. */
+@media (max-width: 760px) {
+  .menu,
+  .menuWide {
+    min-width: 0;
+    max-width: calc(100vw - 1rem);
+  }
+
+  .searchBox,
+  .searchInput {
+    min-width: 0;
+  }
+
+  .crumbBar {
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .mainColumn {
+    overflow-x: clip;
+  }
+}

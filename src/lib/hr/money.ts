@@ -2,7 +2,7 @@ import mongoose, { Types } from "mongoose";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { EmployeeLoan, ExpenseClaim, Employee, Payslip, CLAIM_CATEGORIES, CLAIM_SETTLEMENT_MODES } from "@/models/hr";
+import { EmployeeLoan, ExpenseClaim, Employee, Payslip, PayrollRun, CLAIM_CATEGORIES, CLAIM_SETTLEMENT_MODES } from "@/models/hr";
 import { moneyStringSchema } from "@/lib/validation/money";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { recordAudit } from "@/lib/services/auditService";
@@ -18,6 +18,7 @@ import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, esc
 
 const d = (v: unknown) => new Decimal(v ? String(v) : "0");
 const positive = moneyStringSchema.refine((v) => new Decimal(v).gt(0), "Must be more than zero");
+const MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /* ------------------------------------------------------------------ */
 /* Loans & advances                                                    */
@@ -217,6 +218,8 @@ function claimRow(c: AnyDoc, label?: { name: string; code: string; department: s
     settlementMode: c.settlementMode ?? (c.payrollRunId ? "PAYROLL" : null),
     settledAt: c.settledAt ?? null,
     settlementReference: c.settlementReference ?? "",
+    payInYear: c.payInYear ?? null,
+    payInMonth: c.payInMonth ?? null,
     createdAt: c.createdAt,
   };
 }
@@ -422,12 +425,21 @@ export async function withdrawAdvanceRequest(ctx: AuthContext, id: string) {
 /* Claim settlement                                                    */
 /* ------------------------------------------------------------------ */
 
-export const claimSettlementSchema = z.object({
-  claimIds: z.array(objectId).min(1, "Choose the claims to settle").max(500),
-  mode: z.enum(CLAIM_SETTLEMENT_MODES.filter((m) => m !== "PAYROLL" && m !== "ADVANCE") as ["CASH", "BANK", "CHEQUE"]),
-  paidOn: z.string().trim().min(1, "Choose the payment date"),
-  reference: z.string().trim().max(100).optional().default(""),
-});
+export const claimSettlementSchema = z.discriminatedUnion("mode", [
+  /** Paid with a chosen month's payroll: the claim waits, approved, until that payroll is generated and approved. */
+  z.object({
+    mode: z.literal("PAYROLL"),
+    claimIds: z.array(objectId).min(1, "Choose the claims to settle").max(500),
+    payInMonth: z.coerce.number().int().min(1).max(12),
+    payInYear: z.coerce.number().int().min(2000).max(2100),
+  }),
+  z.object({
+    mode: z.enum(CLAIM_SETTLEMENT_MODES.filter((m) => m !== "PAYROLL" && m !== "ADVANCE") as ["CASH", "BANK", "CHEQUE"]),
+    claimIds: z.array(objectId).min(1, "Choose the claims to settle").max(500),
+    paidOn: z.string().trim().min(1, "Choose the payment date"),
+    reference: z.string().trim().max(100).optional().default(""),
+  }),
+]);
 
 /** Pays approved claims directly (cash, bank transfer or cheque) instead of with the next payroll. */
 export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claimSettlementSchema>) {
@@ -437,13 +449,32 @@ export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claim
   const notReady = claims.filter((c) => c.status !== "APPROVED");
   if (notReady.length > 0) throw AppError.badRequest(`Only approved, unpaid claims can be settled (${notReady.map((c) => c.claimNumber).join(", ")})`, "CLAIM_NOT_APPROVED");
   await assertNotInDraftPayroll(ctx.businessId, { claimIds: ids });
+  const total = claims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0));
+
+  if (input.mode === "PAYROLL") {
+    const run = await PayrollRun.findOne({ businessId: ctx.businessId, year: input.payInYear, month: input.payInMonth, status: { $ne: "CANCELLED" } }, { status: 1, runNumber: 1 }).lean<AnyDoc>();
+    const label = `${MONTH_LABELS[input.payInMonth - 1]} ${input.payInYear}`;
+    if (run && run.status !== "DRAFT") throw AppError.badRequest(`${label} payroll is already ${String(run.status).toLowerCase()}. Choose a later month.`, "PAYROLL_LOCKED");
+    const res = await ExpenseClaim.updateMany(
+      { businessId: ctx.businessId, _id: { $in: ids }, status: "APPROVED", payrollRunId: null },
+      { payInYear: input.payInYear, payInMonth: input.payInMonth, updatedBy: ctx.userId }
+    );
+    await recordAudit({
+      businessId: ctx.businessId,
+      userId: ctx.userId,
+      action: "UPDATE",
+      module: "hr.claims",
+      documentType: "ExpenseClaim",
+      newValue: { scheduled: claims.map((c) => c.claimNumber), payroll: label, amount: total.toFixed(2) },
+    });
+    return { settled: 0, scheduled: res.modifiedCount, amount: total.toFixed(2), payroll: label, draftPayroll: run ? (run.runNumber as string) : null };
+  }
 
   // The status in the filter keeps a claim from being paid twice by two people at once.
   const res = await ExpenseClaim.updateMany(
     { businessId: ctx.businessId, _id: { $in: ids }, status: "APPROVED", payrollRunId: null },
     { status: "REIMBURSED", settlementMode: input.mode, settledAt: toDay(input.paidOn), settlementReference: input.reference, settledByUserId: ctx.userId, updatedBy: ctx.userId }
   );
-  const total = claims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0));
   await recordAudit({
     businessId: ctx.businessId,
     userId: ctx.userId,
@@ -452,7 +483,7 @@ export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claim
     documentType: "ExpenseClaim",
     newValue: { settled: claims.map((c) => c.claimNumber), mode: input.mode, reference: input.reference, amount: total.toFixed(2) },
   });
-  return { settled: res.modifiedCount, amount: total.toFixed(2) };
+  return { settled: res.modifiedCount, scheduled: 0, amount: total.toFixed(2), payroll: null, draftPayroll: null };
 }
 
 export const adjustClaimsSchema = z.object({ claimIds: z.array(objectId).min(1, "Choose the claims to set off").max(200) });

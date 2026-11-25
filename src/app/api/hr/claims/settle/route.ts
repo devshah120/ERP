@@ -10,5 +10,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-claims.approve");
   const result = await settleClaims(ctx, claimSettlementSchema.parse(await req.json()));
-  return ok(result, `${result.settled} claim(s) settled`);
+  return ok(result, result.payroll ? `${result.scheduled} claim(s) will be paid in ${result.payroll} payroll` : `${result.settled} claim(s) settled`);
 });

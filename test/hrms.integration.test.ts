@@ -1310,4 +1310,31 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     await postIncentive(ctx, q);
     expect((await monthVariables(bId, 2026, 1, [emp._id])).get(String(emp._id))).toHaveLength(1);
   });
+
+  it("pays a claim with the payroll month chosen on Claim Settlement", async () => {
+    const { createClaim, claimCreateSchema, decideClaim, settleClaims, claimSettlementSchema } = await import("@/lib/hr/money");
+    const { createRun, getRun, cancelRun } = await import("@/lib/hr/payroll");
+    const { Employee, ExpenseClaim } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+
+    const emp = await Employee.create({ businessId: bId, employeeCode: "EMP-CLM-01", name: "Claim Scheduler", dateOfJoining: new Date("2028-01-01"), employmentStatus: "CONFIRMED", basic: "20000" });
+    const claim = await createClaim(ctx, claimCreateSchema.parse({ employeeId: String(emp._id), claimDate: "2028-04-10", category: "TRAVEL", amount: "750", description: "Client visit" }), { self: false });
+    await decideClaim(ctx, claim.id, "APPROVED", "");
+
+    // A month whose payroll is approved can't be chosen.
+    await expect(settleClaims(ctx, claimSettlementSchema.parse({ mode: "PAYROLL", claimIds: [claim.id], payInMonth: 10, payInYear: 2026 }))).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
+
+    expect(await settleClaims(ctx, claimSettlementSchema.parse({ mode: "PAYROLL", claimIds: [claim.id], payInMonth: 6, payInYear: 2028 }))).toMatchObject({ scheduled: 1, payroll: "June 2028", draftPayroll: null });
+    expect(await ExpenseClaim.findById(claim.id).lean()).toMatchObject({ status: "APPROVED", payInYear: 2028, payInMonth: 6 });
+
+    const reimbursed = async (month: number) => {
+      const run = await createRun(ctx, { month, year: 2028, notes: "" });
+      const slip = (await getRun(ctx, run.id)).payslips.find((x) => x.employeeId === String(emp._id))!;
+      await cancelRun(ctx, run.id, "test"); // a draft is simply deleted
+      return slip.reimbursements;
+    };
+    // May payroll leaves it for June; June pays it.
+    expect(await reimbursed(5)).toBe("0.00");
+    expect(await reimbursed(6)).toBe("750.00");
+  });
 });

@@ -999,6 +999,9 @@ const expenseClaimSchema = new Schema(
     settlementReference: { type: String, trim: true, default: "" },
     settledByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     advanceLoanId: { type: Schema.Types.ObjectId, ref: "EmployeeLoan", default: null },
+    /** Pay with the payroll of this month (or the first one after it); null = the next payroll generated. */
+    payInYear: { type: Number, default: null },
+    payInMonth: { type: Number, default: null, min: 1, max: 12 },
     ...audit,
   },
   { timestamps: true }

@@ -12,7 +12,7 @@ import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
-import { fmtDate, todayKey, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
+import { fmtDate, todayKey, CLAIM_CATEGORY_LABELS, MONTH_NAMES, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconRefresh } from "@/components/icons";
 
@@ -32,6 +32,8 @@ interface Row {
   settlementMode: string | null;
   settledAt: string | null;
   settlementReference: string;
+  payInYear: number | null;
+  payInMonth: number | null;
 }
 
 interface Result {
@@ -63,7 +65,11 @@ export default function ClaimSettlementPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [settling, setSettling] = useState(false);
-  const [form, setForm] = useState({ mode: "BANK", paidOn: todayKey(), reference: "" });
+  const nextMonth = (() => {
+    const t = new Date();
+    return { month: ((t.getMonth() + 1) % 12) + 1, year: t.getMonth() === 11 ? t.getFullYear() + 1 : t.getFullYear() };
+  })();
+  const [form, setForm] = useState({ mode: "PAYROLL", paidOn: todayKey(), reference: "", payInMonth: new Date().getMonth() + 1, payInYear: new Date().getFullYear() });
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const canSettle = hasPermission("hr-claims.approve");
@@ -117,16 +123,28 @@ export default function ClaimSettlementPage() {
     setBusy(true);
     setDialogError(null);
     try {
-      const res = await apiFetch<{ settled: number; amount: string }>("/api/hr/claims/settle", {
+      const claimIds = picked.map((r) => r.id);
+      const body =
+        form.mode === "PAYROLL"
+          ? { mode: "PAYROLL", claimIds, payInMonth: form.payInMonth, payInYear: form.payInYear }
+          : { mode: form.mode, claimIds, paidOn: form.paidOn, reference: form.reference };
+      const res = await apiFetch<{ settled: number; scheduled: number; amount: string; payroll: string | null; draftPayroll: string | null }>("/api/hr/claims/settle", {
         method: "POST",
-        body: JSON.stringify({ claimIds: picked.map((r) => r.id), ...form }),
+        body: JSON.stringify(body),
       });
-      toast.success(`${res.settled} claim${res.settled === 1 ? "" : "s"} settled`, `${formatMoney(res.amount)} paid by ${SETTLEMENT_LABELS[form.mode].toLowerCase()}.`);
+      if (res.payroll) {
+        toast.success(
+          `${res.scheduled} claim${res.scheduled === 1 ? "" : "s"} will be paid in ${res.payroll} payroll`,
+          res.draftPayroll ? `Regenerate draft ${res.draftPayroll} so it includes them.` : `${formatMoney(res.amount)} is added when that payroll is generated.`
+        );
+      } else {
+        toast.success(`${res.settled} claim${res.settled === 1 ? "" : "s"} settled`, `${formatMoney(res.amount)} paid by ${SETTLEMENT_LABELS[form.mode].toLowerCase()}.`);
+      }
       setSettling(false);
-      setForm({ mode: form.mode, paidOn: todayKey(), reference: "" });
+      setForm({ ...form, paidOn: todayKey(), reference: "" });
       load();
     } catch (err) {
-      setDialogError(err instanceof ApiError ? err.message : "Something went wrong");
+      setDialogError(apiErrorText(err));
     } finally {
       setBusy(false);
     }
@@ -188,7 +206,7 @@ export default function ClaimSettlementPage() {
               <th>Category</th>
               <th>Description</th>
               <th className="numCell">Amount</th>
-              <th>{view === "APPROVED" ? "Approved" : "Paid"}</th>
+              <th>{view === "APPROVED" ? "To be paid in" : "Paid"}</th>
             </tr>
           </thead>
           <tbody>
@@ -234,7 +252,10 @@ export default function ClaimSettlementPage() {
                 <td className="numCell">{formatMoney(r.amount)}</td>
                 <td>
                   {view === "APPROVED" ? (
-                    r.decidedAt ? fmtDate(r.decidedAt) : <span className="cellMuted">—</span>
+                    <>
+                      {r.payInYear && r.payInMonth ? `${MONTH_NAMES[r.payInMonth - 1]} ${r.payInYear} payroll` : <span className="cellMuted">Next payroll</span>}
+                      {r.decidedAt && <div className="hrMuted">Approved {fmtDate(r.decidedAt)}</div>}
+                    </>
                   ) : (
                     <>
                       {SETTLEMENT_LABELS[r.settlementMode ?? ""] ?? "—"}
@@ -260,7 +281,11 @@ export default function ClaimSettlementPage() {
       {settling && (
         <Modal
           title={`Settle ${picked.length} claim${picked.length === 1 ? "" : "s"}`}
-          subtitle={`${formatMoney(pickedTotal.toFixed(2))} for ${new Set(picked.map((r) => r.employeeId)).size} employee(s). They will not be paid again in payroll.`}
+          subtitle={
+            form.mode === "PAYROLL"
+              ? `${formatMoney(pickedTotal.toFixed(2))} for ${new Set(picked.map((r) => r.employeeId)).size} employee(s), added to the chosen month's payroll as a reimbursement.`
+              : `${formatMoney(pickedTotal.toFixed(2))} for ${new Set(picked.map((r) => r.employeeId)).size} employee(s). They will not be paid again in payroll.`
+          }
           onClose={() => setSettling(false)}
           busy={busy}
           footer={
@@ -268,8 +293,8 @@ export default function ClaimSettlementPage() {
               <button type="button" className="button buttonSecondary" onClick={() => setSettling(false)} disabled={busy}>
                 Cancel
               </button>
-              <button type="button" className="button buttonPrimary" onClick={settle} disabled={busy || !form.paidOn}>
-                {busy && <span className="spinner" />} Mark as paid
+              <button type="button" className="button buttonPrimary" onClick={settle} disabled={busy || (form.mode !== "PAYROLL" && !form.paidOn)}>
+                {busy && <span className="spinner" />} {form.mode === "PAYROLL" ? "Pay with payroll" : "Mark as paid"}
               </button>
             </>
           }
@@ -280,22 +305,51 @@ export default function ClaimSettlementPage() {
             </div>
           )}
           <div className="formGrid">
-            <div className="field">
-              <label htmlFor="cs-mode">Paid by</label>
+            <div className="field fieldSpanFull">
+              <label htmlFor="cs-mode">Pay</label>
               <select id="cs-mode" className="select" value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
-                <option value="BANK">Bank transfer</option>
-                <option value="CASH">Cash</option>
-                <option value="CHEQUE">Cheque</option>
+                <option value="PAYROLL">With payroll (added to the salary of a month)</option>
+                <option value="BANK">Now, by bank transfer</option>
+                <option value="CASH">Now, in cash</option>
+                <option value="CHEQUE">Now, by cheque</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="cs-date">Paid on</label>
-              <input id="cs-date" className="input" type="date" value={form.paidOn} onChange={(e) => setForm({ ...form, paidOn: e.target.value })} />
-            </div>
-            <div className="field fieldSpanFull">
-              <label htmlFor="cs-ref">{form.mode === "CHEQUE" ? "Cheque no." : form.mode === "BANK" ? "UTR / reference" : "Voucher / reference"}</label>
-              <input id="cs-ref" className="input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="Optional" />
-            </div>
+            {form.mode === "PAYROLL" ? (
+              <div className="field fieldSpanFull">
+                <label htmlFor="cs-month">Pay with the payroll of</label>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <select id="cs-month" className="select" value={form.payInMonth} onChange={(e) => setForm({ ...form, payInMonth: Number(e.target.value) })}>
+                    {MONTH_NAMES.map((m, i) => (
+                      <option key={m} value={i + 1}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <select className="select" style={{ width: "auto" }} value={form.payInYear} onChange={(e) => setForm({ ...form, payInYear: Number(e.target.value) })} aria-label="Year">
+                    {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="button buttonGhost buttonSm" onClick={() => setForm({ ...form, payInMonth: nextMonth.month, payInYear: nextMonth.year })}>
+                    Next month
+                  </button>
+                </div>
+                <span className="hint">If that month&apos;s payroll is missed, the claim is paid in the next one generated.</span>
+              </div>
+            ) : (
+              <>
+                <div className="field">
+                  <label htmlFor="cs-date">Paid on</label>
+                  <input id="cs-date" className="input" type="date" value={form.paidOn} onChange={(e) => setForm({ ...form, paidOn: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label htmlFor="cs-ref">{form.mode === "CHEQUE" ? "Cheque no." : form.mode === "BANK" ? "UTR / reference" : "Voucher / reference"}</label>
+                  <input id="cs-ref" className="input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="Optional" />
+                </div>
+              </>
+            )}
           </div>
         </Modal>
       )}

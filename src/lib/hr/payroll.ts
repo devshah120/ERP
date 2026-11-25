@@ -98,7 +98,17 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       .sort({ issueDate: 1 })
       .session(session)
       .lean<AnyDoc[]>(),
-    ExpenseClaim.find({ businessId: ctx.businessId, employeeId: { $in: ids }, status: "APPROVED", payrollRunId: null, claimDate: { $lte: end } }).session(session).lean<AnyDoc[]>(),
+    // Approved claims go into the next payroll, or the one HR chose on Claim Settlement (and any after it, if that month was missed).
+    ExpenseClaim.find({
+      businessId: ctx.businessId,
+      employeeId: { $in: ids },
+      status: "APPROVED",
+      payrollRunId: null,
+      claimDate: { $lte: end },
+      $or: [{ payInYear: null }, { payInYear: { $exists: false } }, { payInYear: { $lt: run.year } }, { payInYear: run.year, payInMonth: { $lte: run.month } }],
+    })
+      .session(session)
+      .lean<AnyDoc[]>(),
     employeeLabels(ctx.businessId, ids),
     salaryForMonth(ctx.businessId, emps, start, end, session),
     monthVariables(ctx.businessId, run.year, run.month, ids, session),

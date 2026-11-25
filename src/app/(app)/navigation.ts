@@ -193,6 +193,8 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr-holiday-calendars", label: "Holiday Calendars", enabled: true, createHref: "/hr-holiday-calendars/new", keywords: "holiday calendar state location list" },
           { href: "/hr/holidays/assign", label: "Assign Holiday Calendar", enabled: true, keywords: "assign holiday calendar employees location state" },
           { href: "/hr-attendance-reasons", label: "Attendance Reg. Reasons", enabled: true, createHref: "/hr-attendance-reasons/new", keywords: "regularization reason forgot to punch client visit on duty training" },
+          { href: "/hr/shifts/assign/employees", label: "Assign Shift to Employees", enabled: true, keywords: "assign shift employees timing roster general night" },
+          { href: "/hr/shifts/assign/contractors", label: "Assign Shift to Contractors", enabled: true, keywords: "assign shift contractor contract labour workers timing overtime" },
         ],
       },
       {
@@ -652,6 +654,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-holidays": "hr-holidays.view",
   "/hr-holiday-calendars": "hr-holidays.view",
   "/hr/holidays/assign": "hr-holidays.view",
+  "/hr/shifts/assign/employees": "hr-shifts.view",
+  "/hr/shifts/assign/contractors": "hr-shifts.view",
   "/hr/payroll": "hr-payroll.view",
   "/hr/payroll/variables": "hr-payroll.view",
   "/hr/payroll/variables/import": "hr-payroll.process",

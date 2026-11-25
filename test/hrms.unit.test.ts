@@ -5,7 +5,7 @@ import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
 import { eachDay, monthRange, toDay, dayKey, dayKind, shiftFor, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
 import { toForest } from "@/lib/hr/orgTree";
-import { dayOvertimeMinutes, overtimeHourlyRate, overtimeAmount, hoursOf } from "@/lib/hr/contractLabour";
+import { dayOvertimeMinutes, shiftLengthMinutes, overtimeHourlyRate, overtimeAmount, hoursOf } from "@/lib/hr/contractLabour";
 
 describe("product gating", () => {
   it("assigns permissions and screens to products", () => {
@@ -385,17 +385,21 @@ describe("holiday calendars", () => {
 describe("contract labour overtime", () => {
   const shift: ShiftRule = { id: "s", name: "General", startTime: "09:00", endTime: "17:00", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8, weeklyOffs: ["SUNDAY"] };
 
-  it("counts time beyond the shift's full day, honouring the contractor's minimum", () => {
-    expect(dayOvertimeMinutes(shift, "09:00", "19:30", "").overtimeMinutes).toBe(150);
-    expect(dayOvertimeMinutes(shift, "09:00", "17:20", "", 30).overtimeMinutes).toBe(0);
-    expect(dayOvertimeMinutes(shift, "09:00", "17:30", "", 30).overtimeMinutes).toBe(30);
+  it("counts time beyond the shift's length, honouring the contractor's minimum", () => {
+    expect(dayOvertimeMinutes(shift, "09:00", "19:30").overtimeMinutes).toBe(150);
+    expect(dayOvertimeMinutes(shift, "09:00", "17:20", 30).overtimeMinutes).toBe(0);
+    expect(dayOvertimeMinutes(shift, "09:00", "17:30", 30).overtimeMinutes).toBe(30);
     // Night shift crossing midnight.
-    expect(dayOvertimeMinutes(shift, "20:00", "06:00", "").overtimeMinutes).toBe(120);
+    expect(dayOvertimeMinutes({ ...shift, startTime: "20:00", endTime: "04:00" }, "20:00", "06:00").overtimeMinutes).toBe(120);
   });
 
-  it("lets typed-in hours win over the times", () => {
-    const t = dayOvertimeMinutes(shift, "09:00", "17:00", "1.5");
-    expect(t).toMatchObject({ overtimeMinutes: 90, manual: true, workedMinutes: 480 });
+  it("measures the shift from start to end, not by its full-day hours", () => {
+    // 09:30-18:30 is a 9-hour shift (8 working hours plus a break): in 09:30, out 19:00 is 30 minutes over.
+    const general = { ...shift, startTime: "09:30", endTime: "18:30", fullDayHours: 8 };
+    expect(shiftLengthMinutes(general)).toBe(540);
+    expect(dayOvertimeMinutes(general, "09:30", "19:00")).toEqual({ workedMinutes: 570, overtimeMinutes: 30 });
+    expect(dayOvertimeMinutes(general, "09:30", "18:30").overtimeMinutes).toBe(0);
+    expect(shiftLengthMinutes({ ...general, endTime: "09:30" })).toBe(480);
   });
 
   it("takes the worker's rate, else the fixed rate, else day wage ÷ hours × multiple", () => {

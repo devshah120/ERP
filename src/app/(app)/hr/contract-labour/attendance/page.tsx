@@ -18,12 +18,12 @@ interface SheetRow {
   workerCode: string;
   name: string;
   phone: string;
-  contractors: { id: string; name: string; code: string }[];
+  contractors: { id: string; name: string; code: string; minOvertimeMinutes: number }[];
   contractorId: string;
-  shift: { name: string; startTime: string; endTime: string; fullDayHours: number };
+  shift: { name: string; startTime: string; endTime: string; lengthMinutes: number };
   dayKind: "WORKING" | "WEEKLY_OFF" | "HOLIDAY";
   suggested: string;
-  record: { status: string; checkIn: string; checkOut: string; workedMinutes: number; overtimeMinutes: number; overtimeManual: boolean; notes: string } | null;
+  record: { status: string; checkIn: string; checkOut: string; workedMinutes: number; overtimeMinutes: number; notes: string } | null;
 }
 
 interface Sheet {
@@ -40,7 +40,6 @@ interface Draft {
   status: string;
   checkIn: string;
   checkOut: string;
-  overtimeHours: string;
   notes: string;
 }
 
@@ -63,13 +62,14 @@ function minutesOf(t: string): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-/** Overtime the server will work out from the times (shown until saved; the server's figure is the one kept). */
-function autoOvertime(checkIn: string, checkOut: string, fullDayHours: number): number {
+/** Worked and overtime minutes for typed times, as the server works them out: time beyond the shift's length. */
+function liveTimes(checkIn: string, checkOut: string, shiftMinutes: number, minOvertime: number): { worked: number; overtime: number } {
   const a = minutesOf(checkIn);
   const b = minutesOf(checkOut);
-  if (a === null || b === null) return 0;
+  if (a === null || b === null) return { worked: 0, overtime: 0 };
   const worked = b >= a ? b - a : b + 24 * 60 - a;
-  return Math.max(0, worked - fullDayHours * 60);
+  const over = Math.max(0, worked - shiftMinutes);
+  return { worked, overtime: over > 0 && over >= minOvertime ? over : 0 };
 }
 
 export default function LabourAttendancePage() {
@@ -101,10 +101,9 @@ export default function LabourAttendancePage() {
               status: r.record.status,
               checkIn: r.record.checkIn,
               checkOut: r.record.checkOut,
-              overtimeHours: r.record.overtimeManual ? (r.record.overtimeMinutes / 60).toFixed(2).replace(/\.?0+$/, "") : "",
               notes: r.record.notes,
             }
-          : { contractorId: r.contractorId, status: r.suggested, checkIn: "", checkOut: "", overtimeHours: "", notes: "" };
+          : { contractorId: r.contractorId, status: r.suggested, checkIn: "", checkOut: "", notes: "" };
       }
       setDrafts(next);
       setDirty(new Set());
@@ -231,7 +230,7 @@ export default function LabourAttendancePage() {
               <th>In</th>
               <th>Out</th>
               <th>Worked</th>
-              <th title="Leave blank to work it out from the times">Overtime (hrs)</th>
+              <th title="Time worked beyond the shift's length">Overtime</th>
               <th>Note</th>
             </tr>
           </thead>
@@ -259,7 +258,10 @@ export default function LabourAttendancePage() {
               if (!d) return null;
               const working = d.status === "PRESENT" || d.status === "HALF_DAY";
               const locked = !canEdit;
-              const auto = working ? autoOvertime(d.checkIn, d.checkOut, r.shift.fullDayHours) : 0;
+              const minOt = r.contractors.find((c) => c.id === d.contractorId)?.minOvertimeMinutes ?? 0;
+              // Unsaved edits show the figure the server will store; saved rows show the stored one.
+              const live = working ? liveTimes(d.checkIn, d.checkOut, r.shift.lengthMinutes, minOt) : { worked: 0, overtime: 0 };
+              const shown = dirty.has(r.workerId) || !r.record ? live : { worked: r.record.workedMinutes, overtime: r.record.overtimeMinutes };
               return (
                 <tr key={r.workerId} style={dirty.has(r.workerId) ? { background: "var(--accent-soft)" } : undefined}>
                   <td>
@@ -304,18 +306,9 @@ export default function LabourAttendancePage() {
                   <td>
                     <input type="time" className="input attTime" value={d.checkOut} disabled={locked || !working} onChange={(e) => setDraft(r.workerId, { checkOut: e.target.value })} aria-label="Check out" />
                   </td>
-                  <td className="numCell">{minutesLabel(r.record?.workedMinutes ?? 0)}</td>
-                  <td>
-                    <input
-                      className="input attTime"
-                      inputMode="decimal"
-                      value={d.overtimeHours}
-                      disabled={locked || !working}
-                      onChange={(e) => setDraft(r.workerId, { overtimeHours: e.target.value.trim() })}
-                      placeholder={dirty.has(r.workerId) ? (auto ? (auto / 60).toFixed(2) : "0") : r.record && !r.record.overtimeManual ? (r.record.overtimeMinutes / 60).toFixed(2) : "auto"}
-                      aria-label={`Overtime hours for ${r.name}`}
-                      title="Blank = worked beyond the shift's full day"
-                    />
+                  <td className="numCell">{minutesLabel(shown.worked)}</td>
+                  <td className="numCell" title={`Beyond the ${minutesLabel(r.shift.lengthMinutes)} shift${minOt ? `; under ${minOt} min is not counted` : ""}`}>
+                    {shown.overtime > 0 ? <strong>{minutesLabel(shown.overtime)}</strong> : <span className="cellMuted">—</span>}
                   </td>
                   <td>
                     <input className="input" style={{ minWidth: "8rem" }} value={d.notes} disabled={locked} onChange={(e) => setDraft(r.workerId, { notes: e.target.value })} />

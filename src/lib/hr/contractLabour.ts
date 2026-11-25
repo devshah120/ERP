@@ -6,7 +6,7 @@ import { recordAudit } from "@/lib/services/auditService";
 import { Employee, Shift } from "@/models/hr";
 import { Contractor, ContractWorker, ContractAttendance, CONTRACT_ATTENDANCE_STATUSES } from "@/models/contractLabour";
 import type { AuthContext } from "@/lib/auth/context";
-import { toDay, dayKey, monthRange, loadCalendar, shiftFor, dayKind, holidaysFor, type HrCalendar, type ShiftRule } from "./calendar";
+import { toDay, dayKey, monthRange, minutesOf, loadCalendar, shiftFor, dayKind, holidaysFor, type HrCalendar, type ShiftRule } from "./calendar";
 import { computeTimes } from "./attendance";
 import { toForest } from "./orgTree";
 import { objectId, type AnyDoc } from "./common";
@@ -66,14 +66,23 @@ export async function assertWorkerContractors(businessId: Types.ObjectId, ids: u
 /* Pure rules                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Overtime minutes of a day: typed-in hours win, else worked beyond the shift's full day (below the minimum = none). */
-export function dayOvertimeMinutes(shift: ShiftRule, checkIn: string, checkOut: string, manualHours: string, minOvertimeMinutes = 0) {
-  const times = computeTimes(shift, checkIn, checkOut);
-  if (manualHours.trim() !== "") {
-    return { workedMinutes: times.workedMinutes, overtimeMinutes: dec(manualHours).times(60).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber(), manual: true };
-  }
-  const ot = times.overtimeMinutes >= Math.max(0, minOvertimeMinutes) ? times.overtimeMinutes : 0;
-  return { workedMinutes: times.workedMinutes, overtimeMinutes: ot, manual: false };
+/** Length of the shift from its start to its end time (a night shift runs past midnight). */
+export function shiftLengthMinutes(shift: Pick<ShiftRule, "startTime" | "endTime" | "fullDayHours">): number {
+  const start = minutesOf(shift.startTime);
+  const end = minutesOf(shift.endTime);
+  if (start === null || end === null || start === end) return shift.fullDayHours * 60;
+  return end > start ? end - start : end + 24 * 60 - start;
+}
+
+/**
+ * Overtime of a day: time worked beyond the shift's length (09:30–18:30 is
+ * 9 hours, so out at 19:00 after in at 09:30 is 30 minutes). Overtime below
+ * the contractor's minimum is not counted. Always worked out, never typed in.
+ */
+export function dayOvertimeMinutes(shift: ShiftRule, checkIn: string, checkOut: string, minOvertimeMinutes = 0) {
+  const { workedMinutes } = computeTimes(shift, checkIn, checkOut);
+  const over = Math.max(0, workedMinutes - shiftLengthMinutes(shift));
+  return { workedMinutes, overtimeMinutes: over > 0 && over >= Math.max(0, minOvertimeMinutes) ? over : 0 };
 }
 
 export interface OvertimeTerms {
@@ -228,9 +237,14 @@ export async function labourSheet(ctx: AuthContext, dateStr: string, contractorI
         workerCode: w.workerCode as string,
         name: w.name as string,
         phone: (w.phone as string) ?? "",
-        contractors: options.map((id) => ({ id, name: contractors.get(id).name as string, code: contractors.get(id).contractorCode as string })),
+        contractors: options.map((id) => ({
+          id,
+          name: contractors.get(id).name as string,
+          code: contractors.get(id).contractorCode as string,
+          minOvertimeMinutes: Number(contractors.get(id).minOvertimeMinutes ?? 0),
+        })),
         contractorId: defaultContractor,
-        shift: { name: shift.name, startTime: shift.startTime, endTime: shift.endTime, fullDayHours: shift.fullDayHours },
+        shift: { name: shift.name, startTime: shift.startTime, endTime: shift.endTime, lengthMinutes: shiftLengthMinutes(shift) },
         dayKind: kind,
         suggested: kind === "HOLIDAY" ? "HOLIDAY" : kind === "WEEKLY_OFF" ? "WEEKLY_OFF" : "PRESENT",
         record: rec
@@ -240,7 +254,6 @@ export async function labourSheet(ctx: AuthContext, dateStr: string, contractorI
               checkOut: (rec.checkOut as string) ?? "",
               workedMinutes: (rec.workedMinutes as number) ?? 0,
               overtimeMinutes: (rec.overtimeMinutes as number) ?? 0,
-              overtimeManual: Boolean(rec.overtimeManual),
               notes: (rec.notes as string) ?? "",
             }
           : null,
@@ -279,14 +292,6 @@ export const saveLabourSheetSchema = z.object({
         status: z.enum(CONTRACT_ATTENDANCE_STATUSES),
         checkIn: hhmm,
         checkOut: hhmm,
-        /** Blank = work it out from the times. */
-        overtimeHours: z
-          .string()
-          .trim()
-          .regex(/^(\d{1,2}(\.\d{1,2})?)?$/, "Overtime is hours, e.g. 1.5")
-          .refine((v) => v === "" || Number(v) <= 24, "Overtime can't be more than 24 hours")
-          .optional()
-          .default(""),
         notes: z.string().trim().max(300).optional().default(""),
       })
     )
@@ -312,8 +317,8 @@ export async function saveLabourSheet(ctx: AuthContext, input: z.infer<typeof sa
     const working = WORKING.has(row.status);
     const shift = workerShift(cal, worker, contractor);
     const t = working
-      ? dayOvertimeMinutes(shift, row.checkIn, row.checkOut, row.overtimeHours, Number(contractor.minOvertimeMinutes ?? 0))
-      : { workedMinutes: 0, overtimeMinutes: 0, manual: false };
+      ? dayOvertimeMinutes(shift, row.checkIn, row.checkOut, Number(contractor.minOvertimeMinutes ?? 0))
+      : { workedMinutes: 0, overtimeMinutes: 0 };
     overtimeMinutes += t.overtimeMinutes;
     ops.push({
       updateOne: {
@@ -326,7 +331,7 @@ export async function saveLabourSheet(ctx: AuthContext, input: z.infer<typeof sa
             checkOut: working ? row.checkOut : "",
             workedMinutes: t.workedMinutes,
             overtimeMinutes: t.overtimeMinutes,
-            overtimeManual: t.manual,
+            overtimeManual: false,
             notes: row.notes,
             updatedBy: ctx.userId,
           },

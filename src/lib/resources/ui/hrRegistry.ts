@@ -1,4 +1,5 @@
 import type { ResourceUi, FieldConfig } from "./types";
+import { shiftHours } from "@/lib/hr/shiftHours";
 
 /** Screens for the HRMS masters in src/lib/resources/hrRegistry.ts. */
 
@@ -133,6 +134,7 @@ const shifts = master("hr-shifts", "Shifts", "Shift", {
     { key: "name", label: "Shift", filterParam: "name", sortField: "name" },
     { key: "startTime", label: "Starts", sortField: "startTime" },
     { key: "endTime", label: "Ends" },
+    { key: "fullDayHours", label: "Full day (h)", type: "number" },
     { key: "graceMinutes", label: "Grace (min)", type: "number" },
     { key: "weeklyOff1", label: "Weekly off", type: "label", labels: WEEKDAY_LABELS },
     { key: "weeklyOff2", label: "2nd weekly off", type: "label", labels: WEEKDAY_LABELS },
@@ -147,8 +149,14 @@ const shifts = master("hr-shifts", "Shifts", "Shift", {
         { name: "startTime", label: "Start time", type: "text", required: true, defaultValue: "09:30", placeholder: "09:30", hint: "24-hour HH:mm" },
         { name: "endTime", label: "End time", type: "text", required: true, defaultValue: "18:30", placeholder: "18:30", hint: "24-hour HH:mm" },
         { name: "graceMinutes", label: "Late grace (minutes)", type: "number", defaultValue: 15 },
-        { name: "fullDayHours", label: "Hours for a full day", type: "number", defaultValue: 8 },
-        { name: "halfDayHours", label: "Hours for a half day", type: "number", defaultValue: 4, hint: "Less than this is absent" },
+        { name: "fullDayHours", label: "Hours for a full day", type: "number", hint: "Start to end time", compute: (s) => shiftHours(String(s.startTime ?? ""), String(s.endTime ?? ""), { fullDayHours: 0, halfDayHours: 0 }).fullDayHours },
+        {
+          name: "halfDayHours",
+          label: "Hours for a half day",
+          type: "number",
+          hint: "Half a full day; less than this is absent",
+          compute: (s) => shiftHours(String(s.startTime ?? ""), String(s.endTime ?? ""), { fullDayHours: 0, halfDayHours: 0 }).halfDayHours,
+        },
       ],
     },
     {
@@ -763,8 +771,106 @@ const payComponents = master("hr-pay-components", "Pay Components", "Pay compone
   ],
 });
 
+const MONTH_OPTIONS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => ({ value: String(i + 1), label: m }));
+
+const incentiveMatrices = master("hr-incentive-matrices", "Incentive Matrix", "Incentive matrix", {
+  permissions: { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Matrix", filterParam: "name", sortField: "name" },
+    { key: "period", label: "Period", type: "label", labels: { CALENDAR_YEAR: "Calendar year (Jan–Dec)", FINANCIAL_YEAR: "Financial year (Apr–Mar)" } },
+    { key: "basis", label: "Slabs on", type: "label", labels: { DAYS: "Days present", PERCENT: "% of days employed" } },
+    { key: "slabs", label: "Slabs", type: "count" },
+    {
+      key: "payoutMonth",
+      label: "Paid in",
+      type: "label",
+      labels: Object.fromEntries(MONTH_OPTIONS.map((o) => [o.value, o.label])),
+    },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Matrix",
+      fields: [
+        { name: "name", label: "Name", type: "text", required: true, placeholder: "Attendance incentive" },
+        { name: "code", label: "Code", type: "text", hint: "Leave blank to number automatically" },
+        {
+          name: "period",
+          label: "Attendance year",
+          type: "select",
+          defaultValue: "CALENDAR_YEAR",
+          options: [
+            { value: "CALENDAR_YEAR", label: "Calendar year (January–December)" },
+            { value: "FINANCIAL_YEAR", label: "Financial year (April–March)" },
+          ],
+        },
+        { name: "payoutMonth", label: "Paid with the payroll of", type: "select", defaultValue: "1", options: MONTH_OPTIONS, hint: "The first such month after the year ends" },
+        statusField,
+      ],
+    },
+    {
+      label: "Slabs",
+      description: "The highest slab an employee reaches decides their incentive, e.g. 250 days present → 5 days' salary.",
+      fields: [
+        {
+          name: "basis",
+          label: "Slabs are",
+          type: "select",
+          defaultValue: "DAYS",
+          options: [
+            { value: "DAYS", label: "Days present in the year" },
+            { value: "PERCENT", label: "% of the days employed (fair to mid-year joiners)" },
+          ],
+        },
+        {
+          name: "slabs",
+          label: "Slabs",
+          type: "lines",
+          addLabel: "Add slab",
+          defaultValue: [
+            { minValue: 250, incentiveDays: 5 },
+            { minValue: 280, incentiveDays: 7 },
+          ],
+          columns: [
+            { name: "minValue", label: "Present at least (days or %)", type: "number", required: true },
+            { name: "incentiveDays", label: "Incentive (days' salary)", type: "number", required: true },
+          ],
+        },
+      ],
+    },
+    {
+      label: "What counts as present",
+      description: "Marked present days always count, half days as half. Holidays and weekly offs never count.",
+      fields: [
+        { name: "countOnDuty", label: "On duty / field days", type: "checkbox", defaultValue: true },
+        { name: "countUnmarked", label: "Working days left unmarked (payroll pays them as present)", type: "checkbox", defaultValue: true },
+        { name: "countPaidLeave", label: "Paid leave", type: "checkbox", defaultValue: false },
+      ],
+    },
+    {
+      label: "Day's salary",
+      fields: [
+        {
+          name: "salaryBasis",
+          label: "One day's salary is",
+          type: "select",
+          defaultValue: "GROSS",
+          options: [
+            { value: "GROSS", label: "Monthly gross ÷ divisor" },
+            { value: "BASIC", label: "Monthly basic ÷ divisor" },
+          ],
+        },
+        { name: "dayDivisor", label: "Divisor (days)", type: "number", defaultValue: 30, hint: "Usually 30 or 26" },
+        { name: "description", label: "Notes", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
 export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-pay-components": payComponents,
+  "hr-incentive-matrices": incentiveMatrices,
   "hr-departments": departments,
   "hr-designations": designations,
   "hr-grades": grades,

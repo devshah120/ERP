@@ -54,7 +54,7 @@ export async function seedHrDefaults(businessId: Types.ObjectId, session?: Clien
 
   if ((await Shift.countDocuments(live, opts)) === 0) {
     await Shift.create(
-      [{ businessId, name: "General Shift", startTime: "09:30", endTime: "18:30", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8, weeklyOff1: "SUNDAY", weeklyOff2: "", isDefault: true }],
+      [{ businessId, name: "General Shift", startTime: "09:30", endTime: "18:30", graceMinutes: 15, halfDayHours: 4.5, fullDayHours: 9, weeklyOff1: "SUNDAY", weeklyOff2: "", isDefault: true }],
       opts
     );
   }

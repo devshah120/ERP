@@ -1186,16 +1186,16 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     // Booking a worker to a contractor they don't work for is refused.
     await expect(saveLabourSheet(ctx, saveLabourSheetSchema.parse({ date: day, rows: [row(ravi!._id, main!._id, "PRESENT")] }))).rejects.toMatchObject({ code: "WORKER_NOT_UNDER_CONTRACTOR" });
 
-    // Overtime: Suresh under Ramesh 2h × (600 ÷ 8 × 2 = 150) = 300; Ravi under Kiran 2.5h × fixed 120 = 300.
+    // Overtime: Suresh under Ramesh 2h × (600 ÷ 9-hour shift × 2 = 133.33) = 266.66; Ravi under Kiran 2.5h × fixed 120 = 300.
     const report = await overtimeReport(ctx, 2027, 3);
     const line = (name: string, contractor: string) => report.rows.find((r) => r.name === name && r.contractor === contractor)!;
-    expect(line("Suresh Kumar", "Ramesh Patel")).toMatchObject({ presentDays: 1, wages: "600.00", overtimeHours: "2.00", overtimeRate: "150.00", overtimeAmount: "300.00", total: "900.00" });
+    expect(line("Suresh Kumar", "Ramesh Patel")).toMatchObject({ presentDays: 1, wages: "600.00", overtimeHours: "2.00", overtimeRate: "133.33", overtimeAmount: "266.66", total: "866.66" });
     expect(line("Suresh Kumar", "Kiran Builders")).toMatchObject({ halfDays: 1, payableDays: "0.5", dailyWage: "500.00", wages: "250.00", overtimeAmount: "0.00" });
     expect(line("Ravi Das", "Kiran Builders")).toMatchObject({ overtimeHours: "2.50", overtimeRate: "120.00", overtimeAmount: "300.00", wages: "500.00" });
     expect(line("Anil Yadav", "Kiran Builders")).toMatchObject({ dailyWage: "700.00", wages: "700.00", overtimeAmount: "0.00" });
     expect(line("Anil Yadav", "Ramesh Patel")).toMatchObject({ absentDays: 1, wages: "0.00" });
-    expect(report.totals).toMatchObject({ overtimeHours: "4.50", overtimeAmount: "600.00", wages: "2050.00", total: "2650.00" });
-    expect((await overtimeReport(ctx, 2027, 3, String(main!._id))).totals.overtimeAmount).toBe("300.00");
+    expect(report.totals).toMatchObject({ overtimeHours: "4.50", overtimeAmount: "566.66", wages: "2050.00", total: "2616.66" });
+    expect((await overtimeReport(ctx, 2027, 3, String(main!._id))).totals.overtimeAmount).toBe("266.66");
   });
 
   it("runs advance requests and claim settlement: approve, set off claims against an advance, pay claims directly", async () => {
@@ -1269,5 +1269,45 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     const suresh = await ContractWorker.findOne({ businessId, name: "Suresh Kumar" }).lean<{ _id: Types.ObjectId }>();
     await saveLabourSheet(ctx, saveLabourSheetSchema.parse({ date: "2027-03-04", rows: [{ workerId: String(suresh!._id), contractorId: String(main!._id), status: "PRESENT", checkIn: "08:00", checkOut: "17:00" }] }));
     expect(await ContractAttendance.findOne({ businessId, workerId: suresh!._id, date: new Date("2027-03-04T00:00:00Z") }).lean()).toMatchObject({ workedMinutes: 540, overtimeMinutes: 60 });
+  });
+
+  it("counts a year of attendance and adds the attendance incentive to January payroll", async () => {
+    const { attendanceIncentive, postIncentive, incentiveQuery } = await import("@/lib/hr/incentive");
+    const { monthVariables } = await import("@/lib/hr/variables");
+    const { Employee, Attendance, IncentiveMatrix } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+
+    const emp = await Employee.create({ businessId: bId, employeeCode: "EMP-INC-01", name: "Incentive Tester", dateOfJoining: new Date("2025-01-01"), employmentStatus: "CONFIRMED", basic: "20000", hra: "10000" });
+    const matrix = await IncentiveMatrix.create({ businessId: bId, code: "INC-T", name: "Attendance incentive", slabs: [{ minValue: 250, incentiveDays: 5 }, { minValue: 300, incentiveDays: 7 }] });
+    const q = incentiveQuery.parse({ matrixId: String(matrix._id), year: 2025 });
+    const mine = async () => (await attendanceIncentive(ctx, q)).rows.find((r) => r.employeeId === String(emp._id))!;
+
+    // Nothing marked: every working day is unmarked and counts as present.
+    const before = await mine();
+    expect(before.daysEmployed).toBe(365);
+    expect(before.workingDays).toBe(365 - before.weeklyOffs - before.holidays);
+    expect(before.eligibleDays).toBe(before.workingDays);
+    expect(before.workingDays).toBeGreaterThanOrEqual(300);
+    expect(before).toMatchObject({ incentiveDays: 7, dayRate: "1000.00", amount: "7000.00", status: "PAYABLE", posted: null });
+
+    // Absent on every Monday of 2025 drops them under 300 days present: the 250 slab pays 5 days.
+    const mondays = [];
+    for (let d = new Date(Date.UTC(2025, 0, 6)); d.getUTCFullYear() === 2025; d = new Date(d.getTime() + 7 * 86400000)) mondays.push(d);
+    await Attendance.insertMany(mondays.map((date) => ({ businessId: bId, employeeId: emp._id, date, status: "ABSENT" })));
+    const after = await mine();
+    expect(after.absent).toBe(mondays.length);
+    expect(after.eligibleDays).toBe(before.eligibleDays - mondays.length);
+    expect(after).toMatchObject({ incentiveDays: 5, amount: "5000.00" });
+
+    // Added to January 2026 payroll as variable pay, and picked up by payroll.
+    const posted = await postIncentive(ctx, q);
+    expect(posted.payout).toBe("January 2026");
+    const lines = (await monthVariables(bId, 2026, 1, [emp._id])).get(String(emp._id));
+    expect(lines).toEqual([expect.objectContaining({ code: "ATT_INC", kind: "EARNING", amount: "5000.00" })]);
+    expect((await mine()).posted).toBe("5000.00");
+
+    // Posting again replaces the amount rather than adding a second one.
+    await postIncentive(ctx, q);
+    expect((await monthVariables(bId, 2026, 1, [emp._id])).get(String(emp._id))).toHaveLength(1);
   });
 });

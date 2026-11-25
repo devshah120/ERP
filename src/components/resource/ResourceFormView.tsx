@@ -87,6 +87,7 @@ function buildPayload(config: ResourceUi, state: FormState): Record<string, unkn
     for (const field of section.fields) {
       if (!isShown(field, state)) continue;
       if (field.type === "image") continue; // uploaded on its own after the record is saved
+      if (field.compute) continue; // worked out on the server from the other fields
       const value = getPath(state, field.name);
 
       if (field.type === "lines") {
@@ -440,6 +441,10 @@ export default function ResourceFormView({
     const error = fieldErrors[field.name];
 
     const control = (() => {
+      if (field.compute) {
+        const computed = field.compute(state);
+        return <input id={`f-${field.name}`} className="input" value={computed === undefined || computed === null ? "" : String(computed)} readOnly tabIndex={-1} aria-readonly="true" />;
+      }
       if (field.variantOf) {
         const itemId = String(getPath(state, field.variantOf) ?? "");
         const variants = (referenceOptions[field.variantOf] ?? []).find((o) => o.value === itemId)?.variants ?? [];

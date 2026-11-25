@@ -1,6 +1,9 @@
 import type { Types } from "mongoose";
 import { Holiday, HolidayCalendar, Shift, Employee, WEEKDAYS, WORKING_STATUSES } from "@/models/hr";
 import { AppError } from "@/lib/errors/AppError";
+import { shiftHours } from "./shiftHours";
+
+export { shiftHours };
 
 /**
  * Calendar days in HR are stored as UTC midnight of the date, so "2026-11-22"
@@ -87,8 +90,7 @@ const FALLBACK_SHIFT: ShiftRule = {
   startTime: "09:30",
   endTime: "18:30",
   graceMinutes: 15,
-  halfDayHours: 4,
-  fullDayHours: 8,
+  ...shiftHours("09:30", "18:30"),
   weeklyOffs: ["SUNDAY"],
 };
 
@@ -146,8 +148,7 @@ export async function loadCalendar(businessId: Types.ObjectId, from: Date, to: D
       startTime: s.startTime,
       endTime: s.endTime,
       graceMinutes: s.graceMinutes ?? 0,
-      halfDayHours: s.halfDayHours ?? 4,
-      fullDayHours: s.fullDayHours ?? 8,
+      ...shiftHours(s.startTime, s.endTime, { fullDayHours: s.fullDayHours ?? 8, halfDayHours: s.halfDayHours ?? 4 }),
       weeklyOffs: [s.weeklyOff1, s.weeklyOff2].filter(Boolean),
     });
   }

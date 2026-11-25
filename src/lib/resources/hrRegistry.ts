@@ -7,6 +7,7 @@ import { recordFormWrite } from "@/lib/hr/history";
 import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin";
 import { ensureAttendanceReasons } from "@/lib/hr/regularization";
 import { keepSingleDefault } from "@/lib/hr/holidayCalendars";
+import { shiftHours } from "@/lib/hr/shiftHours";
 import { migrateLegacyGradeGroups, assertGradeGroupAllowed } from "@/lib/hr/leaveGroups";
 import { assertContractorParent, assertWorkerContractors } from "@/lib/hr/contractLabour";
 import { Contractor, ContractWorker, CONTRACT_STATUSES, SKILL_CATEGORIES, OVERTIME_RATE_TYPES } from "@/models/contractLabour";
@@ -41,6 +42,10 @@ import {
   APPRAISAL_STAGES,
   PayComponent,
   PAY_COMPONENT_KINDS,
+  IncentiveMatrix,
+  INCENTIVE_PERIODS,
+  INCENTIVE_BASES,
+  INCENTIVE_SALARY_BASES,
 } from "@/models/hr";
 import type { ResourceDefinition } from "./types";
 import { STATUS, permissionsFor, documentConverter, optionalRef, optionalDate, requiredDate } from "./helpers";
@@ -153,8 +158,9 @@ const shifts = define("hr-shifts", "Shift", {
     startTime: time.default("09:30"),
     endTime: time.default("18:30"),
     graceMinutes: z.coerce.number().int().min(0).max(240).default(15),
-    halfDayHours: z.coerce.number().min(0).max(24).default(4),
-    fullDayHours: z.coerce.number().min(0).max(24).default(8),
+    // Worked out from the times on save (see toDocument); any value sent is ignored.
+    halfDayHours: z.coerce.number().min(0).max(24).optional(),
+    fullDayHours: z.coerce.number().min(0).max(24).optional(),
     weeklyOff1: z.enum([...WEEKDAYS, ""]).default("SUNDAY"),
     weeklyOff2: z.enum([...WEEKDAYS, ""]).default(""),
     isDefault: z.coerce.boolean().default(false),
@@ -166,6 +172,22 @@ const shifts = define("hr-shifts", "Shift", {
   sortableFields: ["name", "startTime", "createdAt"],
   defaultSort: "name",
   defaultSortDir: "asc",
+  // Shifts saved before the hours came from the times are brought in line when the list is opened.
+  beforeList: async (businessId) => {
+    const rows = await Shift.find({ businessId, deletedAt: null }, { startTime: 1, endTime: 1, fullDayHours: 1, halfDayHours: 1 }).lean<{ _id: unknown; startTime: string; endTime: string; fullDayHours: number; halfDayHours: number }[]>();
+    const ops = rows
+      .map((r) => ({ r, h: shiftHours(r.startTime, r.endTime, { fullDayHours: r.fullDayHours, halfDayHours: r.halfDayHours }) }))
+      .filter(({ r, h }) => h.fullDayHours !== r.fullDayHours || h.halfDayHours !== r.halfDayHours)
+      .map(({ r, h }) => ({ updateOne: { filter: { _id: r._id, businessId }, update: { $set: h } } }));
+    if (ops.length > 0) await Shift.bulkWrite(ops);
+  },
+  toDocument: (input) => {
+    const { fullDayHours: _full, halfDayHours: _half, ...rest } = input;
+    void _full;
+    void _half;
+    // The form always sends both times; a full day is start to end, a half day half of it.
+    return rest.startTime && rest.endTime ? { ...rest, ...shiftHours(String(rest.startTime), String(rest.endTime)) } : rest;
+  },
 });
 
 const holidays = define("hr-holidays", "Holiday", {
@@ -705,8 +727,59 @@ const payComponents: ResourceDefinition = {
   permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
 };
 
+const incentiveSlab = z.object({
+  minValue: z.coerce.number().min(0, "Can't be negative").max(366),
+  incentiveDays: z.coerce.number().min(0, "Can't be negative").max(60, "At most 60 days"),
+});
+
+/** Attendance incentive matrices ride on the payroll permissions. */
+const incentiveMatrices: ResourceDefinition = {
+  ...define("hr-incentive-matrices", "Incentive matrix", {
+    model: IncentiveMatrix,
+    autoCode: { field: "code", prefix: "INC", entityType: "HR_INCENTIVE_MATRIX" },
+    fields: {
+      code: optionalCode,
+      name: z.string().trim().min(2).max(100),
+      period: z.enum(INCENTIVE_PERIODS).default("CALENDAR_YEAR"),
+      basis: z.enum(INCENTIVE_BASES).default("DAYS"),
+      // Checked on the array itself so edits are held to it too (refine runs on create only).
+      slabs: z
+        .array(incentiveSlab)
+        .min(1, "Add at least one slab")
+        .max(30)
+        .superRefine((rows, ctx) => {
+          const seen = new Set<number>();
+          rows.forEach((r, i) => {
+            if (seen.has(r.minValue)) ctx.addIssue({ code: "custom", path: [i, "minValue"], message: "Two slabs start at the same value" });
+            seen.add(r.minValue);
+          });
+        }),
+      countOnDuty: z.coerce.boolean().default(true),
+      countUnmarked: z.coerce.boolean().default(true),
+      countPaidLeave: z.coerce.boolean().default(false),
+      salaryBasis: z.enum(INCENTIVE_SALARY_BASES).default("GROSS"),
+      dayDivisor: z.coerce.number().int().min(1).max(31).default(30),
+      payoutMonth: z.coerce.number().int().min(1).max(12).default(1),
+      description: optionalText(500),
+      status,
+    },
+    refine: (v, ctx) => {
+      if (v.basis === "PERCENT" && Array.isArray(v.slabs) && (v.slabs as { minValue: number }[]).some((r) => r.minValue > 100)) {
+        ctx.addIssue({ code: "custom", path: ["slabs"], message: "Percentage slabs go up to 100" });
+      }
+    },
+    searchFields: ["code", "name"],
+    filterFields: { code: "code", name: "name" },
+    sortableFields: ["code", "name", "createdAt"],
+    defaultSort: "name",
+    defaultSortDir: "asc",
+  }),
+  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+};
+
 export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-pay-components": payComponents,
+  "hr-incentive-matrices": incentiveMatrices,
   "hr-departments": departments,
   "hr-designations": designations,
   "hr-grades": grades,

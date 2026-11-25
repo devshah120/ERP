@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, ApiError } from "@/lib/api/client";
 
 /** Small building blocks shared by the HRMS screens. */
 
@@ -179,3 +179,12 @@ export const CLAIM_CATEGORY_LABELS: Record<string, string> = {
   OFFICE_SUPPLIES: "Office supplies",
   OTHER: "Other",
 };
+
+/** What went wrong, for a form: a validation failure lists each field's message instead of just "Validation failed". */
+export function apiErrorText(err: unknown, fallback = "Something went wrong"): string {
+  if (!(err instanceof ApiError)) return fallback;
+  const details = Array.isArray(err.errors)
+    ? [...new Set((err.errors as { message?: string }[]).map((e) => e?.message).filter((m): m is string => Boolean(m)))]
+    : [];
+  return details.length > 0 ? details.join(" · ") : err.message;
+}

@@ -18,6 +18,20 @@ export const HR_REPORTS = [
     description: "Present, absent, leave, late and loss-of-pay days per employee for a month.",
     keywords: "attendance present absent late lop monthly",
   },
+  {
+    key: "yearly-attendance",
+    label: "Yearly working days",
+    needs: "year",
+    description: "Each employee's year: days employed, weekly offs, holidays, working days, present, leave and absent days.",
+    keywords: "yearly annual working days holidays weekly off present absent leave attendance",
+  },
+  {
+    key: "attendance-incentive",
+    label: "Attendance incentive",
+    needs: "year",
+    description: "Days counted, the slab reached and the incentive per employee, from the first active incentive matrix.",
+    keywords: "attendance incentive matrix slab reward days salary january",
+  },
   { key: "leave-register", label: "Leave register", needs: "year", description: "Every leave request filed in a year.", keywords: "leave register applications yearly" },
   {
     key: "salary-register",

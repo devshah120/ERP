@@ -8,6 +8,7 @@ import { Contractor, ContractWorker, ContractAttendance, CONTRACT_ATTENDANCE_STA
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, monthRange, minutesOf, loadCalendar, shiftFor, dayKind, holidaysFor, type HrCalendar, type ShiftRule } from "./calendar";
 import { computeTimes } from "./attendance";
+import { shiftHours } from "./shiftHours";
 import { toForest } from "./orgTree";
 import { objectId, type AnyDoc } from "./common";
 
@@ -396,13 +397,14 @@ export async function overtimeReport(ctx: AuthContext, year: number, month: numb
   const [workers, contractors, shifts] = await Promise.all([
     ContractWorker.find({ businessId: ctx.businessId, _id: { $in: [...new Set(records.map((r) => String(r.workerId)))] } }).lean<AnyDoc[]>(),
     Contractor.find({ businessId: ctx.businessId, _id: { $in: [...new Set(records.map((r) => String(r.contractorId)))] } }).lean<AnyDoc[]>(),
-    Shift.find({ businessId: ctx.businessId }, { fullDayHours: 1, isDefault: 1, status: 1, deletedAt: 1 }).lean<AnyDoc[]>(),
+    Shift.find({ businessId: ctx.businessId }, { startTime: 1, endTime: 1, fullDayHours: 1, isDefault: 1, status: 1, deletedAt: 1 }).lean<AnyDoc[]>(),
   ]);
   const wById = new Map(workers.map((w) => [String(w._id), w]));
   const cById = new Map(contractors.map((c) => [String(c._id), c]));
-  const shiftHours = new Map(shifts.map((s) => [String(s._id), Number(s.fullDayHours ?? 8)]));
+  const hoursOfShift = (s: AnyDoc) => shiftHours(s.startTime, s.endTime, { fullDayHours: Number(s.fullDayHours ?? 8), halfDayHours: 0 }).fullDayHours;
+  const fullDayBy = new Map(shifts.map((s) => [String(s._id), hoursOfShift(s)]));
   const def = shifts.find((s) => s.isDefault && !s.deletedAt && s.status === "ACTIVE");
-  const defaultHours = def ? Number(def.fullDayHours ?? 8) : 8;
+  const defaultHours = def ? hoursOfShift(def) : shiftHours("09:30", "18:30").fullDayHours;
 
   type Acc = { present: number; half: number; absent: number; otDays: number; otMinutes: number };
   const groups = new Map<string, Acc>();
@@ -427,7 +429,7 @@ export async function overtimeReport(ctx: AuthContext, year: number, month: numb
     if (!w || !c) continue;
     const dailyWage = dec(w.dailyWage).gt(0) ? dec(w.dailyWage) : dec(c.defaultDailyWage);
     const shiftId = w.shiftId ?? c.shiftId;
-    const fullDayHours = shiftId ? shiftHours.get(String(shiftId)) ?? defaultHours : defaultHours;
+    const fullDayHours = shiftId ? fullDayBy.get(String(shiftId)) ?? defaultHours : defaultHours;
     const rate = overtimeHourlyRate({
       workerRate: w.overtimeRatePerHour,
       rateType: c.overtimeRateType ?? "MULTIPLIER",

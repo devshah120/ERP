@@ -13,6 +13,7 @@ import {
   HrDepartment,
   EmployeeLoan,
   LeaveType,
+  IncentiveMatrix,
   WORKING_STATUSES,
 } from "@/models/hr";
 import { Business } from "@/models/Business";
@@ -20,6 +21,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import type { ExportPayload } from "@/lib/export/exporter";
 import { toDay, dayKey, addDays, monthRange, todayIn } from "./calendar";
 import { monthlyRegister } from "./attendance";
+import { yearAttendance, attendanceIncentive } from "./incentive";
 import { activeAnnouncements } from "./people";
 import { monthLabel } from "./payroll";
 import { employeeLabels, businessTimeZone, type AnyDoc } from "./common";
@@ -238,6 +240,95 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
           { key: "payableDays", label: "Payable days", type: "number" },
         ],
         rows,
+      };
+    }
+
+    case "yearly-attendance": {
+      const { rows: list } = await yearAttendance(ctx, new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)));
+      const rows = list.map((r) => ({
+        employeeCode: r.employeeCode,
+        name: r.name,
+        department: r.department,
+        daysEmployed: r.daysEmployed,
+        weeklyOffs: r.weeklyOffs,
+        holidays: r.holidays,
+        workingDays: r.workingDays,
+        present: r.present,
+        halfDays: r.halfDays,
+        onDuty: r.onDuty,
+        unmarked: r.unmarked,
+        paidLeave: r.paidLeave,
+        unpaidLeave: r.unpaidLeave,
+        absent: r.absent,
+        lopDays: r.lopDays,
+      }));
+      return {
+        title: `Yearly Working Days ${year}`,
+        filterNote: "Working days = days employed − weekly offs − holidays. Half days count half in Present; working days with nothing marked are Unmarked (paid as present).",
+        columns: [
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "name", label: "Name" },
+          { key: "department", label: "Department" },
+          { key: "daysEmployed", label: "Days employed", type: "number" },
+          { key: "weeklyOffs", label: "Weekly offs", type: "number" },
+          { key: "holidays", label: "Holidays", type: "number" },
+          { key: "workingDays", label: "Working days", type: "number" },
+          { key: "present", label: "Present", type: "number" },
+          { key: "halfDays", label: "Half days", type: "number" },
+          { key: "onDuty", label: "On duty", type: "number" },
+          { key: "unmarked", label: "Unmarked", type: "number" },
+          { key: "paidLeave", label: "Paid leave", type: "number" },
+          { key: "unpaidLeave", label: "Unpaid leave", type: "number" },
+          { key: "absent", label: "Absent", type: "number" },
+          { key: "lopDays", label: "LOP days", type: "number" },
+        ],
+        rows,
+        summary: [{ label: "Employees", value: String(rows.length) }],
+      };
+    }
+
+    case "attendance-incentive": {
+      const matrix = await IncentiveMatrix.findOne({ businessId: ctx.businessId, deletedAt: null, status: "ACTIVE" }).sort({ name: 1 }).lean<AnyDoc>();
+      if (!matrix) {
+        return { title: `Attendance Incentive ${year}`, filterNote: "No active incentive matrix. Create one under Settings → Incentive Matrix.", columns: [{ key: "note", label: "Note" }], rows: [] };
+      }
+      const res = await attendanceIncentive(ctx, { matrixId: String(matrix._id), year });
+      const STATUS: Record<string, string> = { PAYABLE: "Payable", BELOW_SLAB: "Below the lowest slab", LEFT: "Left before payout" };
+      const rows = res.rows.map((r) => ({
+        employeeCode: r.employeeCode,
+        name: r.name,
+        department: r.department,
+        workingDays: r.workingDays,
+        eligibleDays: r.eligibleDays,
+        percent: r.percent,
+        incentiveDays: r.incentiveDays,
+        dayRate: r.dayRate,
+        amount: r.amount,
+        posted: r.posted ?? "",
+        status: STATUS[r.status],
+      }));
+      return {
+        title: `Attendance Incentive ${res.period.label}`,
+        filterNote: `${res.matrix.name}: ${res.matrix.slabs.map((s) => `${s.minValue}${res.matrix.basis === "PERCENT" ? "%" : " days"} → ${s.incentiveDays} days`).join(", ")}. Paid in ${res.payout.label} payroll.`,
+        columns: [
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "name", label: "Name" },
+          { key: "department", label: "Department" },
+          { key: "workingDays", label: "Working days", type: "number" },
+          { key: "eligibleDays", label: "Days counted", type: "number" },
+          { key: "percent", label: "% of days employed", type: "number" },
+          { key: "incentiveDays", label: "Incentive days", type: "number" },
+          { key: "dayRate", label: "Day's salary", type: "money" },
+          { key: "amount", label: "Incentive", type: "money" },
+          { key: "posted", label: "In payroll", type: "money" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+        totals: sumColumns(rows, ["amount", "posted"]),
+        summary: [
+          { label: "Getting an incentive", value: String(res.totals.payable) },
+          { label: "Total incentive", value: res.totals.amount },
+        ],
       };
     }
 

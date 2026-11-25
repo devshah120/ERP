@@ -82,6 +82,8 @@ export interface FieldConfig {
   /** Renders as a picker of the size/colour SKUs of the item chosen in this
    *  reference field (e.g. "outputItemId"). */
   variantOf?: string;
+  /** Read-only value worked out from the rest of the form (e.g. a shift's hours from its times); never submitted. */
+  compute?: (state: Record<string, unknown>) => unknown;
   /** Only show (and submit) this field while another field has one of these values. */
   showWhen?: { field: string; values: string[] };
 

@@ -319,7 +319,7 @@ export const advanceRequestSchema = z
     amount: positive,
     /** What the employee proposes to repay each month. */
     emiAmount: positive,
-    reason: z.string().trim().min(3, "Say what it is for").max(500),
+    reason: z.string().trim().max(500).optional().default(""),
   })
   .superRefine((v, ctx) => {
     if (new Decimal(v.emiAmount).gt(new Decimal(v.amount))) ctx.addIssue({ code: "custom", path: ["emiAmount"], message: "Instalment is more than the amount" });

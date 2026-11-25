@@ -15,7 +15,7 @@ import SearchSelect from "@/components/resource/SearchSelect";
 import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
-import { fmtDate, todayKey, MONTH_NAMES, useEmployeeOptions } from "@/components/hr/HrKit";
+import { fmtDate, todayKey, MONTH_NAMES, useEmployeeOptions, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconClose, IconPlus, IconRefresh } from "@/components/icons";
 
@@ -116,7 +116,7 @@ export default function AdvanceRequestsPage() {
       setApproving(null);
       load();
     } catch (err) {
-      setDialogError(err instanceof ApiError ? err.message : "Something went wrong");
+      setDialogError(apiErrorText(err));
     } finally {
       setBusy(false);
     }
@@ -132,7 +132,7 @@ export default function AdvanceRequestsPage() {
       setRejecting(null);
       load();
     } catch (err) {
-      setDialogError(err instanceof ApiError ? err.message : "Something went wrong");
+      setDialogError(apiErrorText(err));
     } finally {
       setBusy(false);
     }
@@ -149,7 +149,7 @@ export default function AdvanceRequestsPage() {
       setStatus("REQUESTED");
       load();
     } catch (err) {
-      setDialogError(err instanceof ApiError ? err.message : "Something went wrong");
+      setDialogError(apiErrorText(err));
     } finally {
       setBusy(false);
     }
@@ -402,7 +402,9 @@ export default function AdvanceRequestsPage() {
               <input id="rq-emi" className="input" inputMode="decimal" value={raise.emiAmount} onChange={(e) => setRaise({ ...raise, emiAmount: e.target.value })} />
             </div>
             <div className="field fieldSpanFull">
-              <label htmlFor="rq-reason">Reason</label>
+              <label htmlFor="rq-reason">
+                Reason<span className="hint"> · optional</span>
+              </label>
               <input id="rq-reason" className="input" value={raise.reason} onChange={(e) => setRaise({ ...raise, reason: e.target.value })} placeholder="Medical emergency, festival advance…" />
             </div>
           </div>

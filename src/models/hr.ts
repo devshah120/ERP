@@ -307,6 +307,52 @@ export const PayComponent = defineMasterModel(
   { uniqueField: "code" }
 );
 
+export const INCENTIVE_PERIODS = ["CALENDAR_YEAR", "FINANCIAL_YEAR"] as const;
+export const INCENTIVE_BASES = ["DAYS", "PERCENT"] as const;
+export const INCENTIVE_SALARY_BASES = ["GROSS", "BASIC"] as const;
+
+/**
+ * An attendance incentive matrix: slabs of days present in a year (or a
+ * percentage of the days employed) and the days' salary each one earns, paid
+ * as variable pay in the payout month's payroll (January by default).
+ */
+export const IncentiveMatrix = defineMasterModel(
+  "IncentiveMatrix",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    /** CALENDAR_YEAR: January–December. FINANCIAL_YEAR: April–March. */
+    period: { type: String, enum: INCENTIVE_PERIODS, default: "CALENDAR_YEAR" },
+    /** DAYS: slabs are days present. PERCENT: slabs are % of the days the employee was employed. */
+    basis: { type: String, enum: INCENTIVE_BASES, default: "DAYS" },
+    slabs: {
+      type: [
+        new Schema(
+          {
+            /** At least this many days present (or this percentage). */
+            minValue: { type: Number, required: true, min: 0 },
+            /** Days of salary paid as the incentive. */
+            incentiveDays: { type: Number, required: true, min: 0 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    /** What counts as present besides marked present days (half days count half). */
+    countOnDuty: { type: Boolean, default: true },
+    countUnmarked: { type: Boolean, default: true },
+    countPaidLeave: { type: Boolean, default: false },
+    /** One day's salary = monthly GROSS or BASIC ÷ dayDivisor. */
+    salaryBasis: { type: String, enum: INCENTIVE_SALARY_BASES, default: "GROSS" },
+    dayDivisor: { type: Number, default: 30, min: 1, max: 31 },
+    /** Paid with the payroll of this month after the period ends (1 = January). */
+    payoutMonth: { type: Number, default: 1, min: 1, max: 12 },
+    description: { type: String, trim: true },
+  },
+  { uniqueField: "code" }
+);
+
 /** One employee's amount of one variable component for one month. */
 export const PayrollVariable = defineHrModel(
   "PayrollVariable",

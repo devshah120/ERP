@@ -5,6 +5,8 @@ import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
 import { eachDay, monthRange, toDay, dayKey, dayKind, shiftFor, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
 import { toForest } from "@/lib/hr/orgTree";
+import { shiftHours } from "@/lib/hr/shiftHours";
+import { incentiveDaysFor, eligibleDays, incentivePeriod, dayRate } from "@/lib/hr/incentive";
 import { dayOvertimeMinutes, shiftLengthMinutes, overtimeHourlyRate, overtimeAmount, hoursOf } from "@/lib/hr/contractLabour";
 
 describe("product gating", () => {
@@ -415,5 +417,50 @@ describe("contract labour overtime", () => {
     expect(overtimeAmount(150, new Decimal("103.13")).toFixed(2)).toBe("257.83");
     expect(overtimeAmount(0, new Decimal("150")).toFixed(2)).toBe("0.00");
     expect(hoursOf(150)).toBe("2.50");
+  });
+});
+
+describe("attendance incentive matrix", () => {
+  const slabs = [
+    { minValue: 250, incentiveDays: 5 },
+    { minValue: 300, incentiveDays: 7 },
+    { minValue: 280, incentiveDays: 6 },
+  ];
+
+  it("pays the highest slab reached", () => {
+    expect(incentiveDaysFor(slabs, 249.5)).toEqual({ incentiveDays: 0, slab: null });
+    expect(incentiveDaysFor(slabs, 250)).toEqual({ incentiveDays: 5, slab: 250 });
+    expect(incentiveDaysFor(slabs, 299)).toEqual({ incentiveDays: 6, slab: 280 });
+    expect(incentiveDaysFor(slabs, 365)).toEqual({ incentiveDays: 7, slab: 300 });
+  });
+
+  it("counts present days with the matrix's options", () => {
+    const s = { present: 240.5, absent: 3, halfDays: 1, paidLeave: 6, unpaidLeave: 0, holidays: 10, weeklyOffs: 52, onDuty: 4, unmarked: 5, lateDays: 0, notEmployed: 0, lopDays: 3.5 };
+    expect(eligibleDays(s, { countOnDuty: true, countUnmarked: true, countPaidLeave: false })).toBe(249.5);
+    expect(eligibleDays(s, { countOnDuty: true, countUnmarked: true, countPaidLeave: true })).toBe(255.5);
+    expect(eligibleDays(s, { countOnDuty: false, countUnmarked: false, countPaidLeave: false })).toBe(240.5);
+  });
+
+  it("pays a calendar year in the next January and a financial year after March", () => {
+    expect(incentivePeriod({ period: "CALENDAR_YEAR", payoutMonth: 1 }, 2026)).toMatchObject({ label: "2026", payoutYear: 2027, payoutMonth: 1 });
+    const fy = incentivePeriod({ period: "FINANCIAL_YEAR", payoutMonth: 4 }, 2026);
+    expect(fy).toMatchObject({ label: "FY 2026-27", payoutYear: 2027, payoutMonth: 4 });
+    expect(dayKey(fy.start)).toBe("2026-04-01");
+    expect(dayKey(fy.end)).toBe("2027-03-31");
+  });
+
+  it("works out one day's salary to the paisa", () => {
+    expect(dayRate(new Decimal("31000"), 30).toFixed(2)).toBe("1033.33");
+    expect(dayRate(new Decimal("26000"), 26).toFixed(2)).toBe("1000.00");
+  });
+});
+
+describe("shift hours", () => {
+  it("makes a full day start to end and a half day half of it", () => {
+    expect(shiftHours("09:30", "18:30")).toEqual({ fullDayHours: 9, halfDayHours: 4.5 });
+    expect(shiftHours("09:00", "17:20")).toEqual({ fullDayHours: 8.33, halfDayHours: 4.17 });
+    expect(shiftHours("22:00", "06:00")).toEqual({ fullDayHours: 8, halfDayHours: 4 });
+    expect(shiftHours("09:00", "09:00", { fullDayHours: 7, halfDayHours: 3 })).toEqual({ fullDayHours: 7, halfDayHours: 3 });
+    expect(shiftHours("9am", "6pm")).toEqual({ fullDayHours: 8, halfDayHours: 4 });
   });
 });

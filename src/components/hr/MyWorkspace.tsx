@@ -13,7 +13,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import LeaveForm, { type LeaveBalance } from "@/components/hr/LeaveForm";
 import ClaimForm from "@/components/hr/ClaimForm";
 import { dayLabel, type CorrectionRow } from "@/components/hr/CorrectionRequests";
-import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
+import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconClock, IconDownload } from "@/components/icons";
 
@@ -900,7 +900,7 @@ function MyAdvances() {
       setForm({ loanType: "ADVANCE", amount: "", emiAmount: "", reason: "" });
       load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Could not send the request");
+      setFormError(apiErrorText(err, "Could not send the request"));
     } finally {
       setBusy(false);
     }
@@ -986,7 +986,7 @@ function MyAdvances() {
               <button type="button" className="button buttonSecondary" onClick={() => setAdding(false)} disabled={busy}>
                 Cancel
               </button>
-              <button type="button" className="button buttonPrimary" onClick={submit} disabled={busy || !form.amount || !form.emiAmount || form.reason.trim().length < 3}>
+              <button type="button" className="button buttonPrimary" onClick={submit} disabled={busy || !form.amount || !form.emiAmount}>
                 {busy && <span className="spinner" />} Send to HR
               </button>
             </>
@@ -1014,7 +1014,9 @@ function MyAdvances() {
               <input id="ma-emi" className="input" inputMode="decimal" value={form.emiAmount} onChange={(e) => setForm({ ...form, emiAmount: e.target.value })} />
             </div>
             <div className="field fieldSpanFull">
-              <label htmlFor="ma-reason">What is it for?</label>
+              <label htmlFor="ma-reason">
+                What is it for?<span className="hint"> · optional</span>
+              </label>
               <input id="ma-reason" className="input" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
             </div>
           </div>

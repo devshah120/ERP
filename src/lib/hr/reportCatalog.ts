@@ -90,9 +90,6 @@ export const HR_REPORTS = [
 export type HrReportKey = (typeof HR_REPORTS)[number]["key"];
 
 /** Reports listed under "Incentive Reports" in the sidebar instead of "HR Reports". */
-/** Reports listed under "Asset Management" in the sidebar instead of "HR Reports". */
-export const ASSET_REPORT_KEYS: ReadonlySet<string> = new Set(["asset-register", "assets-with-employees", "asset-movement"]);
-
 export const INCENTIVE_REPORT_KEYS: ReadonlySet<string> = new Set(["yearly-attendance", "weekoff-working", "attendance-incentive"]);
 
 export function hrReport(key: string) {

@@ -8,6 +8,8 @@ import { linkedUserFrom, checkUserLink, linkUser } from "@/lib/hr/employeeLogin"
 import { ensureAttendanceReasons } from "@/lib/hr/regularization";
 import { keepSingleDefault } from "@/lib/hr/holidayCalendars";
 import { migrateLegacyGradeGroups, assertGradeGroupAllowed } from "@/lib/hr/leaveGroups";
+import { assertContractorParent, assertWorkerContractors } from "@/lib/hr/contractLabour";
+import { Contractor, ContractWorker, CONTRACT_STATUSES, SKILL_CATEGORIES, OVERTIME_RATE_TYPES } from "@/models/contractLabour";
 import {
   HrDepartment,
   Designation,
@@ -455,6 +457,120 @@ const employees = define("hr-employees", "Employee", {
 });
 
 /* ------------------------------------------------------------------ */
+/* Contract labour                                                     */
+/* ------------------------------------------------------------------ */
+
+const objectIdString = /^[a-f\d]{24}$/i;
+
+const contractors = define("hr-contractors", "Contractor", {
+  model: Contractor,
+  autoCode: { field: "contractorCode", prefix: "CON", entityType: "HR_CONTRACTOR" },
+  fields: {
+    contractorCode: optionalCode,
+    name: z.string().trim().min(2).max(150),
+    firmName: optionalText(150),
+    gender: z.enum([...GENDERS_HR, ""]).default(""),
+    dateOfBirth: optionalDate,
+    fatherOrSpouseName: optionalText(150),
+    phone: optionalText(20),
+    email: optionalEmail,
+    emergencyContactName: optionalText(150),
+    emergencyContactPhone: optionalText(20),
+    currentAddress: optionalText(500),
+    permanentAddress: optionalText(500),
+
+    parentContractorId: optionalRef,
+    supervisorEmployeeId: optionalRef,
+    departmentId: optionalRef,
+    shiftId: optionalRef,
+    branchId: optionalRef,
+    workLocation: optionalText(120),
+    contractStatus: z.enum(CONTRACT_STATUSES).default("ACTIVE"),
+    contractStartDate: optionalDate,
+    contractEndDate: optionalDate,
+    labourLicenceNumber: optionalText(60),
+    licenceValidUpto: optionalDate,
+    maxWorkers: z.coerce.number().int().min(0).max(100000).default(0),
+
+    panNumber: z.string().trim().toUpperCase().regex(/^([A-Z]{5}\d{4}[A-Z])?$/, "PAN looks like ABCDE1234F").optional(),
+    aadhaarNumber: z.string().trim().regex(/^(\d{12})?$/, "Aadhaar is 12 digits").optional(),
+    gstin: z.string().trim().toUpperCase().regex(/^([0-9A-Z]{15})?$/, "GSTIN is 15 letters and digits").optional(),
+    pfCode: optionalText(30),
+    esiCode: optionalText(30),
+
+    paymentMode: z.enum(SALARY_PAYMENT_MODES).default("BANK"),
+    bankName: optionalText(120),
+    bankAccountNumber: optionalText(30),
+    ifscCode: z.string().trim().toUpperCase().regex(/^([A-Z]{4}0[A-Z0-9]{6})?$/, "IFSC looks like HDFC0001234").optional(),
+
+    defaultDailyWage: money,
+    overtimeRateType: z.enum(OVERTIME_RATE_TYPES).default("MULTIPLIER"),
+    overtimeMultiplier: z.coerce.number().min(0).max(10).default(2),
+    overtimeRatePerHour: money,
+    minOvertimeMinutes: z.coerce.number().int().min(0).max(600).default(0),
+    notes,
+    status,
+  },
+  refine: dateOrder("contractStartDate", "contractEndDate", "Contract end is before its start"),
+  searchFields: ["name", "contractorCode", "firmName", "phone", "labourLicenceNumber"],
+  filterFields: { contractorCode: "contractorCode", name: "name", firmName: "firmName", phone: "phone", contractStatus: "contractStatus" },
+  refFilters: { parent: { path: "parentContractorId", model: Contractor, field: "name" } },
+  sortableFields: ["contractorCode", "name", "firmName", "contractStartDate", "contractEndDate", "createdAt"],
+  defaultSort: "contractorCode",
+  defaultSortDir: "asc",
+  validateCreate: async (ctx, _side, input) => assertContractorParent(ctx.businessId, input.parentContractorId),
+  validateUpdate: async (ctx, _side, before, input) => {
+    if (input.parentContractorId !== undefined) await assertContractorParent(ctx.businessId, input.parentContractorId, before._id);
+  },
+  toDocument: documentConverter({
+    money: ["defaultDailyWage", "overtimeRatePerHour"],
+    refs: ["parentContractorId", "supervisorEmployeeId", "departmentId", "shiftId", "branchId"],
+    dates: ["dateOfBirth", "contractStartDate", "contractEndDate", "licenceValidUpto"],
+  }),
+});
+
+const contractWorkers = define("hr-contract-workers", "Contract worker", {
+  model: ContractWorker,
+  autoCode: { field: "workerCode", prefix: "WRK", entityType: "HR_CONTRACT_WORKER" },
+  fields: {
+    workerCode: optionalCode,
+    name: z.string().trim().min(2).max(150),
+    phone: z.string().trim().min(6, "Enter the mobile number").max(20),
+    emergencyPhone: optionalText(20),
+    contractorIds: z
+      .array(z.string().trim().regex(objectIdString, "Choose a contractor"))
+      .min(1, "Choose at least one contractor")
+      .max(50)
+      .transform((ids) => [...new Set(ids)]),
+    gender: z.enum([...GENDERS_HR, ""]).default(""),
+    aadhaarNumber: z.string().trim().regex(/^(\d{12})?$/, "Aadhaar is 12 digits").optional(),
+    skillCategory: z.enum([...SKILL_CATEGORIES, ""]).default(""),
+    dateOfJoining: optionalDate,
+    dateOfExit: optionalDate,
+    shiftId: optionalRef,
+    dailyWage: money,
+    overtimeRatePerHour: money,
+    notes,
+    status,
+  },
+  refine: dateOrder("dateOfJoining", "dateOfExit", "Exit date is before the joining date"),
+  searchFields: ["name", "workerCode", "phone", "emergencyPhone", "aadhaarNumber"],
+  filterFields: { workerCode: "workerCode", name: "name", phone: "phone", skillCategory: "skillCategory" },
+  refFilters: { contractor: { path: "contractorIds", model: Contractor, field: "name" } },
+  sortableFields: ["workerCode", "name", "dateOfJoining", "createdAt"],
+  defaultSort: "workerCode",
+  defaultSortDir: "asc",
+  validateCreate: async (ctx, _side, input) => assertWorkerContractors(ctx.businessId, input.contractorIds),
+  validateUpdate: async (ctx, _side, _before, input) => assertWorkerContractors(ctx.businessId, input.contractorIds),
+  toDocument: documentConverter({
+    money: ["dailyWage", "overtimeRatePerHour"],
+    refs: ["shiftId"],
+    refArrays: ["contractorIds"],
+    dates: ["dateOfJoining", "dateOfExit"],
+  }),
+});
+
+/* ------------------------------------------------------------------ */
 /* Talent & assets                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -603,6 +719,8 @@ export const HR_RESOURCES: Record<string, ResourceDefinition> = {
   "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,
+  "hr-contractors": contractors,
+  "hr-contract-workers": contractWorkers,
   "hr-job-openings": jobOpenings,
   "hr-candidates": candidates,
   "hr-assets": assets,

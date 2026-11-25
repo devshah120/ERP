@@ -12,6 +12,7 @@ import type { ResourceUi, FieldConfig } from "@/lib/resources/ui/types";
 import VariantsEditor, { type VariantRow } from "./VariantsEditor";
 import LinesEditor, { type LineRow, type ReferenceOption } from "./LinesEditor";
 import SearchSelect from "./SearchSelect";
+import MultiReferenceField from "./MultiReferenceField";
 import ImageField, { type PendingImage } from "./ImageField";
 import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
@@ -44,7 +45,7 @@ function buildInitialState(config: ResourceUi): FormState {
       const fallback =
         field.type === "checkbox"
           ? false
-          : field.type === "variants" || field.type === "lines"
+          : field.type === "variants" || field.type === "lines" || field.type === "multiReference"
             ? []
             : field.type === "number"
               ? 0
@@ -118,7 +119,7 @@ function buildPayload(config: ResourceUi, state: FormState): Record<string, unkn
         payload = setPath(payload, field.name, Boolean(value));
         continue;
       }
-      if (field.type === "variants") {
+      if (field.type === "variants" || field.type === "multiReference") {
         payload = setPath(payload, field.name, value ?? []);
         continue;
       }
@@ -267,7 +268,7 @@ export default function ResourceFormView({
     // (keyed "<field>.<column>").
     const refs: { key: string; reference: NonNullable<FieldConfig["reference"]> }[] = [];
     for (const field of view.sections.flatMap((s) => s.fields)) {
-      if (field.type === "reference" && field.reference) refs.push({ key: field.name, reference: field.reference });
+      if ((field.type === "reference" || field.type === "multiReference") && field.reference) refs.push({ key: field.name, reference: field.reference });
       for (const col of field.columns ?? []) {
         if (col.type === "reference" && col.reference) refs.push({ key: `${field.name}.${col.name}`, reference: col.reference });
       }
@@ -541,6 +542,16 @@ export default function ResourceFormView({
                 </option>
               ))}
             </select>
+          );
+        case "multiReference":
+          return (
+            <MultiReferenceField
+              id={`f-${field.name}`}
+              value={Array.isArray(value) ? (value as string[]) : []}
+              options={referenceOptions[field.name] ?? []}
+              onChange={(next) => updateField(field.name, next)}
+              invalid={Boolean(error)}
+            />
           );
         case "image": {
           const stamp = String(value ?? "");

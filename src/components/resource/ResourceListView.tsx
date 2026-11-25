@@ -194,7 +194,11 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
     const value = getPath(record, col.key);
     const type = col.type;
     if (type === "count") return Array.isArray(value) ? value.length : 0;
-    if (value === null || value === undefined || value === "") return <span className="cellMuted">—</span>;
+    if (value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) return <span className="cellMuted">—</span>;
+    if (type === "reference" && Array.isArray(value)) {
+      const labels = value.map((v) => refLabels[col.key]?.get(String(v))).filter(Boolean);
+      return labels.length > 0 ? labels.join(", ") : <span className="cellMuted">—</span>;
+    }
 
     if (type === "badge") return <StatusBadge status={String(value)} kind="active" />;
     if (type === "money") return formatMoney(String(value));

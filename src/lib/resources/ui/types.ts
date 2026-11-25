@@ -11,7 +11,9 @@ export type FieldType =
   | "variants"
   | "date"
   | "lines"
-  | "image";
+  | "image"
+  /** A list of ids picked with checkboxes from the `reference` master. */
+  | "multiReference";
 
 /** One column of a "lines" field — a small inline table of sub-rows. */
 export interface LineColumnConfig {
@@ -113,7 +115,7 @@ export interface ColumnConfig {
   type?: "text" | "badge" | "money" | "number" | "date" | "count" | "label" | "reference" | "yesno";
   /** For type "label": stored value → display text, e.g. PERCENT → "Percent". */
   labels?: Record<string, string>;
-  /** For type "reference": show the referenced record's label, not its id. */
+  /** For type "reference": show the referenced record's label, not its id (a list of ids shows each label). */
   reference?: { resource: string; labelField: string };
 }
 

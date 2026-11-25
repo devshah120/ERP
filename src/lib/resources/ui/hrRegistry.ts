@@ -462,6 +462,145 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
   ],
 });
 
+const CONTRACTOR_REF = { resource: "hr-contractors", labelField: "name" };
+const SHIFT_REF = { resource: "hr-shifts", labelField: "name" };
+export const CONTRACT_STATUS_LABELS: Record<string, string> = { ACTIVE: "Active", SUSPENDED: "Suspended", ENDED: "Ended" };
+export const SKILL_LABELS: Record<string, string> = { UNSKILLED: "Unskilled", SEMI_SKILLED: "Semi-skilled", SKILLED: "Skilled", HIGHLY_SKILLED: "Highly skilled" };
+
+const contractors = master("hr-contractors", "Contractors", "Contractor", {
+  columns: [
+    { key: "contractorCode", label: "Code", filterParam: "contractorCode", sortField: "contractorCode" },
+    { key: "name", label: "Contractor", filterParam: "name", sortField: "name" },
+    { key: "firmName", label: "Firm", filterParam: "firmName", sortField: "firmName" },
+    { key: "parentContractorId", label: "Works under", type: "reference", reference: CONTRACTOR_REF, filterParam: "parent" },
+    { key: "phone", label: "Phone", filterParam: "phone" },
+    { key: "supervisorEmployeeId", label: "Supervisor", type: "reference", reference: EMPLOYEE_REF },
+    { key: "contractStartDate", label: "From", type: "date", sortField: "contractStartDate" },
+    { key: "contractEndDate", label: "To", type: "date", sortField: "contractEndDate" },
+    { key: "contractStatus", label: "Contract", type: "label", labels: CONTRACT_STATUS_LABELS },
+    { key: "defaultDailyWage", label: "Day wage", type: "money" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Personal details",
+      fields: [
+        { name: "name", label: "Contractor name", type: "text", required: true, placeholder: "Ramesh Patel" },
+        { name: "contractorCode", label: "Contractor code", type: "text", hint: "Leave blank to number automatically" },
+        { name: "firmName", label: "Firm / agency", type: "text", placeholder: "Patel Labour Services" },
+        { name: "gender", label: "Gender", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(GENDER_LABELS)] },
+        { name: "dateOfBirth", label: "Date of birth", type: "date" },
+        { name: "fatherOrSpouseName", label: "Father's / spouse's name", type: "text" },
+      ],
+    },
+    {
+      label: "Contact",
+      fields: [
+        { name: "phone", label: "Mobile", type: "tel" },
+        { name: "email", label: "Email", type: "email" },
+        { name: "emergencyContactName", label: "Emergency contact", type: "text" },
+        { name: "emergencyContactPhone", label: "Emergency phone", type: "tel" },
+        { name: "currentAddress", label: "Current address", type: "textarea", fullWidth: true },
+        { name: "permanentAddress", label: "Permanent address", type: "textarea", fullWidth: true },
+      ],
+    },
+    {
+      label: "Contract",
+      fields: [
+        { name: "parentContractorId", label: "Works under (main contractor)", type: "reference", reference: CONTRACTOR_REF, hint: "Blank if engaged directly", sendBlank: true },
+        { name: "supervisorEmployeeId", label: "Our supervisor", type: "reference", reference: EMPLOYEE_REF, sendBlank: true },
+        { name: "departmentId", label: "Department", type: "reference", reference: DEPARTMENT_REF, sendBlank: true },
+        { name: "shiftId", label: "Shift", type: "reference", reference: SHIFT_REF, hint: "Sets a full day for overtime; blank uses the default shift", sendBlank: true },
+        { name: "workLocation", label: "Work location / site", type: "text" },
+        { name: "contractStatus", label: "Contract status", type: "select", defaultValue: "ACTIVE", options: opts(CONTRACT_STATUS_LABELS) },
+        { name: "contractStartDate", label: "Contract from", type: "date" },
+        { name: "contractEndDate", label: "Contract to", type: "date" },
+        { name: "labourLicenceNumber", label: "Labour licence no.", type: "text" },
+        { name: "licenceValidUpto", label: "Licence valid until", type: "date" },
+        { name: "maxWorkers", label: "Workers allowed", type: "number", defaultValue: 0, hint: "0 = no limit" },
+      ],
+    },
+    {
+      label: "Wages & overtime",
+      description: "Defaults for this contractor's workers. A worker's own day wage or overtime rate overrides them.",
+      fields: [
+        { name: "defaultDailyWage", label: "Day wage", type: "money", defaultValue: "0" },
+        {
+          name: "overtimeRateType",
+          label: "Overtime paid at",
+          type: "select",
+          defaultValue: "MULTIPLIER",
+          options: [
+            { value: "MULTIPLIER", label: "A multiple of the hourly wage" },
+            { value: "FIXED", label: "A fixed rate per hour" },
+          ],
+        },
+        { name: "overtimeMultiplier", label: "Multiple of hourly wage", type: "number", defaultValue: 2, hint: "2 = double rate", showWhen: { field: "overtimeRateType", values: ["MULTIPLIER"] } },
+        { name: "overtimeRatePerHour", label: "Overtime rate per hour", type: "money", defaultValue: "0", showWhen: { field: "overtimeRateType", values: ["FIXED"] } },
+        { name: "minOvertimeMinutes", label: "Least overtime paid (minutes)", type: "number", defaultValue: 0, hint: "Shorter overtime in a day is ignored" },
+      ],
+    },
+    {
+      label: "Statutory & bank",
+      fields: [
+        { name: "panNumber", label: "PAN", type: "text", placeholder: "ABCDE1234F" },
+        { name: "aadhaarNumber", label: "Aadhaar", type: "text", placeholder: "12 digits" },
+        { name: "gstin", label: "GSTIN", type: "text" },
+        { name: "pfCode", label: "PF establishment code", type: "text" },
+        { name: "esiCode", label: "ESI code", type: "text" },
+        { name: "paymentMode", label: "Paid by", type: "select", defaultValue: "BANK", options: opts(PAY_MODE_LABELS) },
+        { name: "bankName", label: "Bank", type: "text", showWhen: { field: "paymentMode", values: ["BANK"] } },
+        { name: "bankAccountNumber", label: "Account number", type: "text", showWhen: { field: "paymentMode", values: ["BANK"] } },
+        { name: "ifscCode", label: "IFSC", type: "text", placeholder: "HDFC0001234", showWhen: { field: "paymentMode", values: ["BANK"] } },
+        statusField,
+        { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
+const contractWorkers = master("hr-contract-workers", "Contract Workers", "Worker", {
+  columns: [
+    { key: "workerCode", label: "Code", filterParam: "workerCode", sortField: "workerCode" },
+    { key: "name", label: "Name", filterParam: "name", sortField: "name" },
+    { key: "phone", label: "Mobile", filterParam: "phone" },
+    { key: "emergencyPhone", label: "Emergency no." },
+    { key: "contractorIds", label: "Contractors", type: "reference", reference: CONTRACTOR_REF, filterParam: "contractor" },
+    { key: "skillCategory", label: "Skill", type: "label", labels: SKILL_LABELS },
+    { key: "dailyWage", label: "Day wage", type: "money" },
+    { key: "dateOfJoining", label: "Joined", type: "date", sortField: "dateOfJoining" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Worker",
+      fields: [
+        { name: "name", label: "Name", type: "text", required: true, placeholder: "Suresh Kumar" },
+        { name: "phone", label: "Mobile number", type: "tel", required: true },
+        { name: "emergencyPhone", label: "Emergency number", type: "tel" },
+        { name: "workerCode", label: "Worker code", type: "text", hint: "Leave blank to number automatically" },
+        { name: "contractorIds", label: "Works under", type: "multiReference", reference: CONTRACTOR_REF, required: true, fullWidth: true, hint: "Tick every contractor this worker works for" },
+      ],
+    },
+    {
+      label: "Work & wages",
+      description: "Optional. A blank wage or overtime rate uses the contractor's terms.",
+      fields: [
+        { name: "gender", label: "Gender", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(GENDER_LABELS)] },
+        { name: "aadhaarNumber", label: "Aadhaar", type: "text", placeholder: "12 digits" },
+        { name: "skillCategory", label: "Skill category", type: "select", defaultValue: "", options: [{ value: "", label: "—" }, ...opts(SKILL_LABELS)] },
+        { name: "dateOfJoining", label: "Date of joining", type: "date" },
+        { name: "dateOfExit", label: "Last working day", type: "date" },
+        { name: "shiftId", label: "Shift", type: "reference", reference: SHIFT_REF, hint: "Blank uses the contractor's shift", sendBlank: true },
+        { name: "dailyWage", label: "Day wage", type: "money", defaultValue: "0", hint: "0 = contractor's day wage" },
+        { name: "overtimeRatePerHour", label: "Overtime rate per hour", type: "money", defaultValue: "0", hint: "0 = contractor's overtime terms" },
+        statusField,
+        { name: "notes", label: "Notes", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
 const jobOpenings = master("hr-job-openings", "Job Openings", "Job opening", {
   titleField: "title",
   columns: [
@@ -638,6 +777,8 @@ export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
   "hr-attendance-reasons": attendanceReasons,
   "hr-announcements": announcements,
   "hr-employees": employees,
+  "hr-contractors": contractors,
+  "hr-contract-workers": contractWorkers,
   "hr-job-openings": jobOpenings,
   "hr-candidates": candidates,
   "hr-assets": assets,

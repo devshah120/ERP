@@ -1094,4 +1094,107 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(saveMonthSchema.safeParse({ ...base, rows: [row("2027-02-03", "LEAVE")] }).success).toBe(false);
     await expect(saveEmployeeMonth(ctx, saveMonthSchema.parse({ ...base, year: 2026, month: 10, rows: [row("2026-10-05", "PRESENT")] }))).rejects.toMatchObject({ code: "PAYROLL_LOCKED" });
   });
+
+  it("runs contract labour: contractors, sub-contractors, workers under several contractors, bulk upload, attendance and overtime", async () => {
+    const { NextRequest } = await import("next/server");
+    const { createHandler, updateHandler } = await import("@/lib/resources/handlers");
+    const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
+    const { signAccessToken } = await import("@/lib/auth/tokens");
+    const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
+    const { Contractor, ContractWorker, ContractAttendance } = await import("@/models/contractLabour");
+    const { previewImport, commitImport } = await import("@/lib/import/service");
+    const { contractorTree, contractorWorkers, labourSheet, saveLabourSheet, saveLabourSheetSchema, overtimeReport } = await import("@/lib/hr/contractLabour");
+
+    const token = signAccessToken({ sub: String(ctx.userId), businessId, roleId: String(ctx.roleId), permissions: ["*"], branchIds: [], warehouseIds: [], products: ["HRMS"] });
+    const request = (url: string, method: string, body: Record<string, unknown>) =>
+      new NextRequest(url, { method, body: JSON.stringify(body), headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${token}` } });
+    const create = (key: string, body: Record<string, unknown>) => createHandler(HR_RESOURCES[key])(request(`http://localhost/api/masters/${key}`, "POST", body));
+    const update = (key: string, id: unknown, body: Record<string, unknown>) =>
+      updateHandler(HR_RESOURCES[key])(request(`http://localhost/api/masters/${key}/${id}`, "PATCH", body), String(id));
+
+    // Contractors: a main contractor and a sub-contractor under it.
+    await create("hr-contractors", { name: "Ramesh Patel", firmName: "Patel Labour Services", defaultDailyWage: "600", overtimeMultiplier: 2 });
+    const main = await Contractor.findOne({ businessId, name: "Ramesh Patel" }).lean<{ _id: Types.ObjectId; contractorCode: string }>();
+    expect(main!.contractorCode).toMatch(/^CON-/);
+    await create("hr-contractors", { name: "Kiran Builders", parentContractorId: String(main!._id), defaultDailyWage: "500", overtimeRateType: "FIXED", overtimeRatePerHour: "120", minOvertimeMinutes: 30 });
+    const sub = await Contractor.findOne({ businessId, name: "Kiran Builders" }).lean<{ _id: Types.ObjectId; contractorCode: string }>();
+    // A contractor can't sit under its own sub-contractor (or itself).
+    await expect(update("hr-contractors", main!._id, { parentContractorId: String(sub!._id) })).rejects.toMatchObject({ code: "CONTRACTOR_LOOP" });
+    await expect(update("hr-contractors", main!._id, { parentContractorId: String(main!._id) })).rejects.toMatchObject({ code: "CONTRACTOR_LOOP" });
+
+    // A worker under both contractors; one needs at least one contractor.
+    await create("hr-contract-workers", { name: "Suresh Kumar", phone: "9898012345", emergencyPhone: "9898054321", contractorIds: [String(main!._id), String(sub!._id)] });
+    await expect(create("hr-contract-workers", { name: "Nobody's Worker", phone: "9898000000", contractorIds: [] })).rejects.toThrow();
+    await expect(create("hr-contract-workers", { name: "Ghost Worker", phone: "9898000001", contractorIds: [String(new Types.ObjectId())] })).rejects.toMatchObject({ code: "BAD_CONTRACTOR" });
+    const suresh = await ContractWorker.findOne({ businessId, name: "Suresh Kumar" }).lean<{ _id: Types.ObjectId; contractorIds: Types.ObjectId[]; workerCode: string }>();
+    expect(suresh!.contractorIds.map(String).sort()).toEqual([String(main!._id), String(sub!._id)].sort());
+    expect(suresh!.workerCode).toMatch(/^WRK-/);
+
+    // Bulk upload: contractors by code or name, several per cell; unknown ones and duplicates are caught first.
+    const sheet = (rows: Record<string, string>[]) => ({
+      headers: ["Name", "Mobile Number", "Emergency Number", "Contractors", "Day Wage"],
+      rows: rows.map((cells, i) => ({ rowNumber: i + 2, cells })),
+    });
+    const bad = await previewImport(
+      "hr-contract-workers",
+      sheet([
+        { Name: "Anil Yadav", "Mobile Number": "9800000001", "Emergency Number": "", Contractors: "Nobody Ltd", "Day Wage": "" },
+        { Name: "Suresh Again", "Mobile Number": "9898012345", "Emergency Number": "", Contractors: main!.contractorCode, "Day Wage": "" },
+      ]),
+      ctx
+    );
+    expect(bad.errorRows).toBe(1);
+    expect(bad.rows[0].errors[0].message).toMatch(/Nobody Ltd/);
+    expect(bad.rows[1].duplicate).toBe(true);
+    const good = sheet([
+      { Name: "Anil Yadav", "Mobile Number": "9800000001", "Emergency Number": "9800000009", Contractors: `${main!.contractorCode}, kiran builders`, "Day Wage": "700" },
+      { Name: "Ravi Das", "Mobile Number": "9800000002", "Emergency Number": "", Contractors: "Kiran Builders", "Day Wage": "" },
+    ]);
+    expect(await commitImport("hr-contract-workers", good, ctx, { skipDuplicates: true })).toMatchObject({ imported: 2 });
+    const anil = await ContractWorker.findOne({ businessId, name: "Anil Yadav" }).lean<{ _id: Types.ObjectId; contractorIds: Types.ObjectId[]; dailyWage: unknown }>();
+    expect(anil!.contractorIds).toHaveLength(2);
+    expect(String(anil!.dailyWage)).toBe("700");
+    const ravi = await ContractWorker.findOne({ businessId, name: "Ravi Das" }).lean<{ _id: Types.ObjectId }>();
+
+    // Tree: the sub-contractor hangs under the main one; workers count under each contractor they work for.
+    const tree = await contractorTree(ctx);
+    expect(tree.items.find((n) => n.id === String(sub!._id))).toMatchObject({ managerId: String(main!._id), workerCount: 3 });
+    expect(tree.items.find((n) => n.id === String(main!._id))).toMatchObject({ managerId: null, workerCount: 2 });
+    expect((await contractorWorkers(ctx, String(main!._id))).workers.map((w) => w.name).sort()).toEqual(["Anil Yadav", "Suresh Kumar"]);
+
+    // Attendance on Tuesday 2 March 2027 (General Shift: 8 hours a full day).
+    const day = "2027-03-02";
+    const listed = await labourSheet(ctx, day, String(sub!._id));
+    expect(listed.rows.map((r) => r.name).sort()).toEqual(["Anil Yadav", "Ravi Das", "Suresh Kumar"]);
+    expect(listed.rows.find((r) => r.name === "Ravi Das")!.contractorId).toBe(String(sub!._id));
+    const row = (workerId: unknown, contractorId: unknown, status: string, checkIn = "", checkOut = "", overtimeHours = "") => ({ workerId: String(workerId), contractorId: String(contractorId), status, checkIn, checkOut, overtimeHours, notes: "" });
+    await saveLabourSheet(
+      ctx,
+      saveLabourSheetSchema.parse({
+        date: day,
+        rows: [
+          row(suresh!._id, main!._id, "PRESENT", "09:30", "20:30"), // 11h → 3h OT
+          row(anil!._id, sub!._id, "PRESENT", "09:30", "17:50"), // 20 min over: below Kiran's 30-minute minimum
+          row(ravi!._id, sub!._id, "PRESENT", "09:30", "18:30", "2.5"), // typed-in overtime
+        ],
+      })
+    );
+    await saveLabourSheet(ctx, saveLabourSheetSchema.parse({ date: "2027-03-03", rows: [row(suresh!._id, sub!._id, "HALF_DAY", "09:30", "13:30"), row(anil!._id, main!._id, "ABSENT")] }));
+    expect(await ContractAttendance.findOne({ businessId, workerId: suresh!._id, date: new Date(`${day}T00:00:00Z`) }).lean()).toMatchObject({ overtimeMinutes: 180, workedMinutes: 660, overtimeManual: false });
+    expect(await ContractAttendance.findOne({ businessId, workerId: anil!._id, date: new Date(`${day}T00:00:00Z`) }).lean()).toMatchObject({ overtimeMinutes: 0 });
+    expect(await ContractAttendance.findOne({ businessId, workerId: ravi!._id, date: new Date(`${day}T00:00:00Z`) }).lean()).toMatchObject({ overtimeMinutes: 150, overtimeManual: true });
+    // Booking a worker to a contractor they don't work for is refused.
+    await expect(saveLabourSheet(ctx, saveLabourSheetSchema.parse({ date: day, rows: [row(ravi!._id, main!._id, "PRESENT")] }))).rejects.toMatchObject({ code: "WORKER_NOT_UNDER_CONTRACTOR" });
+
+    // Overtime: Suresh under Ramesh 3h × (600 ÷ 8 × 2 = 150) = 450; Ravi under Kiran 2.5h × fixed 120 = 300.
+    const report = await overtimeReport(ctx, 2027, 3);
+    const line = (name: string, contractor: string) => report.rows.find((r) => r.name === name && r.contractor === contractor)!;
+    expect(line("Suresh Kumar", "Ramesh Patel")).toMatchObject({ presentDays: 1, wages: "600.00", overtimeHours: "3.00", overtimeRate: "150.00", overtimeAmount: "450.00", total: "1050.00" });
+    expect(line("Suresh Kumar", "Kiran Builders")).toMatchObject({ halfDays: 1, payableDays: "0.5", dailyWage: "500.00", wages: "250.00", overtimeAmount: "0.00" });
+    expect(line("Ravi Das", "Kiran Builders")).toMatchObject({ overtimeHours: "2.50", overtimeRate: "120.00", overtimeAmount: "300.00", wages: "500.00" });
+    expect(line("Anil Yadav", "Kiran Builders")).toMatchObject({ dailyWage: "700.00", wages: "700.00", overtimeAmount: "0.00" });
+    expect(line("Anil Yadav", "Ramesh Patel")).toMatchObject({ absentDays: 1, wages: "0.00" });
+    expect(report.totals).toMatchObject({ overtimeHours: "5.50", overtimeAmount: "750.00", wages: "2050.00", total: "2800.00" });
+    expect((await overtimeReport(ctx, 2027, 3, String(main!._id))).totals.overtimeAmount).toBe("450.00");
+  });
 });

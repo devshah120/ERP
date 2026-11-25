@@ -14,7 +14,14 @@ export interface ImportFieldDef {
    * expects. Declared per field so imports can reference masters by name
    * rather than forcing users to paste ObjectIds.
    */
-  lookup?: { resource: string; matchField: string; label: string };
+  lookup?: {
+    resource: string;
+    /** Field (or fields, tried together, e.g. code and name) matched against the cell. */
+    matchField: string | string[];
+    label: string;
+    /** The cell lists several, separated by commas; the path gets a list of ids. */
+    multiple?: boolean;
+  };
 }
 
 export interface ImportDefinition {

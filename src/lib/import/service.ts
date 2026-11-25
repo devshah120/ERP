@@ -196,9 +196,12 @@ export async function previewImport(
     const repo = new TenantRepository(lookupDef.model);
     const docs = await repo.find(ctx.businessId, { deletedAt: null });
     const map = new Map<string, string>();
+    const matchFields = Array.isArray(field.lookup.matchField) ? field.lookup.matchField : [field.lookup.matchField];
     for (const d of docs) {
-      const key = String(d[field.lookup.matchField] ?? "").trim().toLowerCase();
-      if (key) map.set(key, d._id.toString());
+      for (const f of matchFields) {
+        const key = String(d[f] ?? "").trim().toLowerCase();
+        if (key && !map.has(key)) map.set(key, d._id.toString());
+      }
     }
     lookupMaps.set(field.lookup.resource, map);
   }
@@ -229,6 +232,22 @@ export async function previewImport(
         continue;
       }
       if (cell === "") continue;
+
+      if (field.lookup?.multiple) {
+        const map = lookupMaps.get(field.lookup.resource);
+        const names = cell.split(/[,;|]/).map((v) => v.trim()).filter(Boolean);
+        const missing = names.filter((n) => !map?.has(n.toLowerCase()));
+        if (missing.length > 0) {
+          errors.push({
+            row: raw.rowNumber,
+            column: field.header,
+            message: `${field.lookup.label} ${missing.map((m) => `"${m}"`).join(", ")} ${missing.length === 1 ? "does" : "do"} not exist — create ${missing.length === 1 ? "it" : "them"} first or correct the spelling`,
+          });
+          continue;
+        }
+        payload = setPath(payload, field.path, [...new Set(names.map((n) => map!.get(n.toLowerCase())!))]);
+        continue;
+      }
 
       if (field.lookup) {
         const map = lookupMaps.get(field.lookup.resource);

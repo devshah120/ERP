@@ -40,3 +40,4 @@ export * from "./BankClearance";
 export * from "./operations";
 export * from "./StoredFile";
 export * from "./hr";
+export * from "./contractLabour";

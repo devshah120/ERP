@@ -164,6 +164,71 @@ export const IMPORTS: Record<string, ImportDefinition> = {
   },
 };
 
+/** Contract labour (HRMS). */
+IMPORTS["hr-contractors"] = {
+  resource: "hr-contractors",
+  title: "Contractors",
+  duplicateKey: { path: "name", header: "Contractor Name" },
+  fields: [
+    { header: "Contractor Name", path: "name", required: true, example: "Ramesh Patel" },
+    { header: "Contractor Code", path: "contractorCode", hint: "Leave blank to number automatically", example: "" },
+    { header: "Firm Name", path: "firmName", example: "Patel Labour Services" },
+    { header: "Mobile", path: "phone", example: "9825012345" },
+    { header: "Email", path: "email", example: "ramesh@example.com" },
+    { header: "Emergency Contact", path: "emergencyContactName", example: "Kiran Patel" },
+    { header: "Emergency Phone", path: "emergencyContactPhone", example: "9825098765" },
+    { header: "Address", path: "currentAddress", example: "12 Udhna Road, Surat" },
+    {
+      header: "Works Under",
+      path: "parentContractorId",
+      hint: "Code or name of the main contractor (must already exist); blank if engaged directly",
+      example: "",
+      lookup: { resource: "hr-contractors", matchField: ["contractorCode", "name"], label: "Contractor" },
+    },
+    { header: "Work Location", path: "workLocation", example: "Unit 2, Sachin GIDC" },
+    { header: "Contract From", path: "contractStartDate", hint: "yyyy-mm-dd", example: "2026-04-01" },
+    { header: "Contract To", path: "contractEndDate", hint: "yyyy-mm-dd", example: "2027-03-31" },
+    { header: "Labour Licence No", path: "labourLicenceNumber", example: "CLRA/SRT/2026/114" },
+    { header: "Licence Valid Until", path: "licenceValidUpto", hint: "yyyy-mm-dd", example: "2027-03-31" },
+    { header: "Workers Allowed", path: "maxWorkers", type: "number", hint: "0 = no limit", example: "50" },
+    { header: "PAN", path: "panNumber", example: "ABCPP1234K" },
+    { header: "GSTIN", path: "gstin", example: "" },
+    { header: "Bank Name", path: "bankName", example: "HDFC Bank" },
+    { header: "Account Number", path: "bankAccountNumber", example: "50100123456789" },
+    { header: "IFSC", path: "ifscCode", example: "HDFC0001234" },
+    { header: "Day Wage", path: "defaultDailyWage", type: "money", example: "550" },
+    { header: "Overtime Paid At", path: "overtimeRateType", hint: "MULTIPLIER (× hourly wage) or FIXED (rate per hour)", example: "MULTIPLIER" },
+    { header: "Overtime Multiple", path: "overtimeMultiplier", type: "number", hint: "2 = double rate", example: "2" },
+    { header: "Overtime Rate Per Hour", path: "overtimeRatePerHour", type: "money", hint: "Used when Overtime Paid At is FIXED", example: "" },
+  ],
+};
+
+IMPORTS["hr-contract-workers"] = {
+  resource: "hr-contract-workers",
+  title: "Contract Workers",
+  duplicateKey: { path: "phone", header: "Mobile Number" },
+  fields: [
+    { header: "Name", path: "name", required: true, example: "Suresh Kumar" },
+    { header: "Mobile Number", path: "phone", required: true, example: "9898012345" },
+    { header: "Emergency Number", path: "emergencyPhone", example: "9898054321" },
+    {
+      header: "Contractors",
+      path: "contractorIds",
+      required: true,
+      hint: "Code or name of each contractor the worker works under, separated by commas, e.g. CON-000001, CON-000003",
+      example: "CON-000001",
+      lookup: { resource: "hr-contractors", matchField: ["contractorCode", "name"], label: "Contractor", multiple: true },
+    },
+    { header: "Worker Code", path: "workerCode", hint: "Leave blank to number automatically", example: "" },
+    { header: "Gender", path: "gender", hint: "MALE, FEMALE or OTHER", example: "MALE" },
+    { header: "Aadhaar", path: "aadhaarNumber", hint: "12 digits", example: "" },
+    { header: "Skill Category", path: "skillCategory", hint: "UNSKILLED, SEMI_SKILLED, SKILLED or HIGHLY_SKILLED", example: "SKILLED" },
+    { header: "Date of Joining", path: "dateOfJoining", hint: "yyyy-mm-dd", example: "2026-11-01" },
+    { header: "Day Wage", path: "dailyWage", type: "money", hint: "Blank or 0 = the contractor's day wage", example: "" },
+    { header: "Overtime Rate Per Hour", path: "overtimeRatePerHour", type: "money", hint: "Blank or 0 = the contractor's overtime terms", example: "" },
+  ],
+};
+
 export function getImportDefinition(resource: string): ImportDefinition | undefined {
   return IMPORTS[resource];
 }

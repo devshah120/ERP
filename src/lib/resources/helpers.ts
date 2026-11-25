@@ -51,6 +51,8 @@ function toObjectIdOrNull(value: unknown) {
 export function documentConverter(opts: {
   money?: string[];
   refs?: string[];
+  /** Fields holding a list of ids, e.g. a worker's contractors. */
+  refArrays?: string[];
   dates?: string[];
   lines?: Record<string, { refs?: string[]; money?: string[] }>;
 }) {
@@ -67,6 +69,11 @@ export function documentConverter(opts: {
 
       if (opts.refs?.includes(key)) {
         out[key] = toObjectIdOrNull(value);
+        continue;
+      }
+
+      if (opts.refArrays?.includes(key)) {
+        out[key] = Array.isArray(value) ? value.filter((v) => v && String(v).length > 0).map((v) => new Types.ObjectId(String(v))) : [];
         continue;
       }
 

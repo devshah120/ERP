@@ -5,6 +5,7 @@ import { computePayslip, type SalaryStructure } from "@/lib/hr/payrollMath";
 import { computeTimes, statusFromHours, summarizeMonth } from "@/lib/hr/attendance";
 import { eachDay, monthRange, toDay, dayKey, dayKind, shiftFor, type HrCalendar, type ShiftRule } from "@/lib/hr/calendar";
 import { toForest } from "@/lib/hr/orgTree";
+import { dayOvertimeMinutes, overtimeHourlyRate, overtimeAmount, hoursOf } from "@/lib/hr/contractLabour";
 
 describe("product gating", () => {
   it("assigns permissions and screens to products", () => {
@@ -378,5 +379,37 @@ describe("holiday calendars", () => {
     const old: HrCalendar = { holidays: new Map([["2026-01-26", "Republic Day"]]), shifts: new Map([["s", general]]), defaultShift: general };
     expect(dayKind(old, general, toDay("2026-01-26"))).toBe("HOLIDAY");
     expect(dayKind(old, shiftFor(old, "s", "anything"), toDay("2026-01-26"))).toBe("HOLIDAY");
+  });
+});
+
+describe("contract labour overtime", () => {
+  const shift: ShiftRule = { id: "s", name: "General", startTime: "09:00", endTime: "17:00", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8, weeklyOffs: ["SUNDAY"] };
+
+  it("counts time beyond the shift's full day, honouring the contractor's minimum", () => {
+    expect(dayOvertimeMinutes(shift, "09:00", "19:30", "").overtimeMinutes).toBe(150);
+    expect(dayOvertimeMinutes(shift, "09:00", "17:20", "", 30).overtimeMinutes).toBe(0);
+    expect(dayOvertimeMinutes(shift, "09:00", "17:30", "", 30).overtimeMinutes).toBe(30);
+    // Night shift crossing midnight.
+    expect(dayOvertimeMinutes(shift, "20:00", "06:00", "").overtimeMinutes).toBe(120);
+  });
+
+  it("lets typed-in hours win over the times", () => {
+    const t = dayOvertimeMinutes(shift, "09:00", "17:00", "1.5");
+    expect(t).toMatchObject({ overtimeMinutes: 90, manual: true, workedMinutes: 480 });
+  });
+
+  it("takes the worker's rate, else the fixed rate, else day wage ÷ hours × multiple", () => {
+    const base = { workerRate: "0", rateType: "MULTIPLIER", fixedRate: "0", multiplier: 2, dailyWage: "600", fullDayHours: 8 };
+    expect(overtimeHourlyRate(base).toFixed(2)).toBe("150.00");
+    expect(overtimeHourlyRate({ ...base, workerRate: "95" }).toFixed(2)).toBe("95.00");
+    expect(overtimeHourlyRate({ ...base, rateType: "FIXED", fixedRate: "120" }).toFixed(2)).toBe("120.00");
+    expect(overtimeHourlyRate({ ...base, dailyWage: "550", multiplier: 1.5 }).toFixed(2)).toBe("103.13");
+    expect(overtimeHourlyRate({ ...base, fullDayHours: 0 }).toFixed(2)).toBe("0.00");
+  });
+
+  it("pays overtime minutes to the paisa", () => {
+    expect(overtimeAmount(150, new Decimal("103.13")).toFixed(2)).toBe("257.83");
+    expect(overtimeAmount(0, new Decimal("150")).toFixed(2)).toBe("0.00");
+    expect(hoursOf(150)).toBe("2.50");
   });
 });

@@ -140,6 +140,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    label: "HR · Contract labour",
+    modules: [
+      m("hr-contractors", "Contractors"),
+      m("hr-contract-workers", "Contract workers"),
+      m("hr-contract-attendance", "Contract labour attendance & overtime", ["view", "edit"]),
+    ],
+  },
+  {
     label: "HR · Talent",
     modules: [
       m("hr-job-openings", "Job openings"),

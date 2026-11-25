@@ -93,8 +93,13 @@ function buildPayload(config: ResourceUi, state: FormState): Record<string, unkn
       if (field.type === "lines") {
         const cols = field.columns ?? [];
         const rows = ((value as LineRow[]) ?? [])
-          // A row the user added but never filled in is not an error to report.
-          .filter((row) => cols.some((c) => c.type !== "number" && String(row[c.name] ?? "").trim() !== ""))
+          // A row the user added but never filled in is not an error to report. Rows are judged by
+          // their text columns (numbers start pre-filled); a table of only numbers, like incentive
+          // slabs, by its numbers.
+          .filter((row) => {
+            const keyCols = cols.some((c) => c.type !== "number") ? cols.filter((c) => c.type !== "number") : cols;
+            return keyCols.some((c) => String(row[c.name] ?? "").trim() !== "");
+          })
           .map((row) => {
             const out: LineRow = {};
             for (const c of cols) {

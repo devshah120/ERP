@@ -1,5 +1,5 @@
 import type { SVGProps, ComponentType } from "react";
-import { HR_REPORTS } from "@/lib/hr/reportCatalog";
+import { HR_REPORTS, INCENTIVE_REPORT_KEYS } from "@/lib/hr/reportCatalog";
 import {
   IconDashboard,
   IconSales,
@@ -132,7 +132,6 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr/payroll", label: "Generate Payroll", enabled: true, keywords: "salary process payslip pf esi pt tds monthly payroll run" },
           { href: "/hr/payroll/variables", label: "Variable Pay", enabled: true, keywords: "variable others bonus incentive overtime arrears canteen deduction monthly" },
           { href: "/hr/payroll/variables/import", label: "Import Variable Pay", enabled: true, keywords: "import variable others excel upload bonus incentive" },
-          { href: "/hr/payroll/incentive", label: "Attendance Incentive", enabled: true, keywords: "attendance incentive matrix yearly working days present reward january payroll slab" },
           { href: "/hr/payroll/approve", label: "Approve / Reject Payroll", enabled: true, keywords: "approve reject draft payroll review" },
           { href: "/hr/payroll/disburse", label: "Disburse Payroll", enabled: true, keywords: "disburse pay salary bank transfer mark paid" },
           { href: "/hr/payroll/rollback", label: "Rollback Payroll", enabled: true, keywords: "rollback cancel approved payroll reverse unlock" },
@@ -200,11 +199,21 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
+        key: "hr-incentive-reports",
+        label: "Incentive Reports",
+        keywords: "incentive matrix reports yearly attendance financial year week off holiday working",
+        icon: IconTrendUp,
+        children: [
+          { href: "/hr/payroll/incentive", label: "Incentive Calculation", enabled: true, keywords: "attendance incentive matrix calculate slab reward add to payroll january" },
+          ...HR_REPORTS.filter((r) => INCENTIVE_REPORT_KEYS.has(r.key)).map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
+        ],
+      },
+      {
         key: "hr-reports",
         label: "HR Reports",
         keywords: "hr report salary register pf esi statement headcount attendance bank transfer",
         icon: IconClipboard,
-        children: HR_REPORTS.map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
+        children: HR_REPORTS.filter((r) => !INCENTIVE_REPORT_KEYS.has(r.key)).map((r) => ({ href: `/hr/reports/${r.key}`, label: r.label, enabled: true, keywords: r.keywords })),
       },
     ],
   },

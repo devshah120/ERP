@@ -15,6 +15,7 @@ export const GET = withApiHandler(async (req: NextRequest, { params }) => {
   const payload = await hrReport(ctx, report, {
     year: sp.get("year") ? Number(sp.get("year")) : undefined,
     month: sp.get("month") ? Number(sp.get("month")) : undefined,
+    financial: sp.get("fy") === "1",
   });
   const format = sp.get("format");
   if (format === "xlsx" || format === "csv") return buildExportResponse(payload, format);

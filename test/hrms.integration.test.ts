@@ -1337,4 +1337,30 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(await reimbursed(5)).toBe("0.00");
     expect(await reimbursed(6)).toBe("750.00");
   });
+
+  it("reports yearly attendance by financial year and who worked on a weekly off or holiday", async () => {
+    const { hrReport } = await import("@/lib/hr/insights");
+    const { Employee, Attendance, Holiday } = await import("@/models/hr");
+    const bId = new Types.ObjectId(businessId);
+
+    const emp = await Employee.create({ businessId: bId, employeeCode: "EMP-WO-01", name: "Weekend Worker", dateOfJoining: new Date("2029-01-01"), employmentStatus: "CONFIRMED", basic: "15000" });
+    await Holiday.create({ businessId: bId, name: "Founders Day", date: new Date("2029-05-15") });
+    // Sunday 6 May 2029 (weekly off), the 15 May holiday as a half day, and an ordinary Monday.
+    await Attendance.insertMany([
+      { businessId: bId, employeeId: emp._id, date: new Date("2029-05-06"), status: "PRESENT", workedMinutes: 480 },
+      { businessId: bId, employeeId: emp._id, date: new Date("2029-05-15"), status: "HALF_DAY", workedMinutes: 240 },
+      { businessId: bId, employeeId: emp._id, date: new Date("2029-05-07"), status: "PRESENT", workedMinutes: 540 },
+    ]);
+
+    const wo = await hrReport(ctx, "weekoff-working", { year: 2029, financial: true });
+    expect(wo.title).toBe("Week-off & Holiday Working FY 2029-30");
+    expect(wo.rows.find((r) => r.name === "Weekend Worker")).toMatchObject({ weeklyOffsWorked: 1, holidaysWorked: 1, daysWorked: 1.5, hoursWorked: "12.00", weeklyOffDates: "06 May", holidayDates: "15 May" });
+
+    // FY 2029-30 runs April 2029 to March 2030; they joined in January 2029, so all 365 days count.
+    const fy = await hrReport(ctx, "yearly-attendance", { year: 2029, financial: true });
+    expect(fy.title).toBe("Yearly Attendance FY 2029-30");
+    expect(fy.rows.find((r) => r.name === "Weekend Worker")).toMatchObject({ daysEmployed: 365 });
+    const cy = await hrReport(ctx, "yearly-attendance", { year: 2028 });
+    expect(cy.rows.find((r) => r.name === "Weekend Worker")).toBeUndefined();
+  });
 });

@@ -41,12 +41,14 @@ export default function HrReportPage() {
   const def = hrReport(key);
   if (!def) notFound();
   const [period, setPeriod] = useState(lastMonth());
+  const [financial, setFinancial] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
 
   const needs = def.needs;
-  const params: Record<string, number> = needs === "month" ? { year: period.year, month: period.month } : needs === "year" ? { year: period.year } : {};
+  const params: Record<string, number> =
+    needs === "month" ? { year: period.year, month: period.month } : needs === "year" ? { year: period.year } : needs === "period" ? { year: period.year, fy: financial ? 1 : 0 } : {};
   const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
 
   // Bumped by the refresh button to fetch the same report again.
@@ -96,6 +98,21 @@ export default function HrReportPage() {
       <div className="toolbar">
         {needs === "none" && <span className="hrMuted">As of today</span>}
         {needs === "month" && <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />}
+        {needs === "period" && (
+          <>
+            <select className="select" style={{ width: "auto" }} value={financial ? "FY" : "CY"} onChange={(e) => setFinancial(e.target.value === "FY")} aria-label="Year type">
+              <option value="CY">Calendar year</option>
+              <option value="FY">Financial year</option>
+            </select>
+            <select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
+              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
+                <option key={y} value={y}>
+                  {financial ? `${y}-${String((y + 1) % 100).padStart(2, "0")} (Apr–Mar)` : y}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         {needs === "year" && (
           <select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
             {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (

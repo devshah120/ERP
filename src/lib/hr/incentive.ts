@@ -6,7 +6,7 @@ import { recordAudit } from "@/lib/services/auditService";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { Attendance, IncentiveMatrix, PayComponent, PayrollRun, PayrollVariable } from "@/models/hr";
 import type { AuthContext } from "@/lib/auth/context";
-import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring } from "./calendar";
+import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring, dayKind, shiftFor } from "./calendar";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { salaryForMonth } from "./history";
 import { employeeLabels, type AnyDoc } from "./common";
@@ -286,4 +286,67 @@ export async function postIncentive(ctx: AuthContext, q: z.infer<typeof incentiv
     reason: "Attendance incentive added to payroll",
   });
   return { added, removed, amount: result.totals.amount, payout: payout.label, draftPayroll: payout.payroll?.status === "DRAFT" ? payout.payroll.runNumber : null };
+}
+
+/* ------------------------------------------------------------------ */
+/* Worked on a weekly off or holiday                                   */
+/* ------------------------------------------------------------------ */
+
+const WORKED = new Set(["PRESENT", "HALF_DAY", "ON_DUTY"]);
+
+/** The days of a period: a calendar year (January–December) or a financial year (April–March) starting in `year`. */
+export function reportPeriod(year: number, financial: boolean) {
+  return financial
+    ? { start: new Date(Date.UTC(year, 3, 1)), end: new Date(Date.UTC(year + 1, 2, 31)), label: `FY ${year}-${String((year + 1) % 100).padStart(2, "0")}` }
+    : { start: new Date(Date.UTC(year, 0, 1)), end: new Date(Date.UTC(year, 11, 31)), label: String(year) };
+}
+
+/**
+ * Employees marked present (or half day / on duty) on a day that was their
+ * own weekly off or holiday, with the dates. Each person's shift and holiday
+ * calendar decide which days were off for them.
+ */
+export async function restDayWorking(ctx: AuthContext, start: Date, end: Date) {
+  const emps = await employeesDuring(ctx.businessId, start, end);
+  const [cal, records, labels] = await Promise.all([
+    loadCalendar(ctx.businessId, start, end),
+    Attendance.find(
+      { businessId: ctx.businessId, date: { $gte: start, $lte: end }, employeeId: { $in: emps.map((e) => e._id) }, status: { $in: [...WORKED] } },
+      { employeeId: 1, date: 1, status: 1, workedMinutes: 1 }
+    )
+      .sort({ date: 1 })
+      .lean<AnyDoc[]>(),
+    employeeLabels(ctx.businessId, emps.map((e) => e._id)),
+  ]);
+  const empBy = new Map(emps.map((e) => [String(e._id), e]));
+  const out = new Map<string, { weeklyOffs: string[]; holidays: string[]; minutes: number; days: number }>();
+  for (const r of records) {
+    const e = empBy.get(String(r.employeeId));
+    if (!e) continue;
+    const kind = dayKind(cal, shiftFor(cal, e.shiftId, e.holidayCalendarId), toDay(r.date));
+    if (kind === "WORKING") continue;
+    const k = String(e._id);
+    const acc = out.get(k) ?? { weeklyOffs: [], holidays: [], minutes: 0, days: 0 };
+    (kind === "HOLIDAY" ? acc.holidays : acc.weeklyOffs).push(dayKey(toDay(r.date)));
+    acc.days += r.status === "HALF_DAY" ? 0.5 : 1;
+    acc.minutes += Number(r.workedMinutes ?? 0);
+    out.set(k, acc);
+  }
+  const fmt = (keys: string[]) => keys.map((k) => new Date(`${k}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })).join(", ");
+  return [...out.entries()]
+    .map(([id, a]) => {
+      const e = empBy.get(id);
+      return {
+        employeeCode: e.employeeCode as string,
+        name: e.name as string,
+        department: labels.get(id)?.department ?? "",
+        weeklyOffsWorked: a.weeklyOffs.length,
+        holidaysWorked: a.holidays.length,
+        daysWorked: a.days,
+        hoursWorked: new Decimal(a.minutes).dividedBy(60).toFixed(2),
+        weeklyOffDates: fmt(a.weeklyOffs),
+        holidayDates: fmt(a.holidays),
+      };
+    })
+    .sort((x, y) => y.daysWorked - x.daysWorked || x.employeeCode.localeCompare(y.employeeCode));
 }

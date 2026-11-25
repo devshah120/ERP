@@ -20,10 +20,17 @@ export const HR_REPORTS = [
   },
   {
     key: "yearly-attendance",
-    label: "Yearly working days",
-    needs: "year",
-    description: "Each employee's year: days employed, weekly offs, holidays, working days, present, leave and absent days.",
-    keywords: "yearly annual working days holidays weekly off present absent leave attendance",
+    label: "Yearly attendance",
+    needs: "period",
+    description: "Each employee's calendar or financial year: days employed, weekly offs, holidays, working days, present, leave and absent days.",
+    keywords: "yearly annual financial year working days holidays weekly off present absent leave attendance",
+  },
+  {
+    key: "weekoff-working",
+    label: "Week-off & holiday working",
+    needs: "period",
+    description: "Employees who worked on their weekly off or a holiday, with how many days, the hours and the dates.",
+    keywords: "week off weekly off holiday working worked sunday comp off",
   },
   {
     key: "attendance-incentive",
@@ -60,6 +67,9 @@ export const HR_REPORTS = [
 ] as const;
 
 export type HrReportKey = (typeof HR_REPORTS)[number]["key"];
+
+/** Reports listed under "Incentive Reports" in the sidebar instead of "HR Reports". */
+export const INCENTIVE_REPORT_KEYS: ReadonlySet<string> = new Set(["yearly-attendance", "weekoff-working", "attendance-incentive"]);
 
 export function hrReport(key: string) {
   return HR_REPORTS.find((r) => r.key === key);

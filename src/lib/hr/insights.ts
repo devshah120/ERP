@@ -21,7 +21,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import type { ExportPayload } from "@/lib/export/exporter";
 import { toDay, dayKey, addDays, monthRange, todayIn } from "./calendar";
 import { monthlyRegister } from "./attendance";
-import { yearAttendance, attendanceIncentive } from "./incentive";
+import { yearAttendance, attendanceIncentive, reportPeriod, restDayWorking } from "./incentive";
 import { activeAnnouncements } from "./people";
 import { monthLabel } from "./payroll";
 import { employeeLabels, businessTimeZone, type AnyDoc } from "./common";
@@ -161,7 +161,7 @@ function sumColumns(rows: Record<string, unknown>[], keys: string[]): Record<str
   return out;
 }
 
-export async function hrReport(ctx: AuthContext, key: string, params: { year?: number; month?: number }): Promise<ExportPayload> {
+export async function hrReport(ctx: AuthContext, key: string, params: { year?: number; month?: number; financial?: boolean }): Promise<ExportPayload> {
   const now = new Date();
   const year = params.year ?? now.getUTCFullYear();
   const month = params.month ?? now.getUTCMonth() + 1;
@@ -244,7 +244,8 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
     }
 
     case "yearly-attendance": {
-      const { rows: list } = await yearAttendance(ctx, new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)));
+      const p = reportPeriod(year, Boolean(params.financial));
+      const { rows: list } = await yearAttendance(ctx, p.start, p.end);
       const rows = list.map((r) => ({
         employeeCode: r.employeeCode,
         name: r.name,
@@ -263,7 +264,7 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
         lopDays: r.lopDays,
       }));
       return {
-        title: `Yearly Working Days ${year}`,
+        title: `Yearly Attendance ${p.label}`,
         filterNote: "Working days = days employed − weekly offs − holidays. Half days count half in Present; working days with nothing marked are Unmarked (paid as present).",
         columns: [
           { key: "employeeCode", label: "Emp. code" },
@@ -284,6 +285,31 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
         ],
         rows,
         summary: [{ label: "Employees", value: String(rows.length) }],
+      };
+    }
+
+    case "weekoff-working": {
+      const p = reportPeriod(year, Boolean(params.financial));
+      const rows = await restDayWorking(ctx, p.start, p.end);
+      return {
+        title: `Week-off & Holiday Working ${p.label}`,
+        filterNote: "Days marked present, half day or on duty that were the employee's own weekly off or holiday (from their shift and holiday calendar).",
+        columns: [
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "name", label: "Name" },
+          { key: "department", label: "Department" },
+          { key: "weeklyOffsWorked", label: "Weekly offs worked", type: "number" },
+          { key: "holidaysWorked", label: "Holidays worked", type: "number" },
+          { key: "daysWorked", label: "Days worked", type: "number" },
+          { key: "hoursWorked", label: "Hours", type: "number" },
+          { key: "weeklyOffDates", label: "Weekly off dates" },
+          { key: "holidayDates", label: "Holiday dates" },
+        ],
+        rows,
+        summary: [
+          { label: "Employees", value: String(rows.length) },
+          { label: "Days worked on rest days", value: String(rows.reduce((t, r) => t + r.daysWorked, 0)) },
+        ],
       };
     }
 

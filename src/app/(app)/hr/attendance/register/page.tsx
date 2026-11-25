@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { AttCode, AttLegend, MonthPicker, MONTH_NAMES, WEEKDAY_SHORT, downloadHref, useMasterOptions } from "@/components/hr/HrKit";
 import { IconDownload, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Register {
   year: number;
@@ -74,14 +75,14 @@ export default function AttendanceRegisterPage() {
 
       <div className="toolbar">
         <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />
-        <select className="select" style={{ width: "auto" }} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Department">
+        <Select className="select" style={{ width: "auto" }} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Department">
           <option value="">All departments</option>
           {departments?.map((d) => (
             <option key={d.id} value={d.id}>
               {d.label}
             </option>
           ))}
-        </select>
+        </Select>
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} aria-label="Refresh">
             <IconRefresh />

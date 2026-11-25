@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import Select from "@/components/ui/Select";
 
 /** Small building blocks shared by the HRMS screens. */
 
@@ -99,20 +100,20 @@ export function MonthPicker({ year, month, onChange }: { year: number; month: nu
   const years = Array.from({ length: 7 }, (_, i) => now - 4 + i);
   return (
     <>
-      <select className="select" style={{ width: "auto" }} value={month} onChange={(e) => onChange({ year, month: Number(e.target.value) })} aria-label="Month">
+      <Select className="select" style={{ width: "auto" }} value={month} onChange={(e) => onChange({ year, month: Number(e.target.value) })} aria-label="Month">
         {MONTH_NAMES.map((m, i) => (
           <option key={m} value={i + 1}>
             {m}
           </option>
         ))}
-      </select>
-      <select className="select" style={{ width: "auto" }} value={year} onChange={(e) => onChange({ year: Number(e.target.value), month })} aria-label="Year">
+      </Select>
+      <Select className="select" style={{ width: "auto" }} value={year} onChange={(e) => onChange({ year: Number(e.target.value), month })} aria-label="Year">
         {years.map((y) => (
           <option key={y} value={y}>
             {y}
           </option>
         ))}
-      </select>
+      </Select>
     </>
   );
 }

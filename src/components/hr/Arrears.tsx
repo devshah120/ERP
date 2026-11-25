@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { Card, MonthPicker, MONTH_NAMES, useEmployeeOptions, useMasterOptions } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
+import Select from "@/components/ui/Select";
 
 export type ArrearTab = "increment" | "day" | "da";
 
@@ -134,12 +135,12 @@ export default function Arrears({ tab }: { tab: ArrearTab }) {
       {tab === "da" && canProcess && <DaArrearForm onDone={load} />}
 
       <div className="toolbar" style={{ marginTop: "0.75rem" }}>
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
           <option value="">Status: All</option>
           <option value="PENDING">Pending (next payroll)</option>
           <option value="INCLUDED">Paid</option>
           <option value="CANCELLED">Cancelled</option>
-        </select>
+        </Select>
         {data && data.pendingCount > 0 && (
           <span className="hrMuted">
             {data.pendingCount} pending · {formatMoney(data.pendingTotal)}
@@ -269,14 +270,14 @@ function DayArrearForm({ onDone }: { onDone: () => void }) {
       <div className="formGrid">
         <div className="field">
           <label htmlFor="da-emp">Employee</label>
-          <select id="da-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
+          <Select id="da-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
             <option value="">— Choose —</option>
             {employees?.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label>Month (approved payroll)</label>
@@ -349,14 +350,14 @@ function DaArrearForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="field">
           <label htmlFor="dar-dept">Employees</label>
-          <select id="dar-dept" className="select" value={form.departmentId} onChange={(e) => (setForm({ ...form, departmentId: e.target.value }), setPreview(null))}>
+          <Select id="dar-dept" className="select" value={form.departmentId} onChange={(e) => (setForm({ ...form, departmentId: e.target.value }), setPreview(null))}>
             <option value="">Everyone</option>
             {departments?.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label>From month</label>

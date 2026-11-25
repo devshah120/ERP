@@ -13,6 +13,7 @@ import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/Shor
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { formatMoney, formatQuantity } from "@/lib/format/number";
 import { IconPlus, IconSave, IconClose, IconTrash } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export type StockKind = "stock-adjustments" | "stock-transfers";
 
@@ -494,7 +495,7 @@ export default function StockDocumentFormView({
             {isAdjustment ? "Warehouse" : "From warehouse"}
             <span className="req">*</span>
           </label>
-          <select
+          <Select
             id="s-warehouse"
             className="select"
             value={warehouseId}
@@ -507,7 +508,7 @@ export default function StockDocumentFormView({
                 {w.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {!isAdjustment && (
@@ -515,7 +516,7 @@ export default function StockDocumentFormView({
             <label htmlFor="s-to">
               To warehouse<span className="req">*</span>
             </label>
-            <select
+            <Select
               id="s-to"
               className="select"
               value={toWarehouseId}
@@ -530,7 +531,7 @@ export default function StockDocumentFormView({
                     {w.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </div>
         )}
 
@@ -551,13 +552,13 @@ export default function StockDocumentFormView({
         {isAdjustment && (
           <div className="docHeadField">
             <label htmlFor="s-reason">Reason</label>
-            <select id="s-reason" className="select" value={reason} onChange={(e) => setReason(e.target.value)}>
+            <Select id="s-reason" className="select" value={reason} onChange={(e) => setReason(e.target.value)}>
               {REASONS.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
       </div>
@@ -576,7 +577,7 @@ export default function StockDocumentFormView({
         {balances.length > 0 && (
           <>
             <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.9rem" }}>
-              <select
+              <Select
                 className="select"
                 value=""
                 onChange={(e) => {
@@ -592,7 +593,7 @@ export default function StockDocumentFormView({
                     {b.variantSku ? ` (${b.variantSku})` : ""} — {formatQuantity(b.quantity)} on hand
                   </option>
                 ))}
-              </select>
+              </Select>
               <button type="button" className="button buttonSecondary" onClick={addAll}>
                 <IconPlus /> Add all {balances.length} items
               </button>

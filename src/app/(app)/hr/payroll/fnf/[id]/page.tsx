@@ -15,6 +15,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { Kpi, MONTH_NAMES, fmtDate, todayKey } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconArrowLeft, IconPlus, IconPrint, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Line {
   code: string;
@@ -392,22 +393,22 @@ export default function FnfDetailPage() {
             </div>
             <div className="field">
               <label htmlFor="fa-treat">Notice shortfall</label>
-              <select id="fa-treat" className="select" value={adjust.noticeTreatment} onChange={(e) => setAdjust({ ...adjust, noticeTreatment: e.target.value })}>
+              <Select id="fa-treat" className="select" value={adjust.noticeTreatment} onChange={(e) => setAdjust({ ...adjust, noticeTreatment: e.target.value })}>
                 {Object.entries(TREATMENT).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           <h4 style={{ margin: "1rem 0 0.5rem" }}>Lines added by hand</h4>
           {adjust.lines.map((l, i) => (
             <div key={i} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <select className="select" style={{ width: "9rem" }} value={l.kind} onChange={(e) => setAdjust({ ...adjust, lines: adjust.lines.map((x, j) => (j === i ? { ...x, kind: e.target.value as "EARNING" | "DEDUCTION" } : x)) })} aria-label="Type">
+              <Select className="select" style={{ width: "9rem" }} value={l.kind} onChange={(e) => setAdjust({ ...adjust, lines: adjust.lines.map((x, j) => (j === i ? { ...x, kind: e.target.value as "EARNING" | "DEDUCTION" } : x)) })} aria-label="Type">
                 <option value="EARNING">Earning</option>
                 <option value="DEDUCTION">Deduction</option>
-              </select>
+              </Select>
               <input className="input" placeholder="Label, e.g. Asset recovery" value={l.label} onChange={(e) => setAdjust({ ...adjust, lines: adjust.lines.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} aria-label="Label" />
               <input className="input" style={{ width: "8rem", textAlign: "right" }} inputMode="decimal" placeholder="0.00" value={l.amount} onChange={(e) => setAdjust({ ...adjust, lines: adjust.lines.map((x, j) => (j === i ? { ...x, amount: e.target.value.trim() } : x)) })} aria-label="Amount" />
               <button type="button" className="button buttonGhost buttonSm" onClick={() => setAdjust({ ...adjust, lines: adjust.lines.filter((_, j) => j !== i) })}>

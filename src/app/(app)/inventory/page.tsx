@@ -13,6 +13,7 @@ import { KpiCard } from "@/components/analytics/KpiGrid";
 import { formatMoney, formatQuantity } from "@/lib/format/number";
 import { humanizeStatus } from "@/components/ui/StatusBadge";
 import { IconPlus, IconRefresh, IconArrowRight, IconChart } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface StockRow {
   itemCode: string;
@@ -234,14 +235,14 @@ export default function InventoryOverviewPage() {
       {tab !== "movements" && (
         <div className="toolbar">
           <SearchBox value={query} onChange={setQuery} placeholder="Search item, code or SKU…" width="18rem" />
-          <select className="select" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} aria-label="Warehouse">
+          <Select className="select" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} aria-label="Warehouse">
             <option value="">All warehouses</option>
             {warehouses.map((w) => (
               <option key={w} value={w}>
                 {w}
               </option>
             ))}
-          </select>
+          </Select>
           <label className="checkboxRow" style={{ marginLeft: "0.25rem" }}>
             <input type="checkbox" checked={onlyAttention} onChange={(e) => setOnlyAttention(e.target.checked)} />
             Only low or out of stock

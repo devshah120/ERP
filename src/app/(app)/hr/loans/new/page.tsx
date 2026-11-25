@@ -12,6 +12,7 @@ import AccessDenied from "@/components/ui/AccessDenied";
 import { MonthPicker, todayKey, useEmployeeOptions, MONTH_NAMES } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconArrowLeft } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export default function NewLoanPage() {
   return (
@@ -101,21 +102,21 @@ function NewLoan() {
                 <label htmlFor="ln-emp">
                   Employee<span className="req">*</span>
                 </label>
-                <select id="ln-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} required>
+                <Select id="ln-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} required>
                   <option value="">— choose —</option>
                   {employees?.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="ln-type">Type</label>
-                <select id="ln-type" className="select" value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })}>
+                <Select id="ln-type" className="select" value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })}>
                   <option value="ADVANCE">Salary advance</option>
                   <option value="LOAN">Loan</option>
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="ln-date">Issued on</label>

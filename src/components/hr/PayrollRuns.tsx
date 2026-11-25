@@ -16,6 +16,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { MonthPicker, MONTH_NAMES } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconRefresh, IconWarning } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Run {
   id: string;
@@ -179,13 +180,13 @@ export default function PayrollRuns({ view }: { view: PayrollView }) {
 
       <div className="toolbar">
         {view === "all" && (
-          <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+          <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
             <option value="">Status: All</option>
             <option value="DRAFT">Draft</option>
             <option value="APPROVED">Approved</option>
             <option value="PAID">Paid</option>
             <option value="CANCELLED">Cancelled</option>
-          </select>
+          </Select>
         )}
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">

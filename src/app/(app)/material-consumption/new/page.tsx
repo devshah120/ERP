@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import ItemLinesInput, { emptyItemLine, cleanLines, type ItemLine } from "@/components/inventory/ItemLinesInput";
 import { useWarehouses } from "@/components/forms/useWarehouses";
 import { IconAlertCircle, IconArrowLeft } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export default function NewConsumptionPage() {
   const router = useRouter();
@@ -70,10 +71,10 @@ export default function NewConsumptionPage() {
             <div className="formGrid">
               <div className="field">
                 <label htmlFor="c-wh">Warehouse<span className="req">*</span></label>
-                <select id="c-wh" className="select" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                <Select id="c-wh" className="select" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
                   <option value="">— choose —</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="c-date">Date</label>

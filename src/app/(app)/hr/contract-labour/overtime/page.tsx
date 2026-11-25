@@ -10,6 +10,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { formatMoney } from "@/lib/format/number";
 import { Kpi, MonthPicker, MONTH_NAMES, downloadHref, useMasterOptions } from "@/components/hr/HrKit";
 import { IconDownload } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   workerId: string;
@@ -102,14 +103,14 @@ export default function OvertimePage() {
 
       <div className="toolbar">
         <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />
-        <select className="select" style={{ width: "auto", maxWidth: "16rem" }} value={contractorId} onChange={(e) => setContractorId(e.target.value)} aria-label="Contractor">
+        <Select className="select" style={{ width: "auto", maxWidth: "16rem" }} value={contractorId} onChange={(e) => setContractorId(e.target.value)} aria-label="Contractor">
           <option value="">All contractors</option>
           {(contractorOptions ?? []).map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
         <SearchBox value={query} onChange={setQuery} placeholder="Filter by worker or contractor…" width="14rem" />
         <label className="checkboxRow">
           <input type="checkbox" checked={onlyOvertime} onChange={(e) => setOnlyOvertime(e.target.checked)} />

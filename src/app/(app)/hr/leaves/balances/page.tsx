@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import type { LeaveBalance } from "@/components/hr/LeaveForm";
+import Select from "@/components/ui/Select";
 
 interface Table {
   year: number;
@@ -142,13 +143,13 @@ export default function LeaveBalancesPage() {
       />
       <div className="toolbar">
         <SearchBox value={query} onChange={setQuery} placeholder="Search employee…" width="16rem" />
-        <select className="select" style={{ width: "auto" }} value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Year">
+        <Select className="select" style={{ width: "auto" }} value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Year">
           {[year - 2, year - 1, year, year + 1].map((y) => (
             <option key={y} value={y}>
               {y}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="tableWrap">

@@ -10,6 +10,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { MonthPicker, downloadHref, fmtDate } from "@/components/hr/HrKit";
 import { formatMoney, formatQuantity } from "@/lib/format/number";
 import { IconDownload, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Report {
   title: string;
@@ -100,27 +101,27 @@ export default function HrReportPage() {
         {needs === "month" && <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />}
         {needs === "period" && (
           <>
-            <select className="select" style={{ width: "auto" }} value={financial ? "FY" : "CY"} onChange={(e) => setFinancial(e.target.value === "FY")} aria-label="Year type">
+            <Select className="select" style={{ width: "auto" }} value={financial ? "FY" : "CY"} onChange={(e) => setFinancial(e.target.value === "FY")} aria-label="Year type">
               <option value="CY">Calendar year</option>
               <option value="FY">Financial year</option>
-            </select>
-            <select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
+            </Select>
+            <Select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
               {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
                 <option key={y} value={y}>
                   {financial ? `${y}-${String((y + 1) % 100).padStart(2, "0")} (Apr–Mar)` : y}
                 </option>
               ))}
-            </select>
+            </Select>
           </>
         )}
         {needs === "year" && (
-          <select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
+          <Select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">
             {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">

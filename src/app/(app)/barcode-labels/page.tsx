@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import BarcodeSvg from "@/components/labels/BarcodeSvg";
 import { IconClose, IconDownload, IconMinus, IconPlus, IconPrint, IconSearch, IconTrash } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 /* ------------------------------------------------------------------ */
 /* Label settings                                                      */
@@ -308,25 +309,25 @@ export default function BarcodeLabelsPage() {
           <div className="lblGrid">
             <div className="field">
               <label htmlFor="lb-cat">Category</label>
-              <select id="lb-cat" className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <Select id="lb-cat" className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 <option value="">All categories</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="lb-brand">Brand</label>
-              <select id="lb-brand" className="select" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+              <Select id="lb-brand" className="select" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
                 <option value="">All brands</option>
                 {brands.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field lblApplyField">
               <span className="lblFieldSpacer" aria-hidden>
@@ -370,24 +371,24 @@ export default function BarcodeLabelsPage() {
             </div>
             <div className="field">
               <label htmlFor="lb-across">Print type</label>
-              <select id="lb-across" className="select" value={across} onChange={(e) => setAcross(Number(e.target.value))}>
+              <Select id="lb-across" className="select" value={across} onChange={(e) => setAcross(Number(e.target.value))}>
                 {ACROSS.map((n) => (
                   <option key={n} value={n}>
                     {n} UPS · {n} label{n === 1 ? "" : "s"} across
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div className="field">
               <label htmlFor="lb-template">Label size</label>
-              <select id="lb-template" className="select" value={templateKey} onChange={(e) => setTemplateKey(e.target.value)}>
+              <Select id="lb-template" className="select" value={templateKey} onChange={(e) => setTemplateKey(e.target.value)}>
                 {TEMPLATES.map((t) => (
                   <option key={t.key} value={t.key}>
                     {t.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field lblSpan2">
               <span className="lblLabel">Show on label</span>
@@ -402,10 +403,10 @@ export default function BarcodeLabelsPage() {
                   <input type="checkbox" checked={showDate} onChange={(e) => setShowDate(e.target.checked)} /> Packing date
                 </label>
                 {showDate && (
-                  <select className="select lblDateFormat" value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFormat)} aria-label="Date format">
+                  <Select className="select lblDateFormat" value={dateFormat} onChange={(e) => setDateFormat(e.target.value as DateFormat)} aria-label="Date format">
                     <option value="MM/YYYY">MM/YYYY</option>
                     <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                  </select>
+                  </Select>
                 )}
               </div>
             </div>

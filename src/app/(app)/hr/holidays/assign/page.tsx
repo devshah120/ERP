@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { useMasterOptions } from "@/components/hr/HrKit";
+import Select from "@/components/ui/Select";
 
 interface Calendar {
   id: string;
@@ -169,7 +170,7 @@ export default function AssignHolidayCalendarPage() {
           <div className="dirFilterFoot">
             <span className="hrMuted">{selected.size > 0 ? `${selected.size} selected` : "Select employees to assign"}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <select className="select" style={{ width: "auto", minWidth: "14rem" }} value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Assign to" disabled={selected.size === 0 || saving}>
+              <Select className="select" style={{ width: "auto", minWidth: "14rem" }} value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Assign to" disabled={selected.size === 0 || saving}>
                 <option value="">Assign to…</option>
                 {(data?.calendars ?? [])
                   .filter((c) => c.active)
@@ -179,7 +180,7 @@ export default function AssignHolidayCalendarPage() {
                     </option>
                   ))}
                 <option value="default">{defaultLabel}</option>
-              </select>
+              </Select>
               <button type="button" className="button buttonPrimary" onClick={assign} disabled={saving || selected.size === 0 || !target}>
                 {saving && <span className="spinner" />} Assign
               </button>

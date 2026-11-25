@@ -13,6 +13,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, useEmployeeOptions } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -91,13 +92,13 @@ export default function FnfListPage() {
         }
       />
       <div className="toolbar">
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
           <option value="">Status: All</option>
           <option value="DRAFT">Draft</option>
           <option value="APPROVED">Approved</option>
           <option value="PAID">Paid</option>
           <option value="CANCELLED">Cancelled</option>
-        </select>
+        </Select>
       </div>
 
       <div className="tableWrap">
@@ -182,24 +183,24 @@ export default function FnfListPage() {
           <div className="formGrid">
             <div className="field fieldSpanFull">
               <label htmlFor="fnf-emp">Employee</label>
-              <select id="fnf-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
+              <Select id="fnf-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
                 <option value="">— Choose —</option>
                 {employees?.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="fnf-type">Separation</label>
-              <select id="fnf-type" className="select" value={form.separationType} onChange={(e) => setForm({ ...form, separationType: e.target.value })}>
+              <Select id="fnf-type" className="select" value={form.separationType} onChange={(e) => setForm({ ...form, separationType: e.target.value })}>
                 {Object.entries(SEPARATION_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="fnf-notice">Notice period (days)</label>

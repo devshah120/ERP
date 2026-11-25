@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { useToast } from "@/components/ui/Toast";
 import { IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   voucherId: string;
@@ -178,20 +179,20 @@ export default function BankReconciliationPage() {
       ) : (
         <>
           <div className="toolbar">
-            <select className="select" style={{ width: "auto", minWidth: "16rem" }} value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="Bank account">
+            <Select className="select" style={{ width: "auto", minWidth: "16rem" }} value={accountId} onChange={(e) => setAccountId(e.target.value)} aria-label="Bank account">
               {accounts?.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <label className="activeFilterNote" style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center" }}>
               As of <input type="date" className="input" style={{ width: "auto" }} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
             </label>
-            <select className="select" style={{ width: "auto" }} value={show} onChange={(e) => setShow(e.target.value as "UNCLEARED" | "ALL")} aria-label="Show">
+            <Select className="select" style={{ width: "auto" }} value={show} onChange={(e) => setShow(e.target.value as "UNCLEARED" | "ALL")} aria-label="Show">
               <option value="UNCLEARED">Uncleared only</option>
               <option value="ALL">All entries</option>
-            </select>
+            </Select>
             <div className="toolbarRight">
               <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
                 {loading ? <span className="spinner" /> : <IconRefresh />}

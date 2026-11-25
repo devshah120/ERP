@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import SAHeader, { PLAN_OPTIONS } from "../../SAHeader";
 import { IconAlertCircle, IconCheckCircle } from "@/components/icons";
 import { PRODUCTS, PRODUCT_LABELS, type Product } from "@/lib/products";
+import Select from "@/components/ui/Select";
 
 const PRODUCT_BLURB: Record<Product, string> = {
   ERP: "Sales, purchase, stock, POS, GST and accounting.",
@@ -196,11 +197,11 @@ export default function NewAccountPage() {
                 <div className="saFormGrid" style={{ marginTop: "1.25rem" }}>
                   <div className="saField">
                     <label htmlFor="n-plan">Plan</label>
-                    <select id="n-plan" className="saInput" value={form.plan} onChange={(e) => set("plan", e.target.value)}>
+                    <Select id="n-plan" className="saInput" value={form.plan} onChange={(e) => set("plan", e.target.value)}>
                       {PLAN_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <div className="saField">
                     <label htmlFor="n-until">Valid until</label>
@@ -249,10 +250,10 @@ export default function NewAccountPage() {
                   </div>
                   <div className="saField">
                     <label htmlFor="n-fy">Financial year starts</label>
-                    <select id="n-fy" className="saInput" value={form.financialYearStartMonth} onChange={(e) => set("financialYearStartMonth", e.target.value)}>
+                    <Select id="n-fy" className="saInput" value={form.financialYearStartMonth} onChange={(e) => set("financialYearStartMonth", e.target.value)}>
                       <option value="4">April</option>
                       <option value="1">January</option>
-                    </select>
+                    </Select>
                   </div>
                 </div>
               </div>

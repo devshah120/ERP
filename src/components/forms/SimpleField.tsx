@@ -1,6 +1,7 @@
 "use client";
 
 import type { FieldConfig } from "@/lib/resources/ui/types";
+import Select from "@/components/ui/Select";
 
 /**
  * Renders one FieldConfig as a labelled control. Used by screens that edit a
@@ -47,14 +48,14 @@ export default function SimpleField({
     case "select":
     case "reference":
       control = (
-        <select id={id} className="select" aria-invalid={invalid} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
+        <Select id={id} className="select" aria-invalid={invalid} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
           {field.type === "reference" && <option value="">— none —</option>}
           {(field.type === "select" ? field.options : options)?.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
       break;
     default:

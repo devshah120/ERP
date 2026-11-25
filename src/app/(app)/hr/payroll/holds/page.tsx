@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { MonthPicker, MONTH_NAMES, fmtDate } from "@/components/hr/HrKit";
 import { IconPlus } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Holds {
   locked: boolean;
@@ -200,14 +201,14 @@ export default function PayrollHoldsPage() {
           )}
           <div className="field" style={{ marginBottom: "0.75rem" }}>
             <label htmlFor="hold-emp">Employee</label>
-            <select id="hold-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
+            <Select id="hold-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
               <option value="">— Choose —</option>
               {data.candidates.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.code})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="field">
             <label htmlFor="hold-reason">Reason</label>

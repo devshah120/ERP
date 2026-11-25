@@ -6,6 +6,7 @@ import Link from "next/link";
 import { IconAlertCircle, IconUsers, IconBuilding, IconRefresh } from "@/components/icons";
 import SAHeader, { ProductTags, PLAN_OPTIONS, fmtDate } from "../../SAHeader";
 import { PRODUCTS, PRODUCT_LABELS, type Product } from "@/lib/products";
+import Select from "@/components/ui/Select";
 
 interface CompanyDetail {
   id: string;
@@ -332,11 +333,11 @@ export default function CompanyDetailPage() {
                   <div className="saFormGrid">
                     <div className="saField">
                       <label htmlFor="s-plan">Plan</label>
-                      <select id="s-plan" className="saInput" value={sub.plan} onChange={(e) => setSub({ ...sub, plan: e.target.value })}>
+                      <Select id="s-plan" className="saInput" value={sub.plan} onChange={(e) => setSub({ ...sub, plan: e.target.value })}>
                         {[...PLAN_OPTIONS, ...(PLAN_OPTIONS.some((o) => o.value === sub.plan) ? [] : [{ value: sub.plan, label: sub.plan }])].map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div className="saField">
                       <label htmlFor="s-until">Valid until</label>

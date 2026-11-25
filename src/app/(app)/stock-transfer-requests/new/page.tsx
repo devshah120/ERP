@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import ItemLinesInput, { emptyItemLine, cleanLines, type ItemLine } from "@/components/inventory/ItemLinesInput";
 import { useWarehouses } from "@/components/forms/useWarehouses";
 import { IconAlertCircle, IconArrowLeft } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export default function NewTransferRequestPage() {
   const router = useRouter();
@@ -70,17 +71,17 @@ export default function NewTransferRequestPage() {
             <div className="formGrid">
               <div className="field">
                 <label htmlFor="r-to">Stock needed at<span className="req">*</span></label>
-                <select id="r-to" className="select" value={toWarehouseId} onChange={(e) => setTo(e.target.value)}>
+                <Select id="r-to" className="select" value={toWarehouseId} onChange={(e) => setTo(e.target.value)}>
                   <option value="">— choose —</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="r-from">Request from<span className="req">*</span></label>
-                <select id="r-from" className="select" value={fromWarehouseId} onChange={(e) => setFrom(e.target.value)}>
+                <Select id="r-from" className="select" value={fromWarehouseId} onChange={(e) => setFrom(e.target.value)}>
                   <option value="">— choose —</option>
                   {warehouses.filter((w) => w.id !== toWarehouseId).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="r-by">Needed by<span className="hint"> · Optional</span></label>

@@ -9,6 +9,7 @@ import { ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { useToast } from "@/components/ui/Toast";
 import { IconAlertCircle, IconInfo } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface PrefixRow {
   documentType: string;
@@ -174,13 +175,13 @@ export default function DocumentPrefixesPage() {
                       />
                     </td>
                     <td>
-                      <select className="select" value={v.padding} disabled={!canEdit} aria-label={`${r.label} digits`} onChange={(e) => change(r, { padding: Number(e.target.value) })}>
+                      <Select className="select" value={v.padding} disabled={!canEdit} aria-label={`${r.label} digits`} onChange={(e) => change(r, { padding: Number(e.target.value) })}>
                         {[3, 4, 5, 6, 7, 8].map((n) => (
                           <option key={n} value={n}>
                             {n}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </td>
                     <td className="cellMono">{next}</td>
                     <td className="numCell tabular">{r.issued}</td>

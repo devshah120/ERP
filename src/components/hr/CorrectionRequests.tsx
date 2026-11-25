@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate } from "@/components/hr/HrKit";
 import { IconCheck, IconClose, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export interface CorrectionRow {
   id: string;
@@ -141,13 +142,13 @@ export default function CorrectionRequests({
     <>
       <div className="toolbar">
         <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search name or request no…" width="18rem" />
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
           <option value="PENDING">Waiting for a decision</option>
           <option value="">Status: All</option>
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Withdrawn</option>
-        </select>
+        </Select>
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
             {loading ? <span className="spinner" /> : <IconRefresh />}

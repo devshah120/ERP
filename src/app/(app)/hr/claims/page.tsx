@@ -17,6 +17,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconClose, IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -125,14 +126,14 @@ function Claims() {
 
       <div className="toolbar">
         <SearchBox value={query} onChange={setQuery} placeholder="Search employee or claim no…" width="18rem" />
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
           <option value="">Status: All</option>
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved (not yet paid)</option>
           <option value="REIMBURSED">Reimbursed</option>
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Withdrawn</option>
-        </select>
+        </Select>
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
             {loading ? <span className="spinner" /> : <IconRefresh />}

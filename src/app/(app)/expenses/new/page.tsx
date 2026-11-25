@@ -10,6 +10,7 @@ import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/Shor
 import PageHeader from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { IconAlertCircle, IconArrowLeft } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Option {
   id: string;
@@ -146,12 +147,12 @@ export default function NewExpensePage() {
               </div>
               <div className="field">
                 <label htmlFor="e-head">Expense head<span className="req">*</span></label>
-                <select id="e-head" className="select" value={form.expenseAccountId} onChange={(e) => set("expenseAccountId", e.target.value)}>
+                <Select id="e-head" className="select" value={form.expenseAccountId} onChange={(e) => set("expenseAccountId", e.target.value)}>
                   <option value="">— choose —</option>
                   {opts?.expenseAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.label}</option>
                   ))}
-                </select>
+                </Select>
                 {err("expenseAccountId")}
               </div>
               <div className="field">
@@ -165,11 +166,11 @@ export default function NewExpensePage() {
               </div>
               <div className="field">
                 <label htmlFor="e-tax">GST rate %<span className="hint"> · if a GST bill was received</span></label>
-                <select id="e-tax" className="select" value={form.taxRatePercent} onChange={(e) => set("taxRatePercent", e.target.value)}>
+                <Select id="e-tax" className="select" value={form.taxRatePercent} onChange={(e) => set("taxRatePercent", e.target.value)}>
                   {[0, 5, 12, 18, 28].map((r) => (
                     <option key={r} value={r}>{r === 0 ? "No GST" : `${r}%`}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               {Number(form.taxRatePercent) > 0 && (
                 <div className="fieldSpanFull">
@@ -191,21 +192,21 @@ export default function NewExpensePage() {
             <div className="formGrid">
               <div className="field">
                 <label htmlFor="e-from">Paid from<span className="req">*</span></label>
-                <select id="e-from" className="select" value={form.paidFromAccountId} onChange={(e) => set("paidFromAccountId", e.target.value)}>
+                <Select id="e-from" className="select" value={form.paidFromAccountId} onChange={(e) => set("paidFromAccountId", e.target.value)}>
                   <option value="">— choose —</option>
                   {opts?.paidFromAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.label}</option>
                   ))}
-                </select>
+                </Select>
                 {err("paidFromAccountId")}
               </div>
               <div className="field">
                 <label htmlFor="e-mode">Mode</label>
-                <select id="e-mode" className="select" value={form.paymentMode} onChange={(e) => set("paymentMode", e.target.value)}>
+                <Select id="e-mode" className="select" value={form.paymentMode} onChange={(e) => set("paymentMode", e.target.value)}>
                   {MODES.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="e-ref">Reference<span className="hint"> · bill no., UTR, cheque no.</span></label>

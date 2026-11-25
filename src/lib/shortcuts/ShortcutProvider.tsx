@@ -306,9 +306,13 @@ export function useShortcutScope(scope: ShortcutScope) {
   }, []);
 }
 
-/** Lets a dialog claim Escape while it is open. */
+/**
+ * Lets a dialog claim Escape while it is open. Outside the app shell (sign-in,
+ * the super admin portal) there is no shortcut provider, and shared controls
+ * such as the standard dropdown simply rely on their own Escape handling.
+ */
 export function useEscapeHandler(onEscape: () => void, active = true) {
-  const { pushEscape } = useShortcuts();
+  const pushEscape = useContext(ShortcutContext)?.pushEscape;
   const latest = useRef(onEscape);
 
   useEffect(() => {
@@ -316,7 +320,7 @@ export function useEscapeHandler(onEscape: () => void, active = true) {
   });
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !pushEscape) return;
     return pushEscape(() => latest.current());
   }, [pushEscape, active]);
 }

@@ -18,6 +18,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, MONTH_NAMES, useEmployeeOptions, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconClose, IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -181,14 +182,14 @@ export default function AdvanceRequestsPage() {
 
       <div className="toolbar">
         <SearchBox value={query} onChange={setQuery} placeholder="Search employee or request no…" width="18rem" />
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
           <option value="REQUESTED">Waiting for decision</option>
           <option value="ACTIVE">Approved (being recovered)</option>
           <option value="CLOSED">Fully recovered</option>
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Withdrawn / cancelled</option>
           <option value="">All</option>
-        </select>
+        </Select>
         <div className="toolbarRight">
           <button type="button" className="button buttonSecondary buttonIcon" onClick={load} disabled={loading} aria-label="Refresh">
             {loading ? <span className="spinner" /> : <IconRefresh />}
@@ -313,20 +314,20 @@ export default function AdvanceRequestsPage() {
             <div className="field">
               <label htmlFor="ap-month">Recover from payroll of</label>
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <select id="ap-month" className="select" value={approval.startMonth} onChange={(e) => setApproval({ ...approval, startMonth: Number(e.target.value) })}>
+                <Select id="ap-month" className="select" value={approval.startMonth} onChange={(e) => setApproval({ ...approval, startMonth: Number(e.target.value) })}>
                   {MONTH_NAMES.map((m, i) => (
                     <option key={m} value={i + 1}>
                       {m}
                     </option>
                   ))}
-                </select>
-                <select className="select" value={approval.startYear} onChange={(e) => setApproval({ ...approval, startYear: Number(e.target.value) })} aria-label="Year">
+                </Select>
+                <Select className="select" value={approval.startYear} onChange={(e) => setApproval({ ...approval, startYear: Number(e.target.value) })} aria-label="Year">
                   {years.map((y) => (
                     <option key={y} value={y}>
                       {y}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             </div>
             <div className="field fieldSpanFull">
@@ -388,10 +389,10 @@ export default function AdvanceRequestsPage() {
             </div>
             <div className="field">
               <label htmlFor="rq-type">Type</label>
-              <select id="rq-type" className="select" value={raise.loanType} onChange={(e) => setRaise({ ...raise, loanType: e.target.value })}>
+              <Select id="rq-type" className="select" value={raise.loanType} onChange={(e) => setRaise({ ...raise, loanType: e.target.value })}>
                 <option value="ADVANCE">Salary advance</option>
                 <option value="LOAN">Loan</option>
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="rq-amt">Amount</label>

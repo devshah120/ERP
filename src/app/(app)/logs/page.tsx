@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { humanizeStatus } from "@/components/ui/StatusBadge";
 import { IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface LogRow {
   id: string;
@@ -101,22 +102,22 @@ export default function ActivityLogPage() {
       />
 
       <div className="toolbar">
-        <select className="select" value={filters.module} onChange={(e) => set("module", e.target.value)} aria-label="Module">
+        <Select className="select" value={filters.module} onChange={(e) => set("module", e.target.value)} aria-label="Module">
           <option value="">All modules</option>
           {data?.modules.map((m) => (
             <option key={m} value={m}>
               {prettify(m)}
             </option>
           ))}
-        </select>
-        <select className="select" value={filters.action} onChange={(e) => set("action", e.target.value)} aria-label="Action">
+        </Select>
+        <Select className="select" value={filters.action} onChange={(e) => set("action", e.target.value)} aria-label="Action">
           <option value="">All actions</option>
           {ACTIONS.map((a) => (
             <option key={a} value={a}>
               {humanizeStatus(a)}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" type="date" style={{ width: "auto" }} aria-label="From date" value={filters.fromDate} max={filters.toDate || undefined} onChange={(e) => set("fromDate", e.target.value)} />
         <input className="input" type="date" style={{ width: "auto" }} aria-label="To date" value={filters.toDate} min={filters.fromDate || undefined} onChange={(e) => set("toDate", e.target.value)} />
         {hasFilters && (

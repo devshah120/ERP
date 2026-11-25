@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { formatQuantity } from "@/lib/format/number";
 import { IconPlus, IconClose } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export interface ItemLine {
   itemId: string;
@@ -116,25 +117,25 @@ export default function ItemLinesInput({
                     {i + 1}
                   </td>
                   <td>
-                    <select value={l.itemId} disabled={disabled} aria-label={`Item, row ${i + 1}`} onChange={(e) => update(i, { itemId: e.target.value, variantSku: "" })}>
+                    <Select value={l.itemId} disabled={disabled} aria-label={`Item, row ${i + 1}`} onChange={(e) => update(i, { itemId: e.target.value, variantSku: "" })}>
                       <option value="">— choose item —</option>
                       {items.map((it) => (
                         <option key={it.id} value={it.id}>
                           {it.itemCode} · {it.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </td>
                   <td>
                     {variants.length > 0 ? (
-                      <select value={l.variantSku} disabled={disabled} aria-label={`Variant, row ${i + 1}`} onChange={(e) => update(i, { variantSku: e.target.value })}>
+                      <Select value={l.variantSku} disabled={disabled} aria-label={`Variant, row ${i + 1}`} onChange={(e) => update(i, { variantSku: e.target.value })}>
                         <option value="">— choose —</option>
                         {variants.map((v) => (
                           <option key={v.sku} value={v.sku}>
                             {variantLabel(v)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     ) : (
                       <span className="cellMuted" style={{ paddingLeft: "0.5rem" }}>
                         —

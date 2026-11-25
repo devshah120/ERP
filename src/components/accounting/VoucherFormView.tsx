@@ -13,6 +13,7 @@ import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/Shor
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconSave, IconClose, IconTrash } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface AccountOption {
   id: string;
@@ -393,13 +394,13 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
         </div>
         <div className="docHeadField">
           <label htmlFor="v-type">Type</label>
-          <select id="v-type" className="select" value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
+          <Select id="v-type" className="select" value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
             {VOUCHER_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="docHeadField">
           <label htmlFor="v-ref">Reference</label>
@@ -430,14 +431,14 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
               <tr key={index}>
                 <td>{index + 1}</td>
                 <td>
-                  <select value={line.accountId} onChange={(e) => updateLine(index, { accountId: e.target.value })}>
+                  <Select value={line.accountId} onChange={(e) => updateLine(index, { accountId: e.target.value })}>
                     <option value="">— select account —</option>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.code} · {a.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </td>
                 <td>
                   <input

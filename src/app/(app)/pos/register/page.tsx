@@ -34,6 +34,7 @@ import {
   IconUser,
   IconWallet,
 } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Register {
   id: string;
@@ -678,9 +679,9 @@ export default function PosRegisterPage() {
               </div>
               <div className="field">
                 <label htmlFor="o-wh">Sell from warehouse</label>
-                <select id="o-wh" className="select" value={openWarehouse} onChange={(e) => setOpenWarehouse(e.target.value)}>
+                <Select id="o-wh" className="select" value={openWarehouse} onChange={(e) => setOpenWarehouse(e.target.value)}>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="o-cash">Opening cash float</label>

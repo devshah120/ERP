@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, minutesLabel } from "@/components/hr/HrKit";
 import { IconChevronLeft, IconChevronRight, IconCheck, IconSave } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface SheetRow {
   employeeId: string;
@@ -252,13 +253,13 @@ export default function DailyAttendancePage() {
                         {r.record?.status === "HALF_DAY" ? "Half-day leave" : "On leave"}
                       </span>
                     ) : (
-                      <select className="select attStatusSelect" value={d.status} disabled={locked} onChange={(e) => setDraft(r.employeeId, { status: e.target.value })} aria-label={`Status for ${r.name}`}>
+                      <Select className="select attStatusSelect" value={d.status} disabled={locked} onChange={(e) => setDraft(r.employeeId, { status: e.target.value })} aria-label={`Status for ${r.name}`}>
                         {STATUSES.map((s) => (
                           <option key={s.value} value={s.value}>
                             {s.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     )}
                     {!r.record && !leave && <div className="hrMuted">not saved yet</div>}
                   </td>

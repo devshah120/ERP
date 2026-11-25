@@ -10,6 +10,7 @@ import { Card, fmtDate } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { EMPLOYMENT_STATUS_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/lib/resources/ui/hrRegistry";
 import { IconPlus } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Change {
   id: string;
@@ -261,7 +262,7 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
       <div className="formGrid">
         <div className="field">
           <label htmlFor="hc-type">What changed</label>
-          <select id="hc-type" className="select" value={changeType} onChange={(e) => setChangeType(e.target.value)}>
+          <Select id="hc-type" className="select" value={changeType} onChange={(e) => setChangeType(e.target.value)}>
             {Object.entries(TYPE_LABELS)
               .filter(([k]) => k !== "JOINED")
               .map(([k, label]) => (
@@ -269,7 +270,7 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
                   {label}
                 </option>
               ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label htmlFor="hc-date">Takes effect from</label>
@@ -287,22 +288,22 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
                 Yes
               </label>
             ) : f.kind === "ref" ? (
-              <select id={`hc-${f.key}`} className="select" value={String(values[f.key] ?? "")} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
+              <Select id={`hc-${f.key}`} className="select" value={String(values[f.key] ?? "")} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
                 <option value="">— None —</option>
                 {data.options[f.options!].map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : f.kind === "select" ? (
-              <select id={`hc-${f.key}`} className="select" value={String(values[f.key] ?? "")} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
+              <Select id={`hc-${f.key}`} className="select" value={String(values[f.key] ?? "")} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
                 {Object.entries(f.labels!).map(([k, label]) => (
                   <option key={k} value={k}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : (
               <input
                 id={`hc-${f.key}`}

@@ -19,6 +19,7 @@ import RowActions, { type RowAction } from "@/components/table/RowActions";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { IconPlus, IconRefresh, IconFilter, IconEye, IconTrash, IconChart } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 /** How payment modes read on screen; the stored codes stay unchanged. */
 const MODE_LABEL: Record<string, string> = {
@@ -276,22 +277,22 @@ export default function PaymentListView({ config }: { config: PaymentUi }) {
             </div>
             <div className="filterField">
               <label>Mode</label>
-              <select value={filters.mode} onChange={(e) => setFilters((f) => ({ ...f, mode: e.target.value }))}>
+              <Select value={filters.mode} onChange={(e) => setFilters((f) => ({ ...f, mode: e.target.value }))}>
                 <option value="">Any</option>
                 {MODES.map((m) => (
                   <option key={m} value={m}>
                     {MODE_LABEL[m] ?? m}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="filterField">
               <label>Status</label>
-              <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
+              <Select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
                 <option value="">Any</option>
                 <option value="CONFIRMED">Confirmed</option>
                 <option value="CANCELLED">Cancelled</option>
-              </select>
+              </Select>
             </div>
           </div>
           <div className="filterActions">

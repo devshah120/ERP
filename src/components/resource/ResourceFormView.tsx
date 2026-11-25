@@ -22,6 +22,7 @@ import { MODULE_DESCRIPTIONS } from "@/lib/ui/moduleDescriptions";
 import { IconArrowLeft, IconTrash } from "@/components/icons";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import { useAuth } from "@/app/(app)/AuthProvider";
+import Select from "@/components/ui/Select";
 
 type FormState = Record<string, unknown>;
 
@@ -454,7 +455,7 @@ export default function ResourceFormView({
         const itemId = String(getPath(state, field.variantOf) ?? "");
         const variants = (referenceOptions[field.variantOf] ?? []).find((o) => o.value === itemId)?.variants ?? [];
         return (
-          <select
+          <Select
             id={`f-${field.name}`}
             aria-invalid={error ? true : undefined}
             className="select"
@@ -468,7 +469,7 @@ export default function ResourceFormView({
                 {v.label} ({v.sku})
               </option>
             ))}
-          </select>
+          </Select>
         );
       }
       switch (field.type) {
@@ -509,7 +510,7 @@ export default function ResourceFormView({
           );
         case "select":
           return (
-            <select
+            <Select
               id={`f-${field.name}`}
               aria-invalid={error ? true : undefined}
               className="select"
@@ -521,7 +522,7 @@ export default function ResourceFormView({
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           );
         case "reference":
           if (field.reference?.searchable) {
@@ -537,7 +538,7 @@ export default function ResourceFormView({
             );
           }
           return (
-            <select
+            <Select
               id={`f-${field.name}`}
               aria-invalid={error ? true : undefined}
               className="select"
@@ -551,7 +552,7 @@ export default function ResourceFormView({
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           );
         case "multiReference":
           return (

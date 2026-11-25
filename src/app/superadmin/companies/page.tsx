@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { IconRefresh, IconAlertCircle, IconBuilding, IconPlus } from "@/components/icons";
 import SAHeader, { ProductTags, fmtDate } from "../SAHeader";
+import Select from "@/components/ui/Select";
 
 interface CompanyRow {
   id: string;
@@ -112,11 +113,11 @@ export default function CompaniesPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <select className="saInput" style={{ width: "auto" }} value={productFilter} onChange={(e) => setProductFilter(e.target.value)} aria-label="Product">
+          <Select className="saInput" style={{ width: "auto" }} value={productFilter} onChange={(e) => setProductFilter(e.target.value)} aria-label="Product">
             <option value="">All products</option>
             <option value="ERP">ERP</option>
             <option value="HRMS">HRMS</option>
-          </select>
+          </Select>
           <div className="saFilterGroup">
             {STATUS_FILTERS.map((s) => (
               <button

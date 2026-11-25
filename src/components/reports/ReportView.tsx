@@ -17,6 +17,7 @@ import ColumnPicker from "@/components/table/ColumnPicker";
 import ExportButton, { type ExportButtonHandle } from "@/components/table/ExportButton";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import { useAuth } from "@/app/(app)/AuthProvider";
+import Select from "@/components/ui/Select";
 
 interface ReportColumn {
   key: string;
@@ -338,7 +339,7 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
             {enabled.includes("account") && (
               <div className="filterField">
                 <label htmlFor="r-account">Account</label>
-                <select
+                <Select
                   id="r-account"
                   value={filters.accountId}
                   onChange={(e) => {
@@ -354,21 +355,21 @@ export default function ReportView({ reportKey }: { reportKey: string }) {
                       {a.code} · {a.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
             {enabled.includes("status") && (
               <div className="filterField">
                 <label htmlFor="r-status">Status</label>
                 {statusChoices.length > 0 ? (
-                  <select id="r-status" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
+                  <Select id="r-status" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
                     <option value="">Any</option>
                     {statusChoices.map((s) => (
                       <option key={s} value={s}>
                         {humanizeStatus(s)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <input id="r-status" placeholder="e.g. POSTED" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value.toUpperCase() }))} />
                 )}

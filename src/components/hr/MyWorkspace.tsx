@@ -16,6 +16,7 @@ import { dayLabel, type CorrectionRow } from "@/components/hr/CorrectionRequests
 import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconClock, IconDownload } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Me {
   employee: {
@@ -801,13 +802,13 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
         </div>
         <div className="field">
           <label htmlFor="corr-status">Should be</label>
-          <select id="corr-status" className="select" value={form.status} onChange={(e) => set({ status: e.target.value })}>
+          <Select id="corr-status" className="select" value={form.status} onChange={(e) => set({ status: e.target.value })}>
             {CORRECTION_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {options?.punchApplicable !== false && (
           <>
@@ -827,14 +828,14 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
         {hasReasons && (
           <div className="field fieldSpanFull">
             <label htmlFor="corr-reason-id">Reason</label>
-            <select id="corr-reason-id" className="select" value={form.reasonId} onChange={(e) => set({ reasonId: e.target.value })}>
+            <Select id="corr-reason-id" className="select" value={form.reasonId} onChange={(e) => set({ reasonId: e.target.value })}>
               <option value="">— choose —</option>
               {options!.reasons.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
       </div>
@@ -1000,10 +1001,10 @@ function MyAdvances() {
           <div className="formGrid">
             <div className="field">
               <label htmlFor="ma-type">Type</label>
-              <select id="ma-type" className="select" value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })}>
+              <Select id="ma-type" className="select" value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })}>
                 <option value="ADVANCE">Salary advance</option>
                 <option value="LOAN">Loan</option>
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="ma-amt">Amount</label>

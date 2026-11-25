@@ -38,6 +38,7 @@ import {
   IconSortNone,
   IconFilter,
 } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface MasterRow extends Record<string, unknown> {
   id: string;
@@ -362,7 +363,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
         />
 
         {!statusColumn && (
-          <select
+          <Select
             className="select"
             value={status}
             onChange={(e) => {
@@ -374,7 +375,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
             <option value="">Status: All</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
-          </select>
+          </Select>
         )}
 
         {filterableColumns && (
@@ -486,7 +487,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
                 {visibleColumns.map((col) => (
                   <th key={col.key}>
                     {col === statusColumn ? (
-                      <select
+                      <Select
                         className="filterRowSelect"
                         value={status}
                         onChange={(e) => {
@@ -498,7 +499,7 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
                         <option value="">All</option>
                         <option value="ACTIVE">Active</option>
                         <option value="INACTIVE">Inactive</option>
-                      </select>
+                      </Select>
                     ) : col.filterParam ? (
                       <input
                         placeholder={`Filter ${col.label.toLowerCase()}`}

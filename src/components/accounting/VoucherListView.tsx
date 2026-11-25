@@ -12,6 +12,7 @@ import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import { formatMoney } from "@/lib/format/number";
 import RowActions, { type RowAction } from "@/components/table/RowActions";
 import { IconPlus, IconRefresh, IconFilter, IconEye, IconChart } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface VoucherRow {
   id: string;
@@ -186,7 +187,7 @@ export default function VoucherListView() {
             </div>
             <div className="filterField">
               <label>Type</label>
-              <select
+              <Select
                 value={filters.voucherType}
                 onChange={(e) => setFilters((f) => ({ ...f, voucherType: e.target.value }))}
               >
@@ -196,23 +197,23 @@ export default function VoucherListView() {
                     {t}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="filterField">
               <label>Source</label>
-              <select value={filters.source} onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))}>
+              <Select value={filters.source} onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))}>
                 <option value="">Any</option>
                 <option value="MANUAL">Entered by hand</option>
                 <option value="SYSTEM">Posted automatically</option>
-              </select>
+              </Select>
             </div>
             <div className="filterField">
               <label>Status</label>
-              <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
+              <Select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
                 <option value="">Any</option>
                 <option value="POSTED">Posted</option>
                 <option value="CANCELLED">Cancelled</option>
-              </select>
+              </Select>
             </div>
           </div>
           <div className="filterActions">

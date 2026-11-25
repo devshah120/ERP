@@ -41,6 +41,7 @@ import {
   IconSortDesc,
   IconSortNone,
 } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface DocRow extends Record<string, unknown> {
   id: string;
@@ -444,7 +445,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
           width="18rem"
         />
 
-        <select
+        <Select
           className="select"
           aria-label="Filter by status"
           value={applied.status}
@@ -461,7 +462,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
               {humanizeStatus(s)}
             </option>
           ))}
-        </select>
+        </Select>
 
         <button
           type="button"
@@ -540,7 +541,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
               </div>
               <div className="filterField">
                 <label htmlFor="f-status">Status</label>
-                <select
+                <Select
                   id="f-status"
                   value={filters.status}
                   onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
@@ -551,12 +552,12 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
                       {humanizeStatus(s)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               {config.columns.some((c) => c.type === "payment") && (
                 <div className="filterField">
                   <label htmlFor="f-pay">Payment status</label>
-                  <select
+                  <Select
                     id="f-pay"
                     value={filters.paymentStatus}
                     onChange={(e) => setFilters((f) => ({ ...f, paymentStatus: e.target.value }))}
@@ -565,7 +566,7 @@ export default function DocumentListView({ config }: { config: DocumentUi }) {
                     <option value="UNPAID">Unpaid</option>
                     <option value="PARTIALLY_PAID">Partly paid</option>
                     <option value="PAID">Paid</option>
-                  </select>
+                  </Select>
                 </div>
               )}
             </div>

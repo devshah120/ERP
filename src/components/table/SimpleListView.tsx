@@ -15,6 +15,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export interface SimpleColumn {
   key: string;
@@ -159,14 +160,14 @@ export default function SimpleListView({ config }: { config: SimpleListConfig })
       <div className="toolbar">
         <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder={config.searchPlaceholder ?? "Search…"} width="18rem" />
         {config.statusOptions && (
-          <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+          <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
             <option value="">Status: All</option>
             {config.statusOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         {config.dateFilter && (
           <>

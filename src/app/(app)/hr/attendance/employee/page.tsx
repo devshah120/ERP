@@ -13,6 +13,7 @@ import SearchSelect from "@/components/resource/SearchSelect";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { MonthPicker, WEEKDAY_SHORT, minutesLabel, MONTH_NAMES } from "@/components/hr/HrKit";
 import { IconCheck, IconChevronLeft, IconChevronRight, IconSave } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Day {
   date: string;
@@ -263,13 +264,13 @@ export default function EmployeeMonthAttendancePage() {
           <span>
             <strong>{selected.size}</strong> day{selected.size === 1 ? "" : "s"} selected
           </span>
-          <select className="select" style={{ width: "auto" }} value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} aria-label="Status for the selected days">
+          <Select className="select" style={{ width: "auto" }} value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} aria-label="Status for the selected days">
             {STATUSES.map((st) => (
               <option key={st.value} value={st.value}>
                 {st.label}
               </option>
             ))}
-          </select>
+          </Select>
           <button type="button" className="button buttonPrimary buttonSm" onClick={applyToSelected}>
             Apply to selected
           </button>
@@ -365,13 +366,13 @@ export default function EmployeeMonthAttendancePage() {
                         </span>
                       ) : (
                         <>
-                          <select className="select attStatusSelect" value={dr.status} disabled={locked} onChange={(e) => setDraft(d.date, { status: e.target.value })} aria-label={`Status on ${d.date}`}>
+                          <Select className="select attStatusSelect" value={dr.status} disabled={locked} onChange={(e) => setDraft(d.date, { status: e.target.value })} aria-label={`Status on ${d.date}`}>
                             {STATUSES.map((st) => (
                               <option key={st.value} value={st.value}>
                                 {st.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                           {!d.record && <div className="hrMuted">not saved yet</div>}
                         </>
                       )}

@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, minutesLabel, useMasterOptions } from "@/components/hr/HrKit";
 import { IconChevronLeft, IconChevronRight, IconCheck, IconSave } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface SheetRow {
   workerId: string;
@@ -201,14 +202,14 @@ export default function LabourAttendancePage() {
         <button type="button" className="button buttonGhost" onClick={() => setDate(todayKey())}>
           Today
         </button>
-        <select className="select" style={{ width: "auto", maxWidth: "16rem" }} value={contractorId} onChange={(e) => setContractorId(e.target.value)} aria-label="Contractor">
+        <Select className="select" style={{ width: "auto", maxWidth: "16rem" }} value={contractorId} onChange={(e) => setContractorId(e.target.value)} aria-label="Contractor">
           <option value="">All contractors</option>
           {(contractorOptions ?? []).map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
         <SearchBox value={query} onChange={setQuery} placeholder="Filter by name, code, mobile…" width="14rem" />
         <div className="toolbarRight">
           {canEdit && sheet && sheet.unmarked > 0 && (
@@ -275,13 +276,13 @@ export default function LabourAttendancePage() {
                   </td>
                   <td>
                     {r.contractors.length > 1 ? (
-                      <select className="select" style={{ minWidth: "9rem" }} value={d.contractorId} disabled={locked} onChange={(e) => setDraft(r.workerId, { contractorId: e.target.value })} aria-label={`Contractor for ${r.name}`}>
+                      <Select className="select" style={{ minWidth: "9rem" }} value={d.contractorId} disabled={locked} onChange={(e) => setDraft(r.workerId, { contractorId: e.target.value })} aria-label={`Contractor for ${r.name}`}>
                         {r.contractors.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     ) : (
                       r.contractors[0]?.name
                     )}
@@ -291,13 +292,13 @@ export default function LabourAttendancePage() {
                     {r.dayKind !== "WORKING" && <div>{r.dayKind === "HOLIDAY" ? "Holiday" : "Weekly off"}</div>}
                   </td>
                   <td>
-                    <select className="select attStatusSelect" value={d.status} disabled={locked} onChange={(e) => setDraft(r.workerId, { status: e.target.value })} aria-label={`Status for ${r.name}`}>
+                    <Select className="select attStatusSelect" value={d.status} disabled={locked} onChange={(e) => setDraft(r.workerId, { status: e.target.value })} aria-label={`Status for ${r.name}`}>
                       {STATUSES.map((s) => (
                         <option key={s.value} value={s.value}>
                           {s.label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     {!r.record && <div className="hrMuted">not saved yet</div>}
                   </td>
                   <td>

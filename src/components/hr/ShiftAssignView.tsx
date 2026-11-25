@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { useMasterOptions } from "@/components/hr/HrKit";
+import Select from "@/components/ui/Select";
 
 interface ShiftInfo {
   id: string;
@@ -195,7 +196,7 @@ export default function ShiftAssignView({ target }: { target: "employees" | "con
           <div className="dirFilterFoot">
             <span className="hrMuted">{selected.size > 0 ? `${selected.size} selected` : `Select ${t.many} to assign`}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <select className="select" style={{ width: "auto", minWidth: "14rem" }} value={assignTo} onChange={(e) => setAssignTo(e.target.value)} aria-label="Assign to" disabled={selected.size === 0 || saving}>
+              <Select className="select" style={{ width: "auto", minWidth: "14rem" }} value={assignTo} onChange={(e) => setAssignTo(e.target.value)} aria-label="Assign to" disabled={selected.size === 0 || saving}>
                 <option value="">Assign to…</option>
                 {(data?.shifts ?? [])
                   .filter((s) => s.active)
@@ -205,7 +206,7 @@ export default function ShiftAssignView({ target }: { target: "employees" | "con
                     </option>
                   ))}
                 <option value="default">{defaultLabel}</option>
-              </select>
+              </Select>
               <button type="button" className="button buttonPrimary" onClick={assign} disabled={saving || selected.size === 0 || !assignTo}>
                 {saving && <span className="spinner" />} Assign
               </button>

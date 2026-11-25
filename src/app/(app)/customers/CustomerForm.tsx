@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api/client";
+import Select from "@/components/ui/Select";
 
 export interface AddressForm {
   line1: string;
@@ -177,10 +178,10 @@ export default function CustomerForm({
         </Field>
         {showStatus && (
           <Field label="Status">
-            <select className="select" value={form.status} onChange={(e) => update("status", e.target.value as CustomerFormState["status"])}>
+            <Select className="select" value={form.status} onChange={(e) => update("status", e.target.value as CustomerFormState["status"])}>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-            </select>
+            </Select>
           </Field>
         )}
       </div>
@@ -335,14 +336,14 @@ export default function CustomerForm({
           />
         </Field>
         <Field label="Opening balance type">
-          <select
+          <Select
             className="select"
             value={form.openingBalanceType}
             onChange={(e) => update("openingBalanceType", e.target.value as CustomerFormState["openingBalanceType"])}
           >
             <option value="DEBIT">Debit (customer owes us)</option>
             <option value="CREDIT">Credit (we owe customer)</option>
-          </select>
+          </Select>
         </Field>
       </div>
 

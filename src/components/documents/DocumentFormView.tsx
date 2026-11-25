@@ -31,6 +31,7 @@ import {
   IconChevronDown,
   IconChevronUp,
 } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface LineRow {
   itemId: string;
@@ -639,7 +640,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
   function renderField(f: FieldConfig, inHeader = false) {
     const control =
       f.type === "reference" ? (
-        <select
+        <Select
           className="select"
           value={extras[f.name] ?? ""}
           onChange={(e) => {
@@ -655,9 +656,9 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       ) : f.type === "select" ? (
-        <select
+        <Select
           className="select"
           value={extras[f.name] ?? String(f.defaultValue ?? "")}
           onChange={(e) => {
@@ -671,7 +672,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       ) : f.type === "textarea" ? (
         <textarea
           className="input"
@@ -866,7 +867,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
               <span className="req">*</span>
             </label>
             <div className="docPartyPicker">
-              <select
+              <Select
                 id="doc-party"
                 className="select"
                 value={customerId}
@@ -884,7 +885,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
                     {(c.customerCode ?? c.vendorCode) ? ` · ${c.customerCode ?? c.vendorCode}` : ""}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Link
                 href={selectedParty ? `${config.partyBasePath}/${selectedParty.id}` : config.partyBasePath}
                 className="docIconBtn"
@@ -1046,7 +1047,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
                   </datalist>
 
                   {(quickItem?.variants?.length ?? 0) > 0 && (
-                    <select
+                    <Select
                       className="select docQuickVariant"
                       value={quick.variantSku}
                       onChange={(e) => setQuick((q) => ({ ...q, variantSku: e.target.value }))}
@@ -1058,7 +1059,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
                           {[v.color, v.size].filter(Boolean).join(" / ") || v.sku}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   )}
 
                   <input
@@ -1159,7 +1160,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
                             <div className="docLineItem">
                               <strong>{line.itemName ?? item?.name ?? "—"}</strong>
                               {(item?.variants?.length ?? 0) > 0 ? (
-                                <select
+                                <Select
                                   value={line.variantSku ?? ""}
                                   onChange={(e) => updateLine(index, { variantSku: e.target.value || undefined })}
                                   disabled={readOnly}
@@ -1170,7 +1171,7 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
                                       {[v.color, v.size].filter(Boolean).join(" / ") || v.sku}
                                     </option>
                                   ))}
-                                </select>
+                                </Select>
                               ) : (
                                 line.variantSku && <span className="docLineMeta">{line.variantSku}</span>
                               )}

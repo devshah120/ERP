@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import type { Option } from "./HrKit";
 import { todayKey } from "./HrKit";
+import Select from "@/components/ui/Select";
 
 export interface LeaveBalance {
   leaveTypeId: string;
@@ -130,28 +131,28 @@ export default function LeaveForm({
             <label htmlFor="lv-emp">
               Employee<span className="req">*</span>
             </label>
-            <select id="lv-emp" className="select" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required disabled={employeeLocked}>
+            <Select id="lv-emp" className="select" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required disabled={employeeLocked}>
               <option value="">— choose —</option>
               {employees?.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
         <div className="field">
           <label htmlFor="lv-type">
             Leave type<span className="req">*</span>
           </label>
-          <select id="lv-type" className="select" value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value, halfDay: false })} required disabled={isHr && !employeeId}>
+          <Select id="lv-type" className="select" value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value, halfDay: false })} required disabled={isHr && !employeeId}>
             <option value="">— choose —</option>
             {balances?.map((b) => (
               <option key={b.leaveTypeId} value={b.leaveTypeId}>
                 {b.name} ({b.code}) · {b.allowNegative ? "no limit" : `${b.available - b.pending} left`}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label htmlFor="lv-from">

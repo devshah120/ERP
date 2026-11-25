@@ -16,6 +16,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, useEmployeeOptions, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -389,13 +390,13 @@ export default function AssetAllocationsView({ mode }: { mode: Mode }) {
             </div>
             <div className="field">
               <label htmlFor="al-cond">Condition when given</label>
-              <select id="al-cond" className="select" value={alloc.condition} onChange={(e) => setAlloc({ ...alloc, condition: e.target.value })}>
+              <Select id="al-cond" className="select" value={alloc.condition} onChange={(e) => setAlloc({ ...alloc, condition: e.target.value })}>
                 {CONDITIONS.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="field">
               <label htmlFor="al-notes">Notes</label>
@@ -435,22 +436,22 @@ export default function AssetAllocationsView({ mode }: { mode: Mode }) {
             </div>
             <div className="field">
               <label htmlFor="rt-outcome">Outcome</label>
-              <select id="rt-outcome" className="select" value={ret.outcome} onChange={(e) => setRet({ ...ret, outcome: e.target.value, condition: e.target.value === "DAMAGED" ? "DAMAGED" : ret.condition })}>
+              <Select id="rt-outcome" className="select" value={ret.outcome} onChange={(e) => setRet({ ...ret, outcome: e.target.value, condition: e.target.value === "DAMAGED" ? "DAMAGED" : ret.condition })}>
                 <option value="RETURNED">Returned in working order</option>
                 <option value="DAMAGED">Returned damaged (send for repair)</option>
                 <option value="LOST">Lost / not returned</option>
-              </select>
+              </Select>
             </div>
             {ret.outcome !== "LOST" && (
               <div className="field">
                 <label htmlFor="rt-cond">Condition now</label>
-                <select id="rt-cond" className="select" value={ret.condition} onChange={(e) => setRet({ ...ret, condition: e.target.value })}>
+                <Select id="rt-cond" className="select" value={ret.condition} onChange={(e) => setRet({ ...ret, condition: e.target.value })}>
                   {CONDITIONS.map((c) => (
                     <option key={c.value} value={c.value}>
                       {c.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
             {ret.outcome !== "RETURNED" && (

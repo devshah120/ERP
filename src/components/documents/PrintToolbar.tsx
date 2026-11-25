@@ -8,6 +8,7 @@ import { useAuth } from "@/app/(app)/AuthProvider";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/Toast";
 import { IconPrint } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export interface PrintLayoutChoice {
   /** Settings key of the document type (sales-invoices, pos-orders…). */
@@ -65,14 +66,14 @@ export default function PrintToolbar({ label, choice }: { label: string; choice?
         {choice && choice.options.length > 1 && (
           <label className="pfmSwitcher">
             <span className="cellMuted">Format</span>
-            <select className="select" value={choice.layoutId} onChange={(e) => switchLayout(e.target.value)} aria-label="Print format">
+            <Select className="select" value={choice.layoutId} onChange={(e) => switchLayout(e.target.value)} aria-label="Print format">
               {choice.options.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                   {o.id === choice.savedId ? " (default)" : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {changed && hasPermission("settings.edit") && (

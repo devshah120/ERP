@@ -14,6 +14,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { initials } from "@/components/shell/UserMenu";
 import { IconRefresh, IconPlus, IconCopy, IconAlertCircle } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface UserRow {
   id: string;
@@ -199,13 +200,13 @@ export default function UsersPage() {
   const roleSelect = (
     <div className="field">
       <label htmlFor="u-role">Role</label>
-      <select id="u-role" className="select" value={form.roleId ?? ""} onChange={(e) => setForm((f) => ({ ...f, roleId: e.target.value }))}>
+      <Select id="u-role" className="select" value={form.roleId ?? ""} onChange={(e) => setForm((f) => ({ ...f, roleId: e.target.value }))}>
         {roles.map((r) => (
           <option key={r.id} value={r.id}>
             {r.name}
           </option>
         ))}
-      </select>
+      </Select>
       {fieldErrors.roleId && <span className="fieldError">{fieldErrors.roleId}</span>}
     </div>
   );

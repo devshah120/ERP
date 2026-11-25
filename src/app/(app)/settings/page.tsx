@@ -8,6 +8,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { IconBuilding, IconClock, IconEdit } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 function Row({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
   return (
@@ -217,7 +218,7 @@ function EditBusinessDialog({ onClose }: { onClose: () => void }) {
             {field("gstin", "GSTIN", { maxLength: 15, placeholder: "24AAACR1234A1Z5", onChange: (e) => set("gstin", e.target.value.toUpperCase()), spellCheck: false })}
             <div className="field">
               <label htmlFor="bp-state">State</label>
-              <select
+              <Select
                 id="bp-state"
                 className="select"
                 value={gstState?.name ?? form.state}
@@ -231,7 +232,7 @@ function EditBusinessDialog({ onClose }: { onClose: () => void }) {
                     {s.name} ({s.code})
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="fieldHint">{gstState ? "Set by the GSTIN's state code" : "Decides CGST + SGST vs IGST"}</span>
             </div>
             {field("phone", "Phone", { type: "tel", maxLength: 20 })}

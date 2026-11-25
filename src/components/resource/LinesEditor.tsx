@@ -2,6 +2,7 @@
 
 import type { LineColumnConfig } from "@/lib/resources/ui/types";
 import { IconPlus, IconClose } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 export type LineRow = Record<string, unknown>;
 
@@ -64,14 +65,14 @@ export default function LinesEditor({
 
     if (col.type === "reference") {
       return (
-        <select aria-label={label} value={String(v ?? "")} onChange={(e) => update(index, col.name, e.target.value)} style={style}>
+        <Select aria-label={label} value={String(v ?? "")} onChange={(e) => update(index, col.name, e.target.value)} style={style}>
           <option value="">— choose —</option>
           {(options[`${fieldName}.${col.name}`] ?? []).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
     }
 
@@ -81,14 +82,14 @@ export default function LinesEditor({
       const variants = itemOpts.find((o) => o.value === itemId)?.variants ?? [];
       if (variants.length === 0) return <span className="cellMuted" style={{ paddingLeft: "0.5rem" }}>—</span>;
       return (
-        <select aria-label={label} value={String(v ?? "")} onChange={(e) => update(index, col.name, e.target.value)} style={style}>
+        <Select aria-label={label} value={String(v ?? "")} onChange={(e) => update(index, col.name, e.target.value)} style={style}>
           <option value="">— size / colour —</option>
           {variants.map((o) => (
             <option key={o.sku} value={o.sku}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
     }
 

@@ -13,6 +13,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { MonthPicker, MONTH_NAMES } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconDownload } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Component {
   id: string;
@@ -148,31 +149,31 @@ export default function VariablePayPage() {
 
       <div className="toolbar" style={{ flexWrap: "wrap" }}>
         <MonthPicker year={period.year} month={period.month} onChange={setPeriod} />
-        <select className="select" style={{ width: "auto" }} value={filters.departmentId} onChange={(e) => setFilters({ ...filters, departmentId: e.target.value })} aria-label="Department">
+        <Select className="select" style={{ width: "auto" }} value={filters.departmentId} onChange={(e) => setFilters({ ...filters, departmentId: e.target.value })} aria-label="Department">
           <option value="">All departments</option>
           {sheet?.options.departments.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
-        </select>
-        <select className="select" style={{ width: "auto" }} value={filters.designationId} onChange={(e) => setFilters({ ...filters, designationId: e.target.value })} aria-label="Designation">
+        </Select>
+        <Select className="select" style={{ width: "auto" }} value={filters.designationId} onChange={(e) => setFilters({ ...filters, designationId: e.target.value })} aria-label="Designation">
           <option value="">All designations</option>
           {sheet?.options.designations.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
-        </select>
+        </Select>
         {(sheet?.options.branches.length ?? 0) > 1 && (
-          <select className="select" style={{ width: "auto" }} value={filters.branchId} onChange={(e) => setFilters({ ...filters, branchId: e.target.value })} aria-label="Location">
+          <Select className="select" style={{ width: "auto" }} value={filters.branchId} onChange={(e) => setFilters({ ...filters, branchId: e.target.value })} aria-label="Location">
             <option value="">All locations</option>
             {sheet?.options.branches.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <SearchBox value={query} onChange={setQuery} placeholder="Employee name or code…" width="14rem" />
       </div>

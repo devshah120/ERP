@@ -16,6 +16,7 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate } from "@/components/hr/HrKit";
 import { IconCheck, IconClose, IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -143,13 +144,13 @@ function LeaveRequests() {
 
       <div className="toolbar">
         <SearchBox inputRef={searchRef} value={query} onChange={setQuery} placeholder="Search employee or request no…" width="18rem" />
-        <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
+        <Select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
           <option value="">Status: All</option>
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Cancelled</option>
-        </select>
+        </Select>
         {employeeId && (
           <Link href="/hr/leaves" className="button buttonGhost">
             Clear employee filter

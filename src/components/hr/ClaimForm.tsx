@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { CLAIM_CATEGORY_LABELS, todayKey, type Option } from "./HrKit";
+import Select from "@/components/ui/Select";
 
 /** Expense claim form; with `employees` HR records it for someone, without it is the employee's own claim. */
 export default function ClaimForm({
@@ -50,14 +51,14 @@ export default function ClaimForm({
             <label htmlFor="cl-emp">
               Employee<span className="req">*</span>
             </label>
-            <select id="cl-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} required>
+            <Select id="cl-emp" className="select" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} required>
               <option value="">— choose —</option>
               {employees?.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
         <div className="field">
@@ -66,13 +67,13 @@ export default function ClaimForm({
         </div>
         <div className="field">
           <label htmlFor="cl-cat">Category</label>
-          <select id="cl-cat" className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          <Select id="cl-cat" className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
             {Object.entries(CLAIM_CATEGORY_LABELS).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label htmlFor="cl-amt">

@@ -15,6 +15,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, CLAIM_CATEGORY_LABELS, MONTH_NAMES, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   id: string;
@@ -307,31 +308,31 @@ export default function ClaimSettlementPage() {
           <div className="formGrid">
             <div className="field fieldSpanFull">
               <label htmlFor="cs-mode">Pay</label>
-              <select id="cs-mode" className="select" value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
+              <Select id="cs-mode" className="select" value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
                 <option value="PAYROLL">With payroll (added to the salary of a month)</option>
                 <option value="BANK">Now, by bank transfer</option>
                 <option value="CASH">Now, in cash</option>
                 <option value="CHEQUE">Now, by cheque</option>
-              </select>
+              </Select>
             </div>
             {form.mode === "PAYROLL" ? (
               <div className="field fieldSpanFull">
                 <label htmlFor="cs-month">Pay with the payroll of</label>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <select id="cs-month" className="select" value={form.payInMonth} onChange={(e) => setForm({ ...form, payInMonth: Number(e.target.value) })}>
+                  <Select id="cs-month" className="select" value={form.payInMonth} onChange={(e) => setForm({ ...form, payInMonth: Number(e.target.value) })}>
                     {MONTH_NAMES.map((m, i) => (
                       <option key={m} value={i + 1}>
                         {m}
                       </option>
                     ))}
-                  </select>
-                  <select className="select" style={{ width: "auto" }} value={form.payInYear} onChange={(e) => setForm({ ...form, payInYear: Number(e.target.value) })} aria-label="Year">
+                  </Select>
+                  <Select className="select" style={{ width: "auto" }} value={form.payInYear} onChange={(e) => setForm({ ...form, payInYear: Number(e.target.value) })} aria-label="Year">
                     {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map((y) => (
                       <option key={y} value={y}>
                         {y}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <button type="button" className="button buttonGhost buttonSm" onClick={() => setForm({ ...form, payInMonth: nextMonth.month, payInYear: nextMonth.year })}>
                     Next month
                   </button>

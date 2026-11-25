@@ -336,6 +336,29 @@ textarea.input {
   cursor: pointer;
 }
 
+/* The standard dropdown (components/ui/Select) is a button styled as .select. */
+.selectTrigger {
+  display: inline-flex;
+  align-items: center;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 1.2;
+}
+.selectTrigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.selectTrigger[data-placeholder] {
+  color: var(--text-muted);
+}
+.selectTriggerText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
 .input:hover:not(:disabled):not(:focus),
 .select:hover:not(:disabled):not(:focus) {
   border-color: #b9bfc9;
@@ -2927,7 +2950,7 @@ kbd {
 }
 
 .table .filterRow input,
-.table .filterRow select {
+.table .filterRow :is(select, .selectTrigger) {
   width: 100%;
   font: inherit;
   font-size: 0.78rem;
@@ -2944,14 +2967,14 @@ kbd {
   min-width: 4.5rem;
 }
 
-.table .filterRow select {
+.table .filterRow :is(select, .selectTrigger) {
   min-width: 0;
   width: 5rem;
   padding-right: 0.25rem;
   cursor: pointer;
 }
 
-.table .filterRow select:focus,
+.table .filterRow :is(select, .selectTrigger):focus,
 .table .filterRow input:focus {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
@@ -3064,7 +3087,7 @@ a.cellLink:hover {
   left: 0;
 }
 
-.tableFooter select {
+.tableFooter :is(select, .selectTrigger) {
   font: inherit;
   font-size: 0.78rem;
   height: 1.75rem;
@@ -3285,7 +3308,7 @@ a.cellLink:hover {
 }
 
 .filterField input,
-.filterField select {
+.filterField :is(select, .selectTrigger) {
   font: inherit;
   font-size: 0.8125rem;
   height: var(--control-h);
@@ -3300,7 +3323,7 @@ a.cellLink:hover {
 }
 
 .filterField input:focus,
-.filterField select:focus {
+.filterField :is(select, .selectTrigger):focus {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
 }
@@ -5129,7 +5152,7 @@ a.cellLink:hover {
 }
 
 .docLinesTable input,
-.docLinesTable select {
+.docLinesTable :is(select, .selectTrigger) {
   width: 100%;
   font: inherit;
   font-size: 0.8125rem;
@@ -5144,20 +5167,20 @@ a.cellLink:hover {
 }
 
 .docLinesTable tbody tr:hover input:not(:disabled),
-.docLinesTable tbody tr:hover select:not(:disabled) {
+.docLinesTable tbody tr:hover :is(select, .selectTrigger):not(:disabled) {
   border-color: var(--border);
   background: var(--surface);
 }
 
 .docLinesTable input:focus,
-.docLinesTable select:focus {
+.docLinesTable :is(select, .selectTrigger):focus {
   border-color: var(--accent) !important;
   background: var(--surface) !important;
   box-shadow: var(--focus-ring);
 }
 
 .docLinesTable input:disabled,
-.docLinesTable select:disabled {
+.docLinesTable :is(select, .selectTrigger):disabled {
   color: var(--text);
   cursor: default;
 }
@@ -13549,5 +13572,181 @@ a.hrKpi:hover {
     border: 0;
     padding: 0;
     max-width: none;
+  }
+}
+
+/* ==================================================================
+   Phones and small tablets: one pass over the shared layout so every
+   ERP and HRMS screen fits a 360–760px wide screen without sideways
+   scrolling of the page (wide tables scroll inside their own frame).
+   ================================================================== */
+
+@media (max-width: 760px) {
+  /* The page never scrolls sideways; wide content scrolls in its own box. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  .mainArea {
+    padding: 1rem 0.75rem 2.5rem;
+  }
+
+  /* Header: title on top, actions below and wrapping. */
+  .pageHeader {
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .pageActions {
+    width: 100%;
+  }
+
+  .pageActions > * {
+    flex: 1 1 auto;
+    max-width: 100%;
+  }
+
+  /* Toolbars and filter bars: controls wrap, inline fixed widths are capped. */
+  .toolbar > *,
+  .dirFilterFoot > *,
+  .pageActions > * {
+    max-width: 100%;
+    min-width: 0 !important;
+  }
+
+  .toolbar > .select,
+  .toolbar > .selectTrigger,
+  .toolbar > .input,
+  .toolbar > .searchBox,
+  .toolbar > div:not(.toolbarRight) {
+    flex: 1 1 9rem;
+  }
+
+  .toolbarRight {
+    flex-wrap: wrap;
+  }
+
+  .dirFilterFoot {
+    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .dirFilterFoot > div[style] {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Forms: one column. */
+  .formGrid,
+  .saFormGrid,
+  .saProductChoices,
+  .payslipMeta,
+  .payslipCols,
+  .docHeadGrid,
+  .rfmGrid,
+  .lblGrid,
+  .quickCreateMenu,
+  .formLayout,
+  .settingsRow,
+  .trendWrap,
+  .posLayout,
+  .posxBody,
+  .lblTop,
+  .auCard,
+  .auCardWide {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .formGrid > *,
+  .field > * {
+    max-width: 100%;
+  }
+
+  /* Headline figures: two to a row. */
+  .hrKpis,
+  .kpiGrid,
+  .kpiGrid4,
+  .ovGrid,
+  .dHeroStats,
+  .posxSummaryFigures {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Dialogs open as a sheet from the bottom, using the full width. */
+  .modalBackdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modalCard {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+
+  .modalHeader {
+    padding: 1rem;
+  }
+
+  /* Tables: scroll sideways inside their frame, with momentum on iOS. */
+  .tableWrap {
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  /* Comfortable touch targets. */
+  .button,
+  .select,
+  .selectTrigger,
+  .input:not(textarea) {
+    min-height: 2.5rem;
+  }
+
+  .checkboxRow input[type="checkbox"] {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .hcSummary {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .hcChip {
+    flex: 0 0 auto;
+  }
+
+  .multiRefList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .multiRefBar .input {
+    max-width: none;
+  }
+}
+
+/* iOS zooms into any field under 16px when it gets focus; phones get 16px fields. */
+@media (max-width: 760px) and (hover: none) {
+  .input,
+  .select,
+  .selectTrigger,
+  textarea.input {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .hrKpis,
+  .kpiGrid,
+  .kpiGrid4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .pageTitle {
+    font-size: 1.125rem;
   }
 }

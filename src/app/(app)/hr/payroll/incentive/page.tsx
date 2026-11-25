@@ -14,6 +14,7 @@ import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { Kpi, downloadHref, useMasterOptions } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconDownload, IconPlus, IconRefresh } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Row {
   employeeId: string;
@@ -169,28 +170,28 @@ export default function AttendanceIncentivePage() {
       )}
 
       <div className="toolbar">
-        <select className="select" style={{ width: "auto", minWidth: "12rem" }} value={activeMatrix} onChange={(e) => setMatrixId(e.target.value)} aria-label="Incentive matrix">
+        <Select className="select" style={{ width: "auto", minWidth: "12rem" }} value={activeMatrix} onChange={(e) => setMatrixId(e.target.value)} aria-label="Incentive matrix">
           {(matrices ?? []).map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>
           ))}
-        </select>
-        <select className="select" style={{ width: "auto" }} value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Attendance year">
+        </Select>
+        <Select className="select" style={{ width: "auto" }} value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Attendance year">
           {years.map((y) => (
             <option key={y} value={y}>
               {y}
             </option>
           ))}
-        </select>
-        <select className="select" style={{ width: "auto" }} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Department">
+        </Select>
+        <Select className="select" style={{ width: "auto" }} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Department">
           <option value="">All departments</option>
           {(departments ?? []).map((d) => (
             <option key={d.id} value={d.id}>
               {d.label}
             </option>
           ))}
-        </select>
+        </Select>
         <SearchBox value={query} onChange={setQuery} placeholder="Filter by name, code…" width="14rem" />
         <label className="checkboxRow">
           <input type="checkbox" checked={onlyPayable} onChange={(e) => setOnlyPayable(e.target.checked)} />

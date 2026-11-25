@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import ItemLinesInput, { emptyItemLine, cleanLines, loadItemOptions, variantLabel, type ItemLine, type ItemOption } from "@/components/inventory/ItemLinesInput";
 import { useWarehouses } from "@/components/forms/useWarehouses";
 import { IconAlertCircle, IconArrowLeft } from "@/components/icons";
+import Select from "@/components/ui/Select";
 
 interface Formula {
   id: string;
@@ -131,7 +132,7 @@ export default function NewMaterialCreationPage() {
             <div className="formGrid">
               <div className="field">
                 <label htmlFor="m-formula">Bill of materials / recipe</label>
-                <select
+                <Select
                   id="m-formula"
                   className="select"
                   value={formulaId}
@@ -146,7 +147,7 @@ export default function NewMaterialCreationPage() {
                       {f.formulaCode} · {f.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="m-runs">Runs<span className="hint"> · multiplies the formula</span></label>
@@ -175,17 +176,17 @@ export default function NewMaterialCreationPage() {
             <div className="formGrid">
               <div className="field">
                 <label htmlFor="m-out">Product made<span className="req">*</span></label>
-                <select id="m-out" className="select" value={outputItemId} onChange={(e) => (setOutputItemId(e.target.value), setOutputVariantSku(""))}>
+                <Select id="m-out" className="select" value={outputItemId} onChange={(e) => (setOutputItemId(e.target.value), setOutputVariantSku(""))}>
                   <option value="">— choose —</option>
                   {items.map((i) => <option key={i.id} value={i.id}>{i.itemCode} · {i.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="m-var">Size / colour</label>
-                <select id="m-var" className="select" value={outputVariantSku} disabled={outputVariants.length === 0} onChange={(e) => setOutputVariantSku(e.target.value)}>
+                <Select id="m-var" className="select" value={outputVariantSku} disabled={outputVariants.length === 0} onChange={(e) => setOutputVariantSku(e.target.value)}>
                   <option value="">{outputVariants.length === 0 ? "No variants" : "— choose —"}</option>
                   {outputVariants.map((v) => <option key={v.sku} value={v.sku}>{variantLabel(v)}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="m-qty">Quantity made<span className="req">*</span></label>
@@ -197,17 +198,17 @@ export default function NewMaterialCreationPage() {
               </div>
               <div className="field">
                 <label htmlFor="m-wh">Components from<span className="req">*</span></label>
-                <select id="m-wh" className="select" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                <Select id="m-wh" className="select" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
                   <option value="">— choose —</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="m-owh">Finished goods to<span className="hint"> · defaults to the same warehouse</span></label>
-                <select id="m-owh" className="select" value={outputWarehouseId} onChange={(e) => setOutputWarehouseId(e.target.value)}>
+                <Select id="m-owh" className="select" value={outputWarehouseId} onChange={(e) => setOutputWarehouseId(e.target.value)}>
                   <option value="">Same warehouse</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="field">
                 <label htmlFor="m-date">Date</label>

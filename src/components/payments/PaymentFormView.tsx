@@ -15,6 +15,7 @@ import { useAuth } from "@/app/(app)/AuthProvider";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { PAYMENT_MODES } from "@/lib/payments/types";
 import { formatMoney } from "@/lib/format/number";
+import Select from "@/components/ui/Select";
 
 /** How payment modes read on screen; the stored codes stay unchanged. */
 const MODE_LABEL: Record<string, string> = {
@@ -388,7 +389,7 @@ export default function PaymentFormView({
         <div className="formGrid">
           <div className="field">
             <label htmlFor="pay-party">{config.partyLabel} *</label>
-            <select
+            <Select
               id="pay-party"
               className="select"
               value={partyId}
@@ -401,7 +402,7 @@ export default function PaymentFormView({
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className="field">
@@ -431,13 +432,13 @@ export default function PaymentFormView({
 
           <div className="field">
             <label htmlFor="pay-mode">Mode</label>
-            <select id="pay-mode" className="select" value={mode} onChange={(e) => setMode(e.target.value)}>
+            <Select id="pay-mode" className="select" value={mode} onChange={(e) => setMode(e.target.value)}>
               {PAYMENT_MODES.map((m) => (
                 <option key={m} value={m}>
                   {MODE_LABEL[m] ?? m}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className="field">

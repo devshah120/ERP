@@ -7,7 +7,6 @@ import { apiFetch, ApiError } from "@/lib/api/client";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
-import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { ErrorState, SkeletonBlock, EmptyState } from "@/components/ui/States";
@@ -16,7 +15,7 @@ import { Card, fmtDate } from "@/components/hr/HrKit";
 import EmploymentHistory from "@/components/hr/EmploymentHistory";
 import { formatMoney } from "@/lib/format/number";
 import { EMPLOYMENT_STATUS_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/lib/resources/ui/hrRegistry";
-import { IconArrowLeft, IconEdit, IconKey, IconPlus } from "@/components/icons";
+import { IconArrowLeft, IconEdit, IconPlus } from "@/components/icons";
 
 interface Balance {
   leaveTypeId: string;
@@ -104,18 +103,14 @@ export default function EmployeeProfilePage() {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [tab, setTab] = useState<Tab>("overview");
-  const [portalOpen, setPortalOpen] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [portalForm, setPortalForm] = useState({ email: "", password: "" });
-  const [portalError, setPortalError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const data = await apiFetch<Profile>(`/api/hr/employees/${id}`);
       setP(data);
-      setPortalForm((f) => ({ ...f, email: f.email || data.workEmail || data.personalEmail || "" }));
     } catch (err) {
       setError(err);
     }
@@ -125,25 +120,6 @@ export default function EmployeeProfilePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
-
-  async function grantPortal() {
-    setBusy(true);
-    setPortalError(null);
-    try {
-      const res = await apiFetch<{ email: string; created: boolean }>(`/api/hr/employees/${id}/portal`, {
-        method: "POST",
-        body: JSON.stringify({ email: portalForm.email, password: portalForm.password || undefined }),
-      });
-      toast.success(res.created ? "Portal login created" : "Existing login linked", res.created ? `They sign in with ${res.email}. They can set their own password with "Forgot password".` : undefined);
-      setPortalOpen(false);
-      load();
-    } catch (err) {
-      const detail = err instanceof ApiError && Array.isArray(err.errors) ? (err.errors as { message: string }[]).map((e) => e.message).join(", ") : "";
-      setPortalError(err instanceof ApiError ? `${err.message}${detail ? `: ${detail}` : ""}` : "Could not give portal access");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function revokePortal() {
     setBusy(true);
@@ -190,11 +166,6 @@ export default function EmployeeProfilePage() {
         }
         actions={
           <>
-            {canEdit && hasPermission("users.create") && !p.portal && (
-              <button type="button" className="button buttonSecondary" onClick={() => setPortalOpen(true)}>
-                <IconKey /> Give portal access
-              </button>
-            )}
             {hasPermission("hr-leaves.create") && (
               <Link href={`/hr/leaves/new?employeeId=${p.id}`} className="button buttonSecondary">
                 <IconPlus /> Leave
@@ -457,41 +428,6 @@ export default function EmployeeProfilePage() {
             </ul>
           )}
         </Card>
-      )}
-
-      {portalOpen && (
-        <Modal
-          title="Give portal access"
-          subtitle="They can then check in and out, see attendance, apply for leave, download payslips and submit claims."
-          onClose={() => setPortalOpen(false)}
-          busy={busy}
-          footer={
-            <>
-              <button type="button" className="button buttonSecondary" onClick={() => setPortalOpen(false)} disabled={busy}>
-                Cancel
-              </button>
-              <button type="button" className="button buttonPrimary" onClick={grantPortal} disabled={busy || !portalForm.email}>
-                {busy && <span className="spinner" />} Give access
-              </button>
-            </>
-          }
-        >
-          {portalError && (
-            <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
-              <span>{portalError}</span>
-            </div>
-          )}
-          <div className="field" style={{ marginBottom: "0.75rem" }}>
-            <label htmlFor="pa-email">Sign-in email</label>
-            <input id="pa-email" className="input" type="email" value={portalForm.email} onChange={(e) => setPortalForm({ ...portalForm, email: e.target.value })} />
-          </div>
-          <div className="field">
-            <label htmlFor="pa-pass">
-              Temporary password<span className="hint"> · not needed if this email already has a login here</span>
-            </label>
-            <input id="pa-pass" className="input" value={portalForm.password} onChange={(e) => setPortalForm({ ...portalForm, password: e.target.value })} placeholder="e.g. Welcome@2026" autoComplete="new-password" />
-          </div>
-        </Modal>
       )}
 
       {revokeOpen && (

@@ -1197,4 +1197,50 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(report.totals).toMatchObject({ overtimeHours: "5.50", overtimeAmount: "750.00", wages: "2050.00", total: "2800.00" });
     expect((await overtimeReport(ctx, 2027, 3, String(main!._id))).totals.overtimeAmount).toBe("450.00");
   });
+
+  it("runs advance requests and claim settlement: approve, set off claims against an advance, pay claims directly", async () => {
+    const { requestAdvance, advanceRequestSchema, decideAdvance, advanceDecisionSchema, createClaim, claimCreateSchema, decideClaim, adjustClaimsAgainstAdvance, settleClaims, claimSettlementSchema, listLoans, loanListSchema } = await import("@/lib/hr/money");
+    const { EmployeeLoan, ExpenseClaim } = await import("@/models/hr");
+
+    // A request issues nothing until approved, and only one may wait at a time.
+    const req = await requestAdvance(ctx, advanceRequestSchema.parse({ employeeId: String(emp.ravi), amount: "10000", emiAmount: "2000", reason: "Medical bills" }), { self: false });
+    expect(await EmployeeLoan.findById(req.id).lean()).toMatchObject({ status: "REQUESTED", requestedBy: "HR" });
+    await expect(requestAdvance(ctx, advanceRequestSchema.parse({ employeeId: String(emp.ravi), amount: "500", emiAmount: "500", reason: "Again" }), { self: false })).rejects.toMatchObject({ code: "REQUEST_PENDING" });
+    expect((await listLoans(ctx, loanListSchema.parse({ status: "REQUESTED" }))).requestedCount).toBe(1);
+
+    // HR approves less than asked.
+    expect(advanceDecisionSchema.safeParse({ action: "approve", amount: "1000", emiAmount: "2000", issueDate: "2027-04-01", startMonth: 5, startYear: 2027 }).success).toBe(false);
+    await decideAdvance(ctx, req.id, advanceDecisionSchema.parse({ action: "approve", amount: "8000", emiAmount: "2000", issueDate: "2027-04-01", startMonth: 5, startYear: 2027, note: "Approved 8k" }));
+    expect(await EmployeeLoan.findById(req.id).lean()).toMatchObject({ status: "ACTIVE", startMonth: 5, decisionNote: "Approved 8k" });
+    expect(String((await EmployeeLoan.findById(req.id).lean<{ amount: unknown }>())!.amount)).toBe("8000.00");
+    await expect(decideAdvance(ctx, req.id, advanceDecisionSchema.parse({ action: "reject", note: "Too late" }))).rejects.toMatchObject({ code: "REQUEST_DECIDED" });
+
+    // Claims: two of Ravi's, one of Asha's, all approved.
+    const claim = async (employeeId: Types.ObjectId, amount: string) => {
+      const c = await createClaim(ctx, claimCreateSchema.parse({ employeeId: String(employeeId), claimDate: "2027-04-05", category: "TRAVEL", amount, description: "Site visit" }), { self: false });
+      await decideClaim(ctx, c.id, "APPROVED", "");
+      return c.id;
+    };
+    const r1 = await claim(emp.ravi, "1200.50");
+    const r2 = await claim(emp.ravi, "1799.50");
+    const a1 = await claim(emp.asha, "650");
+
+    // Set Ravi's claims off against his advance: one transaction, both sides settled.
+    await expect(adjustClaimsAgainstAdvance(ctx, req.id, { claimIds: [a1] })).rejects.toMatchObject({ code: "CLAIM_OTHER_EMPLOYEE" });
+    expect(await adjustClaimsAgainstAdvance(ctx, req.id, { claimIds: [r1, r2] })).toMatchObject({ adjusted: "3000.00", status: "ACTIVE" });
+    const loan = await EmployeeLoan.findById(req.id).lean<{ repaidAmount: unknown; repayments: { claimIds: unknown[] }[] }>();
+    expect(String(loan!.repaidAmount)).toBe("3000.00");
+    expect(loan!.repayments[0].claimIds).toHaveLength(2);
+    expect(await ExpenseClaim.findById(r1).lean()).toMatchObject({ status: "REIMBURSED", settlementMode: "ADVANCE", settlementReference: (await EmployeeLoan.findById(req.id).lean<{ loanNumber: string }>())!.loanNumber });
+
+    // Asha's claim is paid by bank transfer, once.
+    expect(await settleClaims(ctx, claimSettlementSchema.parse({ claimIds: [a1], mode: "BANK", paidOn: "2027-04-10", reference: "UTR123" }))).toMatchObject({ settled: 1, amount: "650.00" });
+    expect(await ExpenseClaim.findById(a1).lean()).toMatchObject({ status: "REIMBURSED", settlementMode: "BANK", settlementReference: "UTR123", payrollRunId: null });
+    await expect(settleClaims(ctx, claimSettlementSchema.parse({ claimIds: [a1], mode: "CASH", paidOn: "2027-04-11" }))).rejects.toMatchObject({ code: "CLAIM_NOT_APPROVED" });
+
+    // A rejected request stays out of payroll.
+    const second = await requestAdvance(ctx, advanceRequestSchema.parse({ employeeId: String(emp.ravi), amount: "500", emiAmount: "500", reason: "Festival" }), { self: false });
+    await decideAdvance(ctx, second.id, advanceDecisionSchema.parse({ action: "reject", note: "One advance at a time" }));
+    expect(await EmployeeLoan.findById(second.id).lean()).toMatchObject({ status: "REJECTED", decisionNote: "One advance at a time" });
+  });
 });

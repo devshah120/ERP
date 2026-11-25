@@ -23,6 +23,7 @@ import {
   IconClock,
   IconWallet,
   IconTrendUp,
+  IconFile,
 } from "@/components/icons";
 
 export interface NavChild {
@@ -85,6 +86,7 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr/me/leave", label: "My Leave", enabled: true, keywords: "apply leave time off my leave balance" },
           { href: "/hr/me/payslips", label: "My Payslips", enabled: true, keywords: "salary slip payslip download" },
           { href: "/hr/me/claims", label: "My Claims", enabled: true, keywords: "expense claim reimbursement bills" },
+          { href: "/hr/me/advances", label: "My Advances", enabled: true, keywords: "salary advance loan request emi" },
           { href: "/hr/me/team", label: "Team Approvals", enabled: true, keywords: "approve team leave attendance correction manager direct reports" },
         ],
       },
@@ -141,8 +143,18 @@ export const NAV_SECTIONS: NavSection[] = [
           { href: "/hr/payroll/gratuity", label: "Gratuity Calculation", enabled: true, keywords: "gratuity calculation liability provision 15 26 five years" },
           { href: "/hr/payroll/fnf", label: "F & F Settlement", enabled: true, keywords: "full and final settlement fnf exit resignation leave encashment notice" },
           { href: "/hr-pay-components", label: "Pay Components", enabled: true, createHref: "/hr-pay-components/new", keywords: "pay head component earning deduction bonus incentive" },
-          { href: "/hr/loans", label: "Loans & Advances", enabled: true, createHref: "/hr/loans/new", keywords: "salary advance loan emi recovery" },
-          { href: "/hr/claims", label: "Expense Claims", enabled: true, createHref: "/hr/claims/new", keywords: "reimbursement claim travel bills" },
+        ],
+      },
+      {
+        key: "hr-advance-claim",
+        label: "Advance & Claim",
+        keywords: "advance loan claim reimbursement expense settlement",
+        icon: IconFile,
+        children: [
+          { href: "/hr/loans/requests", label: "Loan/Advance Request", enabled: true, keywords: "advance loan request approve reject salary advance emi" },
+          { href: "/hr/claims", label: "Claim Request", enabled: true, createHref: "/hr/claims/new", keywords: "expense claim reimbursement travel bills approve reject" },
+          { href: "/hr/loans", label: "Advance Settlement", enabled: true, createHref: "/hr/loans/new", keywords: "advance loan settlement repayment recovery outstanding set off claims" },
+          { href: "/hr/claims/settlement", label: "Claim Settlement", enabled: true, keywords: "claim settlement pay reimburse cash bank cheque paid" },
         ],
       },
       {
@@ -615,6 +627,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/me/leave": "hr-self.view",
   "/hr/me/payslips": "hr-self.view",
   "/hr/me/claims": "hr-self.view",
+  "/hr/me/advances": "hr-self.view",
   "/hr/me/team": "hr-self.view",
   "/hr/employees": "hr-employees.view",
   "/hr/employees/tree": "hr-employees.view",
@@ -654,7 +667,9 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/payroll/fnf": "hr-payroll.view",
   "/hr-pay-components": "hr-payroll.view",
   "/hr/loans": "hr-loans.view",
+  "/hr/loans/requests": "hr-loans.view",
   "/hr/claims": "hr-claims.view",
+  "/hr/claims/settlement": "hr-claims.view",
   "/hr-contractors": "hr-contractors.view",
   "/hr-contract-workers": "hr-contract-workers.view",
   "/hr/contract-labour/attendance": "hr-contract-attendance.view",

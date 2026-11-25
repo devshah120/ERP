@@ -96,7 +96,7 @@ function Claims() {
     setActionError(null);
     try {
       await apiFetch(`/api/hr/claims/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      toast.success(pending.action === "approve" ? `${pending.row.claimNumber} approved` : `${pending.row.claimNumber} rejected`, pending.action === "approve" ? "It will be paid with the next payroll." : undefined);
+      toast.success(pending.action === "approve" ? `${pending.row.claimNumber} approved` : `${pending.row.claimNumber} rejected`, pending.action === "approve" ? "It will be paid with the next payroll, or settle it now on Claim Settlement." : undefined);
       setPending(null);
       load();
     } catch (err) {
@@ -111,9 +111,9 @@ function Claims() {
   return (
     <>
       <PageHeader
-        title="Expense claims"
+        title="Claim requests"
         count={result?.total ?? null}
-        description={result ? `${result.pendingCount} waiting for approval (${formatMoney(result.pendingAmount)}). Approved claims are reimbursed through payroll.` : "Employee reimbursements, paid through payroll once approved."}
+        description={result ? `${result.pendingCount} waiting for approval (${formatMoney(result.pendingAmount)}). Approved claims are paid with the next payroll, or earlier from Claim Settlement.` : "Expense claims from employees, waiting for approval."}
         actions={
           canCreate ? (
             <Link href="/hr/claims/new" className="button buttonPrimary">
@@ -128,7 +128,7 @@ function Claims() {
         <select className="select" style={{ width: "auto" }} value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))} aria-label="Status">
           <option value="">Status: All</option>
           <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved (awaiting payroll)</option>
+          <option value="APPROVED">Approved (not yet paid)</option>
           <option value="REIMBURSED">Reimbursed</option>
           <option value="REJECTED">Rejected</option>
           <option value="CANCELLED">Withdrawn</option>

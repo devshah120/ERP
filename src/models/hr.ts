@@ -873,7 +873,10 @@ payslipSchema.index({ businessId: 1, payrollRunId: 1, employeeId: 1 }, { unique:
 payslipSchema.index({ businessId: 1, employeeId: 1, year: -1, month: -1 });
 export const Payslip = defineModel("Payslip", payslipSchema);
 
-export const LOAN_STATUSES = ["ACTIVE", "CLOSED", "CANCELLED"] as const;
+/** REQUESTED → (approved) ACTIVE → CLOSED, or REJECTED; a request can be withdrawn (CANCELLED). */
+export const LOAN_STATUSES = ["REQUESTED", "ACTIVE", "CLOSED", "CANCELLED", "REJECTED"] as const;
+/** How a claim was paid: with payroll, directly, or set off against an advance the employee owes. */
+export const CLAIM_SETTLEMENT_MODES = ["PAYROLL", "CASH", "BANK", "CHEQUE", "ADVANCE"] as const;
 
 /** A salary advance or loan recovered in monthly instalments through payroll. */
 const employeeLoanSchema = new Schema(
@@ -899,6 +902,8 @@ const employeeLoanSchema = new Schema(
             note: { type: String, default: "" },
             /** Recovered in a full & final settlement instead of payroll. */
             fnfSettlementId: { type: Schema.Types.ObjectId, ref: "FnfSettlement", default: null },
+            /** Settled by setting off approved expense claims against it. */
+            claimIds: { type: [{ type: Schema.Types.ObjectId, ref: "ExpenseClaim" }], default: [] },
             at: { type: Date, default: () => new Date() },
           },
           { _id: false }
@@ -909,6 +914,12 @@ const employeeLoanSchema = new Schema(
     repaidAmount: money,
     status: { type: String, enum: LOAN_STATUSES, default: "ACTIVE" },
     reason: { type: String, trim: true, default: "" },
+    /** Asked for by the employee on self-service, or issued by HR. */
+    requestedBy: { type: String, enum: ["EMPLOYEE", "HR"], default: "HR" },
+    requestedAt: { type: Date, default: null },
+    decidedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    decidedAt: { type: Date, default: null },
+    decisionNote: { type: String, trim: true, default: "" },
     ...audit,
   },
   { timestamps: true }
@@ -936,6 +947,12 @@ const expenseClaimSchema = new Schema(
     decidedAt: { type: Date, default: null },
     decisionNote: { type: String, trim: true, default: "" },
     payrollRunId: { type: Schema.Types.ObjectId, ref: "PayrollRun", default: null },
+    /** Set when the claim is reimbursed: how, when, the payment reference, and the advance it was set off against. */
+    settlementMode: { type: String, enum: [...CLAIM_SETTLEMENT_MODES, null], default: null },
+    settledAt: { type: Date, default: null },
+    settlementReference: { type: String, trim: true, default: "" },
+    settledByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    advanceLoanId: { type: Schema.Types.ObjectId, ref: "EmployeeLoan", default: null },
     ...audit,
   },
   { timestamps: true }

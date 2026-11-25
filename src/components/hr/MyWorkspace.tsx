@@ -45,13 +45,14 @@ interface MyAttendance {
   pendingLeaves: number;
 }
 
-export type MySection = "overview" | "attendance" | "leave" | "payslips" | "claims";
+export type MySection = "overview" | "attendance" | "leave" | "payslips" | "claims" | "advances";
 
 const SECTION_TITLES: Record<Exclude<MySection, "overview">, string> = {
   attendance: "My attendance",
   leave: "My leave",
   payslips: "My payslips",
   claims: "My expense claims",
+  advances: "My advances & loans",
 };
 
 /**
@@ -316,6 +317,7 @@ export default function MyWorkspace({ section }: { section: MySection }) {
       {tab === "leave" && <MyLeave balances={me.leaveBalances} onChanged={loadMe} />}
       {tab === "payslips" && <MyPayslips />}
       {tab === "claims" && <MyClaims />}
+      {tab === "advances" && <MyAdvances />}
     </>
   );
 }
@@ -841,5 +843,183 @@ function CorrectionForm({ initialDate, maxDate, onClose, onDone }: { initialDate
         <textarea id="corr-reason" className="input" rows={3} value={form.reason} onChange={(e) => set({ reason: e.target.value })} placeholder="e.g. Forgot to check out; left at 18:30 after the client call" />
       </div>
     </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+interface AdvanceRow {
+  id: string;
+  loanNumber: string;
+  loanType: string;
+  issueDate: string;
+  amount: string;
+  emiAmount: string;
+  repaidAmount: string;
+  outstanding: string;
+  startMonth: number;
+  startYear: number;
+  status: string;
+  reason: string;
+  decisionNote: string;
+  createdAt: string;
+}
+
+const ADVANCE_TYPE_LABELS: Record<string, string> = { ADVANCE: "Salary advance", LOAN: "Loan" };
+
+/** The employee's own advances and loans, with a request form. */
+function MyAdvances() {
+  const toast = useToast();
+  const [rows, setRows] = useState<AdvanceRow[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ loanType: "ADVANCE", amount: "", emiAmount: "", reason: "" });
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await apiFetch<{ items: AdvanceRow[] }>("/api/hr/self/loans?pageSize=50");
+      setRows(r.items);
+    } catch {
+      setRows([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
+
+  async function submit() {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const r = await apiFetch<{ loanNumber: string }>("/api/hr/self/loans", { method: "POST", body: JSON.stringify(form) });
+      toast.success(`${r.loanNumber} sent to HR`, "You'll see their decision here.");
+      setAdding(false);
+      setForm({ loanType: "ADVANCE", amount: "", emiAmount: "", reason: "" });
+      load();
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Could not send the request");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw(id: string) {
+    try {
+      await apiFetch(`/api/hr/self/loans/${id}`, { method: "DELETE" });
+      toast.success("Request withdrawn");
+      load();
+    } catch (err) {
+      toast.error("Could not withdraw", err instanceof ApiError ? err.message : undefined);
+    }
+  }
+
+  const waiting = rows?.some((r) => r.status === "REQUESTED");
+
+  return (
+    <>
+      <div className="toolbar">
+        <button type="button" className="button buttonPrimary" onClick={() => (setFormError(null), setAdding(true))} disabled={waiting} title={waiting ? "You already have a request waiting for HR" : undefined}>
+          <IconPlus /> Request advance
+        </button>
+      </div>
+      <div className="tableWrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Type</th>
+              <th>Asked on</th>
+              <th className="numCell">Amount</th>
+              <th className="numCell">Instalment</th>
+              <th className="numCell">Outstanding</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows && rows.length === 0 && (
+              <tr>
+                <td colSpan={8}>
+                  <EmptyState title="No advances or loans" description="Ask HR for a salary advance; it is recovered from your salary in instalments." />
+                </td>
+              </tr>
+            )}
+            {rows?.map((r) => (
+              <tr key={r.id}>
+                <td className="cellMono">{r.loanNumber}</td>
+                <td>
+                  {ADVANCE_TYPE_LABELS[r.loanType] ?? r.loanType}
+                  {r.reason && <div className="hrMuted">{r.reason}</div>}
+                  {r.decisionNote && <div className="hrMuted">HR: {r.decisionNote}</div>}
+                </td>
+                <td>{fmtDate(r.createdAt)}</td>
+                <td className="numCell">{formatMoney(r.amount)}</td>
+                <td className="numCell">{formatMoney(r.emiAmount)}</td>
+                <td className="numCell">{r.status === "ACTIVE" || r.status === "CLOSED" ? formatMoney(r.outstanding) : "—"}</td>
+                <td>
+                  <StatusBadge status={r.status} />
+                </td>
+                <td style={{ textAlign: "right" }}>
+                  {r.status === "REQUESTED" && (
+                    <button type="button" className="button buttonGhost buttonSm" onClick={() => withdraw(r.id)}>
+                      Withdraw
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {adding && (
+        <Modal
+          title="Request an advance"
+          subtitle="HR decides the amount and when recovery from your salary starts."
+          onClose={() => setAdding(false)}
+          busy={busy}
+          width="34rem"
+          footer={
+            <>
+              <button type="button" className="button buttonSecondary" onClick={() => setAdding(false)} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="button buttonPrimary" onClick={submit} disabled={busy || !form.amount || !form.emiAmount || form.reason.trim().length < 3}>
+                {busy && <span className="spinner" />} Send to HR
+              </button>
+            </>
+          }
+        >
+          {formError && (
+            <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
+              <span>{formError}</span>
+            </div>
+          )}
+          <div className="formGrid">
+            <div className="field">
+              <label htmlFor="ma-type">Type</label>
+              <select id="ma-type" className="select" value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })}>
+                <option value="ADVANCE">Salary advance</option>
+                <option value="LOAN">Loan</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="ma-amt">Amount</label>
+              <input id="ma-amt" className="input" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            </div>
+            <div className="field">
+              <label htmlFor="ma-emi">Repay per month</label>
+              <input id="ma-emi" className="input" inputMode="decimal" value={form.emiAmount} onChange={(e) => setForm({ ...form, emiAmount: e.target.value })} />
+            </div>
+            <div className="field fieldSpanFull">
+              <label htmlFor="ma-reason">What is it for?</label>
+              <input id="ma-reason" className="input" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }

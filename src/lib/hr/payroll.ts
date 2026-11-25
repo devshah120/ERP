@@ -294,7 +294,7 @@ export async function approveRun(ctx: AuthContext, id: string, input: { payUnmar
         if ((slip.claimIds ?? []).length > 0) {
           await ExpenseClaim.updateMany(
             { businessId: ctx.businessId, _id: { $in: slip.claimIds }, status: "APPROVED" },
-            { status: "REIMBURSED", payrollRunId: run._id, updatedBy: ctx.userId },
+            { status: "REIMBURSED", payrollRunId: run._id, settlementMode: "PAYROLL", settledAt: new Date(Date.UTC(run.year, run.month - 1, 1)), settlementReference: run.runNumber, updatedBy: ctx.userId },
             { session }
           );
         }
@@ -414,7 +414,7 @@ export async function cancelRun(ctx: AuthContext, id: string, reason: string) {
         loan.updatedBy = ctx.userId;
         await loan.save({ session });
       }
-      await ExpenseClaim.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "APPROVED", payrollRunId: null, updatedBy: ctx.userId }, { session });
+      await ExpenseClaim.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "APPROVED", payrollRunId: null, settlementMode: null, settledAt: null, settlementReference: "", updatedBy: ctx.userId }, { session });
       await Payslip.updateMany({ businessId: ctx.businessId, payrollRunId: run._id }, { status: "CANCELLED" }, { session });
       run.set({ status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason, updatedBy: ctx.userId });
       await run.save({ session });

@@ -4,16 +4,18 @@ import SimpleListView, { type SimpleListConfig } from "@/components/table/Simple
 import { formatMoney } from "@/lib/format/number";
 
 const config: SimpleListConfig = {
-  title: "Loans & advances",
-  description: "Salary advances and loans, recovered in monthly instalments when payroll is approved.",
+  title: "Advance settlement",
+  description: "Issued advances and loans. They are recovered in instalments when payroll is approved; open one to record a repayment or set approved claims off against it.",
   apiPath: "/api/hr/loans",
   basePath: "/hr/loans",
-  create: { label: "New loan / advance", href: "/hr/loans/new", permission: "hr-loans.create" },
+  create: { label: "Issue advance directly", href: "/hr/loans/new", permission: "hr-loans.create" },
   searchPlaceholder: "Search employee or loan no…",
   statusOptions: [
-    { value: "ACTIVE", label: "Active" },
-    { value: "CLOSED", label: "Closed" },
-    { value: "CANCELLED", label: "Cancelled" },
+    { value: "ACTIVE", label: "Outstanding" },
+    { value: "CLOSED", label: "Fully recovered" },
+    { value: "REQUESTED", label: "Requested (not yet approved)" },
+    { value: "REJECTED", label: "Rejected" },
+    { value: "CANCELLED", label: "Cancelled / withdrawn" },
   ],
   emptyText: "No loans or advances",
   columns: [
@@ -34,6 +36,6 @@ const config: SimpleListConfig = {
   ),
 };
 
-export default function LoansPage() {
+export default function AdvanceSettlementPage() {
   return <SimpleListView config={config} />;
 }

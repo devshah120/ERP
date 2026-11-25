@@ -12,7 +12,7 @@ import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { ErrorState, SkeletonBlock, EmptyState } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
-import { Card, Kpi, fmtDate, MONTH_NAMES } from "@/components/hr/HrKit";
+import { Card, Kpi, fmtDate, MONTH_NAMES, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
 import { IconArrowLeft } from "@/components/icons";
 
@@ -33,7 +33,18 @@ interface Loan {
   startYear: number;
   status: string;
   reason: string;
-  repayments: { month: number; year: number; amount: string; note: string; at: string }[];
+  requestedBy: string;
+  decisionNote: string;
+  repayments: { month: number; year: number; amount: string; note: string; at: string; viaClaims: boolean }[];
+}
+
+interface ClaimOption {
+  id: string;
+  claimNumber: string;
+  claimDate: string;
+  category: string;
+  amount: string;
+  description: string;
 }
 
 export default function LoanPage() {
@@ -47,6 +58,9 @@ export default function LoanPage() {
   const [repay, setRepay] = useState({ amount: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [setOffOpen, setSetOffOpen] = useState(false);
+  const [claims, setClaims] = useState<ClaimOption[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setError(null);
@@ -79,6 +93,36 @@ export default function LoanPage() {
     }
   }
 
+  async function openSetOff() {
+    if (!loan) return;
+    setDialogError(null);
+    setPicked(new Set());
+    setClaims(null);
+    setSetOffOpen(true);
+    try {
+      const r = await apiFetch<{ items: ClaimOption[] }>(`/api/hr/claims?status=APPROVED&employeeId=${loan.employeeId}&pageSize=100`);
+      setClaims(r.items);
+    } catch (err) {
+      setClaims([]);
+      setDialogError(err instanceof ApiError ? err.message : "Could not load the employee's claims");
+    }
+  }
+
+  async function setOff() {
+    setBusy(true);
+    setDialogError(null);
+    try {
+      const r = await apiFetch<{ adjusted: string; status: string }>(`/api/hr/loans/${id}`, { method: "POST", body: JSON.stringify({ action: "adjust-claims", claimIds: [...picked] }) });
+      toast.success(`${formatMoney(r.adjusted)} set off against claims`, r.status === "CLOSED" ? "The advance is now fully settled." : undefined);
+      setSetOffOpen(false);
+      load();
+    } catch (err) {
+      setDialogError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (isForbidden(error)) return <AccessDenied detail={(error as Error).message} />;
   if (error) return <ErrorState message={error instanceof ApiError ? error.message : "Could not load this loan."} onRetry={load} />;
   if (!loan) return <SkeletonBlock lines={6} />;
@@ -88,7 +132,7 @@ export default function LoanPage() {
       <PageHeader
         eyebrow={
           <Link href="/hr/loans" className="textLink" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-            <IconArrowLeft /> Loans & advances
+            <IconArrowLeft /> Advance settlement
           </Link>
         }
         title={
@@ -107,6 +151,11 @@ export default function LoanPage() {
         actions={
           loan.status === "ACTIVE" ? (
             <>
+              {hasPermission("hr-loans.create") && hasPermission("hr-claims.approve") && (
+                <button type="button" className="button buttonSecondary" onClick={openSetOff}>
+                  Set off against claims
+                </button>
+              )}
               {hasPermission("hr-loans.create") && (
                 <button type="button" className="button buttonSecondary" onClick={() => (setDialogError(null), setRepayOpen(true))}>
                   Record repayment
@@ -121,6 +170,23 @@ export default function LoanPage() {
           ) : undefined
         }
       />
+
+      {loan.status === "REQUESTED" && (
+        <div className="banner bannerInfo" style={{ marginBottom: "0.75rem" }}>
+          <span>
+            This is a request waiting for a decision. Approve or reject it on{" "}
+            <Link href="/hr/loans/requests" className="textLink">
+              Loan / Advance Request
+            </Link>
+            .
+          </span>
+        </div>
+      )}
+      {loan.decisionNote && (
+        <p className="hrMuted" style={{ marginBottom: "0.75rem" }}>
+          {loan.status === "REJECTED" ? "Rejected" : "Decision note"}: {loan.decisionNote}
+        </p>
+      )}
 
       <div className="hrKpis">
         <Kpi label="Amount" value={formatMoney(loan.amount)} />
@@ -180,6 +246,60 @@ export default function LoanPage() {
               <input id="rp-note" className="input" value={repay.note} onChange={(e) => setRepay({ ...repay, note: e.target.value })} placeholder="Cash / UTR" />
             </div>
           </div>
+        </Modal>
+      )}
+      {setOffOpen && (
+        <Modal
+          title="Set off against claims"
+          subtitle={`Tick ${loan.employeeName}'s approved claims to settle against this advance instead of paying them. ${formatMoney(loan.outstanding)} outstanding.`}
+          onClose={() => setSetOffOpen(false)}
+          busy={busy}
+          width="40rem"
+          footer={
+            <>
+              <button type="button" className="button buttonSecondary" onClick={() => setSetOffOpen(false)} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="button buttonPrimary" onClick={setOff} disabled={busy || picked.size === 0}>
+                {busy && <span className="spinner" />} Set off {picked.size > 0 ? `(${picked.size})` : ""}
+              </button>
+            </>
+          }
+        >
+          {dialogError && (
+            <div className="banner bannerError" style={{ marginBottom: "0.75rem" }}>
+              <span>{dialogError}</span>
+            </div>
+          )}
+          {!claims && <SkeletonBlock lines={3} />}
+          {claims && claims.length === 0 && !dialogError && <EmptyState compact title="No approved, unpaid claims" description="Only approved claims not yet paid can be set off." />}
+          {claims && claims.length > 0 && (
+            <ul className="hrList">
+              {claims.map((c) => (
+                <li key={c.id}>
+                  <label className="checkboxRow" style={{ alignItems: "flex-start" }}>
+                    <input
+                      type="checkbox"
+                      checked={picked.has(c.id)}
+                      onChange={() =>
+                        setPicked((s) => {
+                          const next = new Set(s);
+                          if (next.has(c.id)) next.delete(c.id);
+                          else next.add(c.id);
+                          return next;
+                        })
+                      }
+                    />
+                    <span>
+                      {c.claimNumber} · {CLAIM_CATEGORY_LABELS[c.category] ?? c.category} · {fmtDate(c.claimDate)}
+                      <div className="hrMuted">{c.description}</div>
+                    </span>
+                  </label>
+                  <span className="numCell">{formatMoney(c.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Modal>
       )}
       {cancelOpen && (

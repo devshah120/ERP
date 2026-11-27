@@ -385,6 +385,7 @@ export async function commitImport(
   try {
     await session.withTransaction(async () => {
       for (const row of toInsert) {
+        if (resourceDef.prepareWrite) await resourceDef.prepareWrite(ctx, row.values);
         const payload = resourceDef.toDocument
           ? resourceDef.toDocument(row.values)
           : { ...row.values };

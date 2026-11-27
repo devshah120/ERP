@@ -21,6 +21,49 @@ export const ESI_EMPLOYEE_RATE = new Decimal("0.0075");
 export const ESI_EMPLOYER_RATE = new Decimal("0.0325");
 export const ESI_GROSS_LIMIT = new Decimal("21000");
 
+/**
+ * PF, ESI and professional-tax rules, from HR Settings (PF Settings, ESIC
+ * Settings, PT Slabs). Left out, the statutory defaults above apply.
+ */
+export interface StatutoryRules {
+  pfEnabled: boolean;
+  pfEmployeeRate: Decimal.Value;
+  pfEmployerRate: Decimal.Value;
+  pfWageCeiling: Decimal.Value;
+  /** true: PF on wages up to the ceiling; false: PF on the whole earned basic. */
+  pfCapAtCeiling: boolean;
+  esiEnabled: boolean;
+  esiGrossLimit: Decimal.Value;
+  esiEmployeeRate: Decimal.Value;
+  esiEmployerRate: Decimal.Value;
+  /** Professional-tax slabs on earned gross; empty = each employee's fixed monthly amount. */
+  ptSlabs: { minGross: Decimal.Value; maxGross: Decimal.Value; amount: Decimal.Value; februaryAmount: Decimal.Value }[];
+}
+
+export const DEFAULT_RULES: StatutoryRules = {
+  pfEnabled: true,
+  pfEmployeeRate: PF_RATE,
+  pfEmployerRate: PF_RATE,
+  pfWageCeiling: PF_WAGE_CEILING,
+  pfCapAtCeiling: true,
+  esiEnabled: true,
+  esiGrossLimit: ESI_GROSS_LIMIT,
+  esiEmployeeRate: ESI_EMPLOYEE_RATE,
+  esiEmployerRate: ESI_EMPLOYER_RATE,
+  ptSlabs: [],
+};
+
+/** The slab amount for an earned gross (maxGross 0 = no upper limit); null when no slab covers it. */
+export function ptFromSlabs(slabs: StatutoryRules["ptSlabs"], gross: Decimal, month?: number): Decimal | null {
+  const slab = slabs.find((s) => {
+    const max = new Decimal(s.maxGross || 0);
+    return gross.gte(new Decimal(s.minGross || 0)) && (max.lte(0) || gross.lte(max));
+  });
+  if (!slab) return null;
+  const feb = new Decimal(slab.februaryAmount || 0);
+  return new Decimal(month === 2 && feb.gt(0) ? feb : slab.amount || 0).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+}
+
 export interface SalaryStructure {
   basic: Decimal.Value;
   hra: Decimal.Value;
@@ -49,6 +92,10 @@ export interface PayslipInput {
   reimbursements: Decimal.Value;
   /** One-off amounts for the month (bonus, incentive, canteen…); not reduced for loss-of-pay days. */
   variables?: { code: string; label: string; kind: "EARNING" | "DEDUCTION"; amount: Decimal.Value; esiApplicable?: boolean }[];
+  /** From HR Settings; the statutory defaults when left out. */
+  rules?: StatutoryRules;
+  /** 1–12; picks a PT slab's February amount. */
+  month?: number;
 }
 
 export interface PayLine {
@@ -77,6 +124,7 @@ const rupeeUp = (v: Decimal) => v.toDecimalPlaces(0, Decimal.ROUND_CEIL);
 
 export function computePayslip(input: PayslipInput): PayslipResult {
   const s = input.structure;
+  const r = input.rules ?? DEFAULT_RULES;
   const days = Math.max(1, input.daysInMonth);
   const lop = Math.min(Math.max(0, input.lopDays), days);
   const payable = new Decimal(days).minus(lop);
@@ -105,22 +153,23 @@ export function computePayslip(input: PayslipInput): PayslipResult {
   const employer: PayLine[] = [];
 
   let pfWages = new Decimal(0);
-  if (s.pfApplicable && earnedBasic.gt(0)) {
-    pfWages = Decimal.min(earnedBasic, PF_WAGE_CEILING);
-    const pf = rupee(pfWages.times(PF_RATE));
-    deductions.push({ code: "PF", label: "Provident fund", amount: pf });
-    employer.push({ code: "PF_ER", label: "Employer PF", amount: pf });
+  if (r.pfEnabled && s.pfApplicable && earnedBasic.gt(0)) {
+    pfWages = r.pfCapAtCeiling ? Decimal.min(earnedBasic, new Decimal(r.pfWageCeiling)) : earnedBasic;
+    deductions.push({ code: "PF", label: "Provident fund", amount: rupee(pfWages.times(r.pfEmployeeRate)) });
+    employer.push({ code: "PF_ER", label: "Employer PF", amount: rupee(pfWages.times(r.pfEmployerRate)) });
   }
 
   let esiWages = new Decimal(0);
-  if (s.esiApplicable && fullGross.lte(ESI_GROSS_LIMIT) && gross.minus(esiExcluded).gt(0)) {
+  if (r.esiEnabled && s.esiApplicable && fullGross.lte(new Decimal(r.esiGrossLimit)) && gross.minus(esiExcluded).gt(0)) {
     esiWages = gross.minus(esiExcluded);
-    deductions.push({ code: "ESI", label: "ESI", amount: rupeeUp(esiWages.times(ESI_EMPLOYEE_RATE)) });
-    employer.push({ code: "ESI_ER", label: "Employer ESI", amount: rupeeUp(esiWages.times(ESI_EMPLOYER_RATE)) });
+    deductions.push({ code: "ESI", label: "ESI", amount: rupeeUp(esiWages.times(r.esiEmployeeRate)) });
+    employer.push({ code: "ESI_ER", label: "Employer ESI", amount: rupeeUp(esiWages.times(r.esiEmployerRate)) });
   }
 
-  if (s.ptApplicable && gross.gt(0) && new Decimal(s.professionalTax || 0).gt(0)) {
-    deductions.push({ code: "PT", label: "Professional tax", amount: money(s.professionalTax) });
+  if (s.ptApplicable && gross.gt(0)) {
+    // Slabs, when HR has set them up, decide PT from the month's gross; otherwise the employee's fixed amount.
+    const pt = r.ptSlabs.length > 0 ? ptFromSlabs(r.ptSlabs, gross, input.month) ?? new Decimal(0) : money(s.professionalTax);
+    if (pt.gt(0)) deductions.push({ code: "PT", label: "Professional tax", amount: pt });
   }
 
   if (new Decimal(s.monthlyTds || 0).gt(0) && gross.gt(0)) {

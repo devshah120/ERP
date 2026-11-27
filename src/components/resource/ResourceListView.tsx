@@ -17,6 +17,7 @@ import BulkActionBar from "@/components/table/BulkActionBar";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { getImportDefinition } from "@/lib/import/registry";
 import PageHeader from "@/components/ui/PageHeader";
+import HelpPanel from "@/components/hr/HelpPanel";
 import SearchBox from "@/components/ui/SearchBox";
 import Pagination from "@/components/ui/Pagination";
 import StatusBadge, { humanizeStatus } from "@/components/ui/StatusBadge";
@@ -352,6 +353,8 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
           </>
         }
       />
+
+      <HelpPanel topic={config.help} />
 
       <div className="toolbar">
         <SearchBox

@@ -1,5 +1,6 @@
 import type { ResourceUi, FieldConfig } from "./types";
 import { shiftHours } from "@/lib/hr/shiftHours";
+import { COMPONENT_LABELS, CALC_TYPE_LABELS } from "@/lib/hr/salaryStructureMath";
 
 /** Screens for the HRMS masters in src/lib/resources/hrRegistry.ts. */
 
@@ -357,6 +358,12 @@ const announcements = master("hr-announcements", "Announcements", "Announcement"
 });
 
 const employees = master("hr-employees", "Employee Records", "Employee", {
+  help: "hr-employees",
+  // New employees start with the PF / ESI / PT ticks chosen in Payroll Settings.
+  settingsDefaults: {
+    section: "hr-payroll-settings",
+    map: { pfApplicable: "defaultPfApplicable", esiApplicable: "defaultEsiApplicable", ptApplicable: "defaultPtApplicable" },
+  },
   columns: [
     { key: "employeeCode", label: "Emp. code", filterParam: "employeeCode", sortField: "employeeCode" },
     { key: "name", label: "Name", filterParam: "name", sortField: "name" },
@@ -423,17 +430,34 @@ const employees = master("hr-employees", "Employee Records", "Employee", {
     },
     {
       label: "Salary structure (monthly)",
+      description: "Choose a salary structure and type only the salary amount: saving fills in basic, HRA and the other heads. Without a structure, type the heads yourself.",
       fields: [
-        { name: "basic", label: "Basic", type: "money", defaultValue: "0", hint: "PF is worked out on basic" },
+        {
+          name: "salaryStructureId",
+          label: "Salary structure",
+          type: "reference",
+          reference: { resource: "hr-salary-structures", labelField: "name" },
+          hint: "HR Settings → Salary Structures",
+          sendBlank: true,
+        },
+        { name: "salaryAmount", label: "Salary amount (gross)", type: "money", defaultValue: "0", hint: "Monthly or annual, as set in Payroll Settings" },
+        { name: "basic", label: "Basic", type: "money", defaultValue: "0", hint: "PF is worked out on basic. Filled from the structure when one is chosen" },
         { name: "hra", label: "House rent allowance", type: "money", defaultValue: "0" },
         { name: "conveyance", label: "Conveyance", type: "money", defaultValue: "0" },
         { name: "specialAllowance", label: "Special allowance", type: "money", defaultValue: "0" },
         { name: "otherAllowance", label: "Other allowance", type: "money", defaultValue: "0" },
         { name: "monthlyTds", label: "TDS per month", type: "money", defaultValue: "0", hint: "Income tax to deduct each month" },
-        { name: "pfApplicable", label: "Deduct Provident Fund (12% of basic, up to ₹15,000 wages)", type: "checkbox", defaultValue: true },
-        { name: "esiApplicable", label: "Deduct ESI (0.75%, when gross is ₹21,000 or less)", type: "checkbox" },
+        { name: "pfApplicable", label: "Deduct Provident Fund (rates in HR Settings → PF Settings)", type: "checkbox", defaultValue: true },
+        { name: "esiApplicable", label: "Deduct ESI (rates and gross limit in HR Settings → ESIC Settings)", type: "checkbox" },
         { name: "ptApplicable", label: "Deduct Professional Tax", type: "checkbox", defaultValue: true },
-        { name: "professionalTax", label: "Professional tax per month", type: "money", defaultValue: "200", showWhen: { field: "ptApplicable", values: ["true"] } },
+        {
+          name: "professionalTax",
+          label: "Professional tax per month",
+          type: "money",
+          defaultValue: "200",
+          hint: "Used only while no PT slabs are set up; slabs decide PT once they exist",
+          showWhen: { field: "ptApplicable", values: ["true"] },
+        },
       ],
     },
     {
@@ -764,7 +788,95 @@ const appraisals = master("hr-appraisals", "Appraisals", "Appraisal", {
   ],
 });
 
+const PAYROLL_PERMS = { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" };
+
+const salaryStructures = master("hr-salary-structures", "Salary Structures", "Salary structure", {
+  permissions: PAYROLL_PERMS,
+  help: "hr-salary-structures",
+  columns: [
+    { key: "code", label: "Code", filterParam: "code", sortField: "code" },
+    { key: "name", label: "Structure", filterParam: "name", sortField: "name" },
+    { key: "lines", label: "Heads", type: "count" },
+    { key: "roundingDecimals", label: "Rounding (decimals)", type: "number" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Structure",
+      fields: [
+        { name: "name", label: "Name", type: "text", required: true, placeholder: "Standard Staff" },
+        { name: "code", label: "Code", type: "text", hint: "Leave blank to number automatically" },
+        {
+          name: "roundingDecimals",
+          label: "Round heads to",
+          type: "select",
+          defaultValue: "0",
+          options: [
+            { value: "0", label: "Whole rupees" },
+            { value: "2", label: "Paise (2 decimals)" },
+          ],
+          hint: "The balance head absorbs the rounding",
+        },
+        statusField,
+        { name: "description", label: "Description", type: "textarea", fullWidth: true, placeholder: "Office and supervisory staff" },
+      ],
+    },
+    {
+      label: "Salary heads",
+      description: "One line per head. Exactly one line takes the balance, so the heads always add up to the gross typed on the employee.",
+      fields: [
+        {
+          name: "lines",
+          label: "Heads",
+          type: "lines",
+          addLabel: "Add head",
+          defaultValue: [
+            { component: "BASIC", calcType: "PERCENT_OF_GROSS", value: 50 },
+            { component: "HRA", calcType: "PERCENT_OF_BASIC", value: 40 },
+            { component: "CONV", calcType: "FIXED", value: 1600 },
+            { component: "SPECIAL", calcType: "BALANCE", value: 0 },
+          ],
+          columns: [
+            { name: "component", label: "Head", type: "select", required: true, options: opts(COMPONENT_LABELS) },
+            { name: "calcType", label: "Worked out as", type: "select", required: true, options: opts(CALC_TYPE_LABELS) },
+            { name: "value", label: "Value (% or ₹; 0 for balance)", type: "number", width: "12rem" },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+const ptSlabs = master("hr-pt-slabs", "PT Slabs", "PT slab", {
+  permissions: PAYROLL_PERMS,
+  help: "hr-pt-slabs",
+  titleField: "state",
+  columns: [
+    { key: "state", label: "State", filterParam: "state", sortField: "state" },
+    { key: "minGross", label: "Gross from", type: "money", sortField: "minGross" },
+    { key: "maxGross", label: "Gross up to (0 = no limit)", type: "money" },
+    { key: "amount", label: "PT per month", type: "money" },
+    { key: "februaryAmount", label: "February", type: "money" },
+    statusColumn,
+  ],
+  sections: [
+    {
+      label: "Slab",
+      fields: [
+        { name: "state", label: "State", type: "text", required: true, placeholder: "Gujarat" },
+        { name: "minGross", label: "Monthly gross from (₹)", type: "money", defaultValue: "0" },
+        { name: "maxGross", label: "Monthly gross up to (₹)", type: "money", defaultValue: "0", hint: "0 = no upper limit" },
+        { name: "amount", label: "Professional tax per month (₹)", type: "money", defaultValue: "0" },
+        { name: "februaryAmount", label: "February amount (₹)", type: "money", defaultValue: "0", hint: "0 = same as other months" },
+        statusField,
+        { name: "description", label: "Notes", type: "textarea", fullWidth: true },
+      ],
+    },
+  ],
+});
+
 const payComponents = master("hr-pay-components", "Pay Components", "Pay component", {
+  help: "hr-pay-components",
   permissions: { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
@@ -886,6 +998,8 @@ const incentiveMatrices = master("hr-incentive-matrices", "Incentive Matrix", "I
 });
 
 export const HR_RESOURCE_UI: Record<string, ResourceUi> = {
+  "hr-salary-structures": salaryStructures,
+  "hr-pt-slabs": ptSlabs,
   "hr-pay-components": payComponents,
   "hr-incentive-matrices": incentiveMatrices,
   "hr-departments": departments,

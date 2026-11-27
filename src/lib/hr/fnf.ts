@@ -9,6 +9,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar, employedDuringFilter } from "./calendar";
 import { summarizeMonth, type AttendanceRow } from "./attendance";
 import { computePayslip } from "./payrollMath";
+import { statutoryRules } from "./payrollSettings";
 import { salaryForMonth, stateOn } from "./history";
 import { balancesFor } from "./leave";
 import { pendingArrearLines } from "./arrears";
@@ -173,6 +174,7 @@ async function calculate(ctx: AuthContext, emp: AnyDoc, input: FnfInput) {
   const earnBy = new Map<string, Line>();
   const dedBy = new Map<string, Line>();
   let unmarked = 0;
+  const rules = await statutoryRules(ctx.businessId);
   for (let y = fromY, m = fromM; ym(y, m) <= ym(lwd.getUTCFullYear(), lwd.getUTCMonth() + 1); m === 12 ? ((y += 1), (m = 1)) : (m += 1)) {
     const { start, end } = monthRange(y, m);
     const days = eachDay(start, end);
@@ -185,7 +187,7 @@ async function calculate(ctx: AuthContext, emp: AnyDoc, input: FnfInput) {
     const { summary } = summarizeMonth(leaving, cal, days, records);
     unmarked += summary.unmarked;
     const s = salaries.get(String(emp._id))!;
-    const slip = computePayslip({ structure: s, daysInMonth: days.length, lopDays: summary.lopDays, loans: [], reimbursements: "0" });
+    const slip = computePayslip({ structure: s, daysInMonth: days.length, lopDays: summary.lopDays, loans: [], reimbursements: "0", rules, month: m });
     months.push(`${MONTHS[m - 1]} ${y} (${slip.payableDays} days)`);
     for (const l of slip.earnings) {
       const cur = earnBy.get(l.code) ?? { code: l.code, label: l.label, amount: new Decimal(0) };

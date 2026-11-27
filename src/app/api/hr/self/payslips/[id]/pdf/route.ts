@@ -4,6 +4,7 @@ import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { getPayslip } from "@/lib/hr/payroll";
 import { renderPayslipsPdf, pdfFilename, pdfResponse } from "@/lib/hr/payslipPdf";
+import { getPayrollSettings } from "@/lib/hr/payrollSettings";
 
 /** The signed-in employee's own approved payslip as a PDF file. */
 export const GET = withApiHandler(async (req: NextRequest, { params }) => {
@@ -12,5 +13,5 @@ export const GET = withApiHandler(async (req: NextRequest, { params }) => {
   const { id } = await params;
   const slip = await getPayslip(ctx, id, { self: true });
   const name = pdfFilename("Payslip", slip.period);
-  return pdfResponse(await renderPayslipsPdf([slip], name), name);
+  return pdfResponse(await renderPayslipsPdf([slip], name, { showBankName: (await getPayrollSettings(ctx.businessId)).showBankNameOnPayslip }), name);
 });

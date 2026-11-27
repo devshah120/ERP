@@ -76,6 +76,19 @@ export default function LinesEditor({
       );
     }
 
+    if (col.type === "select") {
+      return (
+        <Select aria-label={label} value={String(v ?? "")} onChange={(e) => update(index, col.name, e.target.value)} style={style}>
+          <option value="">— choose —</option>
+          {(col.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+      );
+    }
+
     if (col.type === "variant") {
       const itemId = String(row[col.itemColumn ?? ""] ?? "");
       const itemOpts = options[`${fieldName}.${col.itemColumn}`] ?? [];

@@ -150,6 +150,7 @@ export function createHandler(def: ResourceDefinition) {
     const body = await req.json();
     const input = def.createSchema.parse(body) as Record<string, unknown>;
     const side = takeSideFields(def, input);
+    if (def.prepareWrite) await def.prepareWrite(ctx, input);
     const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
     if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
     if (def.validateCreate) await def.validateCreate(ctx, side, input);
@@ -188,12 +189,13 @@ export function updateHandler(def: ResourceDefinition) {
     const body = await req.json();
     const input = def.updateSchema.parse(body) as Record<string, unknown>;
     const side = takeSideFields(def, input);
-    const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
-    update.updatedBy = ctx.userId;
 
     const repo = new TenantRepository(def.model);
     const before = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
     if (!before) throw AppError.notFound(`${def.label} not found`);
+    if (def.prepareWrite) await def.prepareWrite(ctx, input, before);
+    const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
+    update.updatedBy = ctx.userId;
     if (def.validateUpdate) await def.validateUpdate(ctx, side, before, input);
 
     const doc = await repo.findByIdAndUpdate(ctx.businessId, id, update);

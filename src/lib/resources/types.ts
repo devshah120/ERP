@@ -53,6 +53,13 @@ export interface ResourceDefinition {
    */
   beforeCreate?: (businessId: Types.ObjectId, count: number) => Promise<void>;
 
+  /**
+   * Runs before a create or update is written (form and Excel import), with the
+   * validated input and, for an update, the record as it is now. May change
+   * `input` (e.g. work salary heads out from a structure) or throw an AppError.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prepareWrite?: (ctx: AuthContext, input: Record<string, unknown>, before?: any) => Promise<void>;
   /** Runs before the list is read, e.g. to seed built-in rows for a workspace that predates them. */
   beforeList?: (businessId: Types.ObjectId) => Promise<void>;
 

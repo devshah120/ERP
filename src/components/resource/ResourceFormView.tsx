@@ -15,6 +15,7 @@ import SearchSelect from "./SearchSelect";
 import MultiReferenceField from "./MultiReferenceField";
 import ImageField, { type PendingImage } from "./ImageField";
 import PageHeader from "@/components/ui/PageHeader";
+import HelpPanel from "@/components/hr/HelpPanel";
 import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -748,6 +749,8 @@ export default function ResourceFormView({
           )
         }
       />
+
+      {!isEdit && <HelpPanel topic={config.help} />}
 
       <form onSubmit={handleSubmit} noValidate={false}>
         <div className={view.sections.length > 2 ? "formLayout" : undefined}>

@@ -19,7 +19,9 @@ export type FieldType =
 export interface LineColumnConfig {
   name: string;
   label: string;
-  type: "text" | "number" | "money" | "reference" | "variant";
+  type: "text" | "number" | "money" | "reference" | "variant" | "select";
+  /** For "select": the fixed choices. */
+  options?: { value: string; label: string }[];
   /** For "reference": which master to load options from. */
   reference?: { resource: string; labelField: string };
   /** For "variant": the reference column whose item's SKUs to offer. */
@@ -135,4 +137,6 @@ export interface ResourceUi {
   settingsDefaults?: { section: string; map: Record<string, string> };
   /** Permission keys when they are not `<key>.create/edit/delete` (must match the server definition). */
   permissions?: { create: string; edit: string; delete: string };
+  /** Key into PAYROLL_HELP (src/lib/hr/payrollHelp.ts): a "How this works" panel on the list and form. */
+  help?: string;
 }

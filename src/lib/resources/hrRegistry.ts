@@ -11,6 +11,8 @@ import { shiftHours } from "@/lib/hr/shiftHours";
 import { syncLegacyAssets, assertStatusChange } from "@/lib/hr/assets";
 import { migrateLegacyGradeGroups, assertGradeGroupAllowed } from "@/lib/hr/leaveGroups";
 import { assertContractorParent, assertWorkerContractors } from "@/lib/hr/contractLabour";
+import { prepareEmployeeSalary } from "@/lib/hr/payrollSettings";
+import { structureProblems, type StructureLine } from "@/lib/hr/salaryStructureMath";
 import { Contractor, ContractWorker, CONTRACT_STATUSES, SKILL_CATEGORIES, OVERTIME_RATE_TYPES } from "@/models/contractLabour";
 import {
   HrDepartment,
@@ -48,6 +50,10 @@ import {
   INCENTIVE_PERIODS,
   INCENTIVE_BASES,
   INCENTIVE_SALARY_BASES,
+  SalaryStructure,
+  STRUCTURE_COMPONENTS,
+  STRUCTURE_CALC_TYPES,
+  PtSlab,
 } from "@/models/hr";
 import type { ResourceDefinition } from "./types";
 import { STATUS, permissionsFor, documentConverter, optionalRef, optionalDate, requiredDate } from "./helpers";
@@ -440,6 +446,8 @@ const employees = define("hr-employees", "Employee", {
     ptApplicable: z.coerce.boolean().default(true),
     professionalTax: moneyStringSchema.default("200"),
     monthlyTds: money,
+    salaryStructureId: optionalRef,
+    salaryAmount: money,
     notes,
     status,
   },
@@ -457,6 +465,8 @@ const employees = define("hr-employees", "Employee", {
   defaultSort: "employeeCode",
   defaultSortDir: "asc",
   beforeCreate: assertEmployeeSeats,
+  // A salary structure + amount fills the salary heads; Payroll Settings' mandatory fields are checked here too.
+  prepareWrite: prepareEmployeeSalary,
   // The "Existing user" picker: linking a team member has its own permission and checks, so it is not a plain field write.
   sideFields: ["userId"],
   validateCreate: async (ctx, side) => {
@@ -474,8 +484,8 @@ const employees = define("hr-employees", "Employee", {
     if (userId !== undefined) await linkUser(ctx, doc, userId);
   },
   toDocument: documentConverter({
-    money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds"],
-    refs: ["departmentId", "designationId", "gradeId", "reportingManagerId", "shiftId", "holidayCalendarId", "branchId"],
+    money: ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance", "professionalTax", "monthlyTds", "salaryAmount"],
+    refs: ["departmentId", "designationId", "gradeId", "reportingManagerId", "shiftId", "holidayCalendarId", "branchId", "salaryStructureId"],
     dates: ["dateOfBirth", "dateOfJoining", "probationEndDate", "confirmationDate", "dateOfExit"],
   }),
 });
@@ -782,7 +792,71 @@ const incentiveMatrices: ResourceDefinition = {
   permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
 };
 
+const structureLine = z.object({
+  component: z.enum(STRUCTURE_COMPONENTS),
+  calcType: z.enum(STRUCTURE_CALC_TYPES),
+  value: z.coerce.number().min(0, "Can't be negative").max(10_000_000).default(0),
+});
+
+/** Salary structures (HR Settings → Payroll) ride on the payroll permissions. */
+const salaryStructures: ResourceDefinition = {
+  ...define("hr-salary-structures", "Salary structure", {
+    model: SalaryStructure,
+    autoCode: { field: "code", prefix: "SAL", entityType: "HR_SALARY_STRUCTURE" },
+    fields: {
+      code: optionalCode,
+      name: z.string().trim().min(2).max(100),
+      description: optionalText(500),
+      roundingDecimals: z.coerce.number().int().refine((v) => v === 0 || v === 2, "0 or 2").default(0),
+      // Checked on the array itself so edits are held to it too.
+      lines: z
+        .array(structureLine)
+        .min(1, "Add at least one salary head")
+        .max(5)
+        .superRefine((rows, ctx) => {
+          for (const [i, message] of structureProblems(rows as StructureLine[])) ctx.addIssue({ code: "custom", path: i === null ? [] : [i, "value"], message });
+        }),
+      status,
+    },
+    searchFields: ["code", "name"],
+    filterFields: { code: "code", name: "name" },
+    sortableFields: ["code", "name", "createdAt"],
+    defaultSort: "name",
+    defaultSortDir: "asc",
+  }),
+  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+};
+
+/** Professional-tax slabs; once any is active, payroll takes PT from them. */
+const ptSlabs: ResourceDefinition = {
+  ...define("hr-pt-slabs", "PT slab", {
+    model: PtSlab,
+    fields: {
+      state: z.string().trim().min(2).max(60),
+      minGross: money,
+      maxGross: money,
+      amount: money,
+      februaryAmount: money,
+      description: optionalText(300),
+      status,
+    },
+    refine: (v, ctx) => {
+      const max = Number(v.maxGross ?? 0);
+      if (max > 0 && max < Number(v.minGross ?? 0)) ctx.addIssue({ code: "custom", path: ["maxGross"], message: "Upper limit is below the lower limit" });
+    },
+    searchFields: ["state", "description"],
+    filterFields: { state: "state" },
+    sortableFields: ["state", "minGross", "createdAt"],
+    defaultSort: "minGross",
+    defaultSortDir: "asc",
+    toDocument: documentConverter({ money: ["minGross", "maxGross", "amount", "februaryAmount"] }),
+  }),
+  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+};
+
 export const HR_RESOURCES: Record<string, ResourceDefinition> = {
+  "hr-salary-structures": salaryStructures,
+  "hr-pt-slabs": ptSlabs,
   "hr-pay-components": payComponents,
   "hr-incentive-matrices": incentiveMatrices,
   "hr-departments": departments,

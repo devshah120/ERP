@@ -13,7 +13,9 @@ import PageHeader from "@/components/ui/PageHeader";
 import { SkeletonBlock } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import SimpleField from "@/components/forms/SimpleField";
-import { IconAlertCircle, IconArrowLeft, IconInfo } from "@/components/icons";
+import { IconArrowLeft, IconInfo, IconChevronDown } from "@/components/icons";
+import HelpPanel from "@/components/hr/HelpPanel";
+import type { FieldConfig } from "@/lib/resources/ui/types";
 
 /** One settings section as an editable form. Read-only without settings.edit (or the section's own edit permission). */
 export default function SettingsFormView({ sectionKey }: { sectionKey: string }) {
@@ -28,6 +30,8 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Accordion: the first group starts open.
+  const [openGroup, setOpenGroup] = useState<string | null>(section.groups?.[0]?.title ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +89,22 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
 
   useShortcutScope({ onSave: () => void save() });
 
+  function renderField(f: FieldConfig) {
+    return (
+      <SimpleField
+        key={f.name}
+        field={f}
+        value={values?.[f.name]}
+        options={options[f.name]}
+        error={fieldErrors[f.name]}
+        onChange={(v) => {
+          setValues((s) => ({ ...(s ?? {}), [f.name]: v }));
+          setDirty(true);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -98,6 +118,7 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
       />
 
       <div style={{ maxWidth: "62rem" }}>
+        <HelpPanel topic={section.help} />
         <div className="banner bannerInfo" style={{ marginBottom: "1rem" }}>
           <IconInfo />
           <span>
@@ -120,25 +141,35 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
         {values && (
           <form onSubmit={save}>
             <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
-              <section className="formSection">
-                <div className="formSectionBody">
-                  <div className="formGrid">
-                    {section.fields.map((f) => (
-                      <SimpleField
-                        key={f.name}
-                        field={f}
-                        value={values[f.name]}
-                        options={options[f.name]}
-                        error={fieldErrors[f.name]}
-                        onChange={(v) => {
-                          setValues((s) => ({ ...(s ?? {}), [f.name]: v }));
-                          setDirty(true);
-                        }}
-                      />
-                    ))}
+              {section.groups ? (
+                section.groups.map((g) => {
+                  const open = openGroup === g.title;
+                  const fields = g.fields.map((n) => section.fields.find((f) => f.name === n)).filter((f): f is FieldConfig => Boolean(f));
+                  const hasError = fields.some((f) => fieldErrors[f.name]);
+                  return (
+                    <section key={g.title} className="formSection settingsAccordion">
+                      <button type="button" className="settingsAccordionHead" aria-expanded={open || hasError} onClick={() => setOpenGroup(open ? null : g.title)}>
+                        <span>
+                          <span className="formSectionTitle">{g.title}</span>
+                          {g.description && <span className="formSectionDesc" style={{ display: "block" }}>{g.description}</span>}
+                        </span>
+                        <IconChevronDown style={{ transform: open || hasError ? "rotate(180deg)" : undefined }} />
+                      </button>
+                      {(open || hasError) && (
+                        <div className="formSectionBody">
+                          <div className="formGrid">{fields.map(renderField)}</div>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })
+              ) : (
+                <section className="formSection">
+                  <div className="formSectionBody">
+                    <div className="formGrid">{section.fields.map(renderField)}</div>
                   </div>
-                </div>
-              </section>
+                </section>
+              )}
             </fieldset>
             {canEdit && (
               <div className="formActionsBar">

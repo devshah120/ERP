@@ -100,6 +100,44 @@ export const NOTIFICATION_INSIGHTS: Record<keyof z.infer<typeof notificationSett
   alertTrends: ["sales-vs-purchase", "revenue-trend", "top-customers", "top-products"],
 };
 
+/**
+ * Payroll Settings. Read by src/lib/hr/payrollSettings.ts (salary split,
+ * payroll generation and approval), the payslip PDF and the employee form
+ * (defaults and mandatory fields). Defaults keep payroll behaving as it did
+ * before this screen existed.
+ */
+export const hrPayrollSettingsSchema = z.object({
+  salaryAmountBasis: z.enum(["MONTHLY", "ANNUAL"]).default("MONTHLY"),
+  restrictIfPfAccountMissing: flag(false),
+  restrictIfLeavesPending: flag(false),
+  showBankNameOnPayslip: flag(true),
+  reportingManagerMandatory: flag(false),
+  departmentMandatory: flag(false),
+  defaultPfApplicable: flag(true),
+  defaultEsiApplicable: flag(false),
+  defaultPtApplicable: flag(true),
+});
+
+const percent = (def: number) => z.coerce.number().min(0, "Can't be negative").max(100, "At most 100").default(def);
+const rupees = (def: number) => z.coerce.number().min(0, "Can't be negative").max(10_000_000).default(def);
+
+/** PF Settings: read by payroll (src/lib/hr/payrollSettings.ts → computePayslip). Defaults are the statutory 12% on wages up to ₹15,000. */
+export const hrPfSettingsSchema = z.object({
+  pfApplicable: flag(true),
+  employeeRate: percent(12),
+  employerRate: percent(12),
+  wageCeiling: rupees(15000),
+  capAtCeiling: flag(true),
+});
+
+/** ESIC Settings: read by payroll. Defaults are 0.75% / 3.25% for a gross up to ₹21,000. */
+export const hrEsicSettingsSchema = z.object({
+  esicApplicable: flag(true),
+  grossLimit: rupees(21000),
+  employeeRate: percent(0.75),
+  employerRate: percent(3.25),
+});
+
 export interface SettingsSection {
   key: string;
   title: string;
@@ -112,6 +150,10 @@ export interface SettingsSection {
   editPermission?: string;
   /** Where the screen's back link goes, when not the Settings page. */
   back?: { href: string; label: string };
+  /** Collapsible groups (accordion), each listing its field names; without them the fields show as one form. */
+  groups?: { title: string; description?: string; fields: string[] }[];
+  /** Key into PAYROLL_HELP (src/lib/hr/payrollHelp.ts) for the "How this works" panel. */
+  help?: string;
 }
 
 const ITEM_TYPES = [
@@ -251,8 +293,83 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
       { name: "skipPolicyOnApproval", label: "Do not check attendance policy while approving AR", type: "checkbox", fullWidth: true, hint: "Approval then only refuses full-day leave and locked payroll months" },
     ],
   },
+  "hr-payroll-settings": {
+    key: "hr-payroll-settings",
+    title: "Payroll Settings",
+    description: "Workspace-wide payroll rules: how salary amounts are entered, what holds a payroll back, and employee defaults.",
+    usedBy:
+      "The employee form (salary split, defaults, mandatory fields), payslip generation (PF account check), payroll approval (pending leave check) and the payslip PDF (bank name).",
+    schema: hrPayrollSettingsSchema,
+    editPermission: "hr-payroll.process",
+    back: { href: "/hr/settings", label: "HR Settings" },
+    help: "hr-payroll-settings",
+    groups: [
+      { title: "Payroll configurations", fields: ["salaryAmountBasis", "restrictIfPfAccountMissing", "restrictIfLeavesPending", "showBankNameOnPayslip"] },
+      {
+        title: "Employee configurations",
+        description: "What the employee form insists on, and the deductions a new employee starts with.",
+        fields: ["reportingManagerMandatory", "departmentMandatory", "defaultPfApplicable", "defaultEsiApplicable", "defaultPtApplicable"],
+      },
+    ],
+    fields: [
+      {
+        name: "salaryAmountBasis",
+        label: "Salary amount entered as",
+        type: "select",
+        options: [
+          { value: "MONTHLY", label: "Monthly gross" },
+          { value: "ANNUAL", label: "Annual gross (divided by 12)" },
+        ],
+        hint: "The amount typed on an employee who has a salary structure",
+      },
+      { name: "restrictIfPfAccountMissing", label: "Restrict salary if PF account no. is not allocated", type: "checkbox", fullWidth: true, hint: "Payslips are not generated while a PF-deducted employee has no UAN or PF number" },
+      { name: "restrictIfLeavesPending", label: "Restrict salary if leaves are pending for approval", type: "checkbox", fullWidth: true, hint: "A month can't be approved while its leave requests wait for a decision" },
+      { name: "showBankNameOnPayslip", label: "Display bank name in payslip", type: "checkbox", fullWidth: true },
+      { name: "reportingManagerMandatory", label: "Reporting manager mandatory", type: "checkbox", fullWidth: true },
+      { name: "departmentMandatory", label: "Department mandatory", type: "checkbox", fullWidth: true },
+      { name: "defaultPfApplicable", label: "New employees: deduct PF", type: "checkbox", fullWidth: true },
+      { name: "defaultEsiApplicable", label: "New employees: deduct ESI", type: "checkbox", fullWidth: true },
+      { name: "defaultPtApplicable", label: "New employees: deduct professional tax", type: "checkbox", fullWidth: true },
+    ],
+  },
+  "hr-pf-settings": {
+    key: "hr-pf-settings",
+    title: "PF Settings",
+    description: "Provident fund rates and wage ceiling.",
+    usedBy: "Every payslip generated from now on, for employees with “Deduct Provident Fund” ticked. Approved payslips keep the amounts they were made with.",
+    schema: hrPfSettingsSchema,
+    editPermission: "hr-payroll.process",
+    back: { href: "/hr/settings", label: "HR Settings" },
+    help: "hr-pf-settings",
+    fields: [
+      { name: "pfApplicable", label: "PF applicable", type: "checkbox", fullWidth: true, hint: "Off: no PF for anyone, whatever the employee record says" },
+      { name: "employeeRate", label: "Employee contribution (%)", type: "number" },
+      { name: "employerRate", label: "Employer contribution (%)", type: "number", hint: "EPF + EPS together" },
+      { name: "wageCeiling", label: "Wage ceiling (₹)", type: "number", hint: "Statutory ceiling ₹15,000" },
+      { name: "capAtCeiling", label: "Deduct PF up to ceiling only", type: "checkbox", fullWidth: true, hint: "Off: PF on the whole earned basic" },
+    ],
+  },
+  "hr-esic-settings": {
+    key: "hr-esic-settings",
+    title: "ESIC Settings",
+    description: "Employee State Insurance rates and gross limit.",
+    usedBy: "Every payslip generated from now on, for employees with “Deduct ESI” ticked. Approved payslips keep the amounts they were made with.",
+    schema: hrEsicSettingsSchema,
+    editPermission: "hr-payroll.process",
+    back: { href: "/hr/settings", label: "HR Settings" },
+    help: "hr-esic-settings",
+    fields: [
+      { name: "esicApplicable", label: "ESIC applicable", type: "checkbox", fullWidth: true, hint: "Off: no ESI for anyone" },
+      { name: "grossLimit", label: "Gross limit (₹)", type: "number", hint: "ESI applies when the full-month gross is at or under this" },
+      { name: "employeeRate", label: "Employee contribution (%)", type: "number" },
+      { name: "employerRate", label: "Employer contribution (%)", type: "number" },
+    ],
+  },
 };
 
+export type HrPayrollSettings = z.infer<typeof hrPayrollSettingsSchema>;
+export type HrPfSettings = z.infer<typeof hrPfSettingsSchema>;
+export type HrEsicSettings = z.infer<typeof hrEsicSettingsSchema>;
 export type ItemSettings = z.infer<typeof itemSettingsSchema>;
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
 export type PurchaseSettings = z.infer<typeof purchaseSettingsSchema>;

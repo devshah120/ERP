@@ -1414,4 +1414,67 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(mine.map((r) => r.outcome).sort()).toEqual(["Lost", "Returned damaged", "With employee"]);
     expect(mine.find((r) => r.outcome === "Lost")).toMatchObject({ recoveryAmount: "40000.00" });
   });
+
+  it("sets up payroll from HR settings: demo data, salary structure on the employee, annual amounts, mandatory fields, PF account check", async () => {
+    const { NextRequest } = await import("next/server");
+    const { createHandler, updateHandler } = await import("@/lib/resources/handlers");
+    const { HR_RESOURCES } = await import("@/lib/resources/hrRegistry");
+    const { signAccessToken } = await import("@/lib/auth/tokens");
+    const { ACCESS_TOKEN_COOKIE } = await import("@/lib/auth/cookies");
+    const { Employee, SalaryStructure, PtSlab } = await import("@/models/hr");
+    const { createPayrollDemo, DEMO_STRUCTURE_CODE } = await import("@/lib/hr/payrollDemo");
+    const { updateSettings } = await import("@/lib/settings/service");
+    const { statutoryRules } = await import("@/lib/hr/payrollSettings");
+    const { createRun, createRunSchema } = await import("@/lib/hr/payroll");
+
+    const token = signAccessToken({ sub: String(ctx.userId), businessId, roleId: String(ctx.roleId), permissions: ["*"], branchIds: [], warehouseIds: [], products: ["HRMS"] });
+    const request = (url: string, method: string, body: Record<string, unknown>) =>
+      new NextRequest(url, { method, body: JSON.stringify(body), headers: { "content-type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${token}` } });
+    const create = (key: string, body: Record<string, unknown>) => createHandler(HR_RESOURCES[key])(request(`http://localhost/api/masters/${key}`, "POST", body));
+    const update = (key: string, id: unknown, body: Record<string, unknown>) =>
+      updateHandler(HR_RESOURCES[key])(request(`http://localhost/api/masters/${key}/${id}`, "PATCH", body), String(id));
+    const heads = (e: Record<string, unknown>) => ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance"].map((k) => String(e[k]));
+
+    // Demo data: one structure, PT slabs created inactive (so PT is unchanged); running it twice adds nothing.
+    expect((await createPayrollDemo(ctx)).created).toHaveLength(2);
+    expect((await createPayrollDemo(ctx)).created).toHaveLength(0);
+    const demo = await SalaryStructure.findOne({ businessId, code: DEMO_STRUCTURE_CODE }).lean<{ _id: Types.ObjectId }>();
+    expect(await PtSlab.countDocuments({ businessId, status: "INACTIVE" })).toBe(2);
+    expect((await statutoryRules(ctx.businessId)).ptSlabs).toHaveLength(0);
+
+    // A structure needs exactly one balance head.
+    await expect(create("hr-salary-structures", { name: "Broken", lines: [{ component: "BASIC", calcType: "PERCENT_OF_GROSS", value: 60 }] })).rejects.toThrow();
+
+    // Employee: choose the structure, type ₹30,000 only; the heads are worked out on save.
+    const base = { name: "Structure Employee", employeeCode: "SAL-T-1", dateOfJoining: "2026-11-01", salaryStructureId: String(demo!._id) };
+    await create("hr-employees", { ...base, salaryAmount: "30000", basic: "1" });
+    let e = await Employee.findOne({ businessId, name: "Structure Employee" }).lean<Record<string, unknown> & { _id: Types.ObjectId }>();
+    expect(heads(e!)).toEqual(["15000", "6000", "1600", "7400", "0"]);
+
+    // A raise re-splits (the form sends the structure and amount with every save).
+    await update("hr-employees", e!._id, { ...base, salaryAmount: "40000" });
+    e = await Employee.findById(e!._id).lean<Record<string, unknown> & { _id: Types.ObjectId }>();
+    expect(heads(e!)).toEqual(["20000", "8000", "1600", "10400", "0"]);
+    // Clearing the structure leaves the heads as typed.
+    await update("hr-employees", e!._id, { ...base, salaryStructureId: "", salaryAmount: "0", basic: "21000", hra: "8000", conveyance: "1600", specialAllowance: "10400" });
+    expect(heads((await Employee.findById(e!._id).lean<Record<string, unknown>>())!)).toEqual(["21000", "8000", "1600", "10400", "0"]);
+
+    // Annual amounts: ₹3,60,000 a year = ₹30,000 a month.
+    await updateSettings(ctx.businessId, ctx.userId, "hr-payroll-settings", { salaryAmountBasis: "ANNUAL" });
+    await update("hr-employees", e!._id, { ...base, salaryAmount: "360000" });
+    expect(heads((await Employee.findById(e!._id).lean<Record<string, unknown>>())!)).toEqual(["15000", "6000", "1600", "7400", "0"]);
+
+    // Too small for the fixed conveyance → refused, nothing saved.
+    await updateSettings(ctx.businessId, ctx.userId, "hr-payroll-settings", { salaryAmountBasis: "MONTHLY" });
+    await expect(update("hr-employees", e!._id, { ...base, salaryAmount: "1000" })).rejects.toMatchObject({ statusCode: 400 });
+
+    // Mandatory department (Payroll Settings → Employee configurations).
+    await updateSettings(ctx.businessId, ctx.userId, "hr-payroll-settings", { departmentMandatory: true });
+    await expect(create("hr-employees", { name: "No Department", employeeCode: "SAL-T-2", dateOfJoining: "2026-11-01" })).rejects.toMatchObject({ statusCode: 400 });
+
+    // Restrict salary when a PF-deducted employee has no UAN / PF number.
+    await updateSettings(ctx.businessId, ctx.userId, "hr-payroll-settings", { restrictIfPfAccountMissing: true });
+    await expect(createRun(ctx, createRunSchema.parse({ year: 2027, month: 6 }))).rejects.toMatchObject({ code: "PF_ACCOUNT_MISSING" });
+    await updateSettings(ctx.businessId, ctx.userId, "hr-payroll-settings", {});
+  });
 });

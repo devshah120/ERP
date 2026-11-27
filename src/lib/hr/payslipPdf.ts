@@ -106,7 +106,7 @@ interface Fonts {
   bold: PDFFont;
 }
 
-function drawPayslip(page: PDFPage, p: PayslipPrintData, f: Fonts) {
+function drawPayslip(page: PDFPage, p: PayslipPrintData, f: Fonts, opts: PayslipPdfOptions) {
   const width = A4.w - MARGIN * 2;
   const text = (s: string, x: number, y: number, size = 9, opts: { bold?: boolean; color?: ReturnType<typeof rgb> } = {}) =>
     page.drawText(pdfText(s), { x, y, size, font: opts.bold ? f.bold : f.regular, color: opts.color ?? INK });
@@ -138,7 +138,9 @@ function drawPayslip(page: PDFPage, p: PayslipPrintData, f: Fonts) {
 
   // Employee details, two columns
   const masked = p.employee.bankAccountNumber ? `xxxx${p.employee.bankAccountNumber.slice(-4)}` : "-";
-  const bank = (p.employee.paymentMode ?? "BANK") === "BANK" ? `${p.employee.bankName ?? ""} ${masked}`.trim() : p.employee.paymentMode ?? "";
+  // Payroll Settings → "Display bank name in payslip"; the account's last four digits always show.
+  const bankName = opts.showBankName === false ? "" : p.employee.bankName ?? "";
+  const bank = (p.employee.paymentMode ?? "BANK") === "BANK" ? `${bankName} ${masked}`.trim() : p.employee.paymentMode ?? "";
   const meta: [string, string][] = [
     ["Employee", p.employee.name],
     ["Employee code", p.employee.code],
@@ -225,13 +227,18 @@ function drawPayslip(page: PDFPage, p: PayslipPrintData, f: Fonts) {
   }
 }
 
+export interface PayslipPdfOptions {
+  /** From Payroll Settings; default true. */
+  showBankName?: boolean;
+}
+
 /** One A4 page per payslip, in the order given. */
-export async function renderPayslipsPdf(slips: PayslipPrintData[], title: string): Promise<Uint8Array> {
+export async function renderPayslipsPdf(slips: PayslipPrintData[], title: string, opts: PayslipPdfOptions = {}): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(pdfText(title));
   doc.setCreator("NEXORA HRMS");
   const fonts = { regular: await doc.embedFont(StandardFonts.Helvetica), bold: await doc.embedFont(StandardFonts.HelveticaBold) };
-  for (const s of slips) drawPayslip(doc.addPage([A4.w, A4.h]), s, fonts);
+  for (const s of slips) drawPayslip(doc.addPage([A4.w, A4.h]), s, fonts, opts);
   return doc.save();
 }
 

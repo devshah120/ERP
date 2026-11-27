@@ -2,7 +2,7 @@ import mongoose, { Types, type ClientSession } from "mongoose";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
-import { Attendance, PayrollRun, Payslip, EmployeeLoan, ExpenseClaim, Employee, PayrollHold } from "@/models/hr";
+import { Attendance, PayrollRun, Payslip, EmployeeLoan, ExpenseClaim, Employee, PayrollHold, LeaveApplication } from "@/models/hr";
 import { Business } from "@/models/Business";
 import { recordAudit } from "@/lib/services/auditService";
 import { toDecimal128 } from "@/lib/documents/decimal128";
@@ -14,6 +14,7 @@ import { payrollEmployees } from "./holds";
 import { monthVariables, variableKey } from "./variables";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
+import { statutoryRules, getPayrollSettings } from "./payrollSettings";
 import { applyDueChanges, salaryForMonth } from "./history";
 import { postPayrollAccrual, postPayrollPayment, reversePayrollAccrual } from "./payrollPosting";
 import { pendingArrearLines, settleArrears, reopenArrears } from "./arrears";
@@ -86,6 +87,19 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
   if (emps.length === 0) throw AppError.badRequest(`No employees to pay in ${monthLabel(run.month, run.year)} (none on the rolls, or all on hold).`, "NO_EMPLOYEES");
   const ids = emps.map((e) => e._id);
 
+  // Payroll Settings: hold the month back while a PF-deducted employee has no UAN / PF number.
+  const [settings, rules] = await Promise.all([getPayrollSettings(ctx.businessId), statutoryRules(ctx.businessId)]);
+  if (settings.restrictIfPfAccountMissing && rules.pfEnabled) {
+    const missing = emps.filter((e) => e.pfApplicable !== false && !String(e.uanNumber ?? "").trim() && !String(e.pfNumber ?? "").trim());
+    if (missing.length > 0) {
+      const names = missing.slice(0, 5).map((e) => `${e.name} (${e.employeeCode})`).join(", ");
+      throw AppError.badRequest(
+        `${missing.length} employee${missing.length === 1 ? " has" : "s have"} PF deducted but no UAN or PF account number: ${names}${missing.length > 5 ? "…" : ""}. Add the numbers, or untick PF for them, or turn off the restriction in Payroll Settings.`,
+        "PF_ACCOUNT_MISSING"
+      );
+    }
+  }
+
   const [cal, attendanceBy, loans, claims, labels, salaries, variables] = await Promise.all([
     loadCalendar(ctx.businessId, start, end),
     monthAttendance(ctx.businessId, ids, start, end, session),
@@ -144,6 +158,8 @@ async function generatePayslips(ctx: AuthContext, run: AnyDoc, session: ClientSe
       },
       daysInMonth,
       lopDays: summary.lopDays,
+      rules,
+      month: run.month,
       loans: myLoans.map((l) => ({ loanId: String(l._id), emi: d(l.emiAmount), outstanding: d(l.amount).minus(d(l.repaidAmount)) })),
       reimbursements: myClaims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0)),
       // Variable pay for the month plus any arrears owed for approved months.
@@ -280,12 +296,27 @@ export async function recomputeRun(ctx: AuthContext, id: string) {
  * reimbursed claims are marked paid, all in one transaction. From here the
  * month's attendance and leave are frozen.
  */
+/** Payroll Settings → "Restrict salary if leaves are pending": refuses approval while leave in the month awaits a decision. */
+async function assertNoPendingLeave(ctx: AuthContext, run: AnyDoc) {
+  const settings = await getPayrollSettings(ctx.businessId);
+  if (!settings.restrictIfLeavesPending) return;
+  const { start, end } = monthRange(run.year, run.month);
+  const pending = await LeaveApplication.countDocuments({ businessId: ctx.businessId, status: "PENDING", fromDate: { $lte: end }, toDate: { $gte: start } });
+  if (pending > 0) {
+    throw AppError.badRequest(
+      `${pending} leave request${pending === 1 ? " is" : "s are"} still pending for ${monthLabel(run.month, run.year)}. Approve or reject ${pending === 1 ? "it" : "them"} first (or turn off the restriction in Payroll Settings).`,
+      "LEAVES_PENDING"
+    );
+  }
+}
+
 export async function approveRun(ctx: AuthContext, id: string, input: { payUnmarkedAsPresent?: boolean } = {}) {
   const run = await loadRun(ctx, id);
   if (run.status !== "DRAFT") throw AppError.badRequest(`This payroll is already ${run.status.toLowerCase()}`, "PAYROLL_NOT_DRAFT");
   const slips = await Payslip.find({ businessId: ctx.businessId, payrollRunId: run._id }).lean<AnyDoc[]>();
   if (slips.length === 0) throw AppError.badRequest("This payroll has no payslips", "PAYROLL_EMPTY");
   const { unmarkedDays, unmarkedEmployees } = await assertAttendanceSettled(ctx, run, slips, input.payUnmarkedAsPresent === true);
+  await assertNoPendingLeave(ctx, run);
 
   const session = await mongoose.startSession();
   try {

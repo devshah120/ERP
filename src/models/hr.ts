@@ -255,6 +255,10 @@ export const Employee = defineMasterModel(
     ptApplicable: { type: Boolean, default: true },
     professionalTax: { type: Schema.Types.Decimal128, default: "200" },
     monthlyTds: money,
+    /** Salary structure the five heads above were split by (HR Settings → Salary Structures); null = typed by hand. */
+    salaryStructureId: { type: Schema.Types.ObjectId, ref: "SalaryStructure", default: null },
+    /** The amount HR entered and the structure split: monthly or annual gross, as Payroll Settings says. */
+    salaryAmount: money,
 
     /** Login for the self-service portal, when one has been granted. */
     userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
@@ -307,6 +311,50 @@ export const PayComponent = defineMasterModel(
   },
   { uniqueField: "code" }
 );
+
+/* ------------------------------------------------------------------ */
+/* Salary structures & professional tax                               */
+/* ------------------------------------------------------------------ */
+
+/** The fixed monthly heads a structure can fill: each is a salary field on the employee. */
+export const STRUCTURE_COMPONENTS = ["BASIC", "HRA", "CONV", "SPECIAL", "OTHER"] as const;
+/** How a head is worked out from the gross: % of gross, % of basic, a fixed amount, or whatever is left. */
+export const STRUCTURE_CALC_TYPES = ["PERCENT_OF_GROSS", "PERCENT_OF_BASIC", "FIXED", "BALANCE"] as const;
+
+/**
+ * A salary template. HR assigns it to an employee and types only the gross;
+ * the lines split it into basic, HRA, conveyance, special and other.
+ */
+export const SalaryStructure = defineMasterModel(
+  "SalaryStructure",
+  {
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    /** 0 = whole rupees, 2 = paise. The BALANCE head absorbs the rounding so the heads always add up to the gross. */
+    roundingDecimals: { type: Number, default: 0 },
+    lines: [
+      {
+        _id: false,
+        component: { type: String, enum: STRUCTURE_COMPONENTS, required: true },
+        calcType: { type: String, enum: STRUCTURE_CALC_TYPES, required: true },
+        /** Percent for the PERCENT_* types, rupees for FIXED, ignored for BALANCE. */
+        value: { type: Number, default: 0 },
+      },
+    ],
+  },
+  { uniqueField: "code" }
+);
+
+/** One professional-tax slab: monthly gross from minGross up to maxGross (0 = no upper limit) pays amount (februaryAmount in February). */
+export const PtSlab = defineMasterModel("PtSlab", {
+  state: { type: String, required: true, trim: true },
+  minGross: money,
+  maxGross: money,
+  amount: money,
+  februaryAmount: money,
+  description: { type: String, trim: true },
+});
 
 export const INCENTIVE_PERIODS = ["CALENDAR_YEAR", "FINANCIAL_YEAR"] as const;
 export const INCENTIVE_BASES = ["DAYS", "PERCENT"] as const;

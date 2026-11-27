@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, todayKey, CLAIM_CATEGORY_LABELS, MONTH_NAMES, apiErrorText } from "@/components/hr/HrKit";
+import ClaimAttachment, { type ClaimAttachmentInfo } from "@/components/hr/ClaimAttachment";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconRefresh } from "@/components/icons";
 import Select from "@/components/ui/Select";
@@ -28,6 +29,7 @@ interface Row {
   amount: string;
   description: string;
   billReference: string;
+  attachment?: ClaimAttachmentInfo | null;
   status: string;
   decidedAt: string | null;
   settlementMode: string | null;
@@ -249,6 +251,7 @@ export default function ClaimSettlementPage() {
                 <td style={{ maxWidth: "18rem" }}>
                   {r.description}
                   {r.billReference && <div className="hrMuted">Bill {r.billReference}</div>}
+                  <ClaimAttachment baseUrl={`/api/hr/claims/${r.id}`} attachment={r.attachment} />
                 </td>
                 <td className="numCell">{formatMoney(r.amount)}</td>
                 <td>

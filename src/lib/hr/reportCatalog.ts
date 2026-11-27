@@ -47,6 +47,13 @@ export const HR_REPORTS = [
     description: "Each employee's earnings, deductions and net pay for a month's payroll.",
     keywords: "salary register payroll earnings deductions net pay",
   },
+  {
+    key: "form-16",
+    label: "Form 16 (salary & TDS)",
+    needs: "fy",
+    description: "Each employee's salary, deductions and TDS for a financial year (Apr–Mar) from approved payrolls, with TDS by quarter for Part A and the salary break-up for Part B.",
+    keywords: "form 16 form16 tds income tax salary certificate part a part b quarterly 24q pan",
+  },
   { key: "pf-statement", label: "PF statement (ECR)", needs: "month", description: "EPF/EPS wages and contributions in the EPFO ECR layout.", keywords: "pf epf eps ecr provident fund statement" },
   { key: "esi-statement", label: "ESI statement", needs: "month", description: "ESI wages and employee/employer contributions.", keywords: "esi esic statement contribution" },
   {

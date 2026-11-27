@@ -26,5 +26,6 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { toStatus, reason } = transitionSchema.parse(await req.json());
   const doc = await transitionDocument(docType, id, toStatus, reason, ctx);
 
-  return ok(doc, `${def.label} moved to ${toStatus}`);
+  const approvalMessage = (doc as { approvalMessage?: string }).approvalMessage;
+  return ok(doc, approvalMessage ?? `${def.label} moved to ${toStatus}`);
 });

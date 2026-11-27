@@ -1026,6 +1026,20 @@ const expenseClaimSchema = new Schema(
     amount: { type: Schema.Types.Decimal128, required: true },
     description: { type: String, trim: true, default: "" },
     billReference: { type: String, trim: true, default: "" },
+    /** Scanned bill or receipt (JPG, PNG or PDF). The bytes are only loaded when the file is opened. */
+    attachment: {
+      type: new Schema(
+        {
+          fileName: { type: String, required: true },
+          mimeType: { type: String, required: true },
+          size: { type: Number, required: true },
+          data: { type: Buffer, required: true, select: false },
+          uploadedAt: { type: Date, default: Date.now },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
     status: { type: String, enum: CLAIM_STATUSES, default: "PENDING" },
     decidedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     decidedAt: { type: Date, default: null },

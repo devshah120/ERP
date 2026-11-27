@@ -165,6 +165,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       m("users", "Employees", ["view", "create", "edit", "disable"]),
       m("roles", "User roles", ["view", "manage"]),
       m("audit-logs", "Activity log", ["view"]),
+      m("approvals", "Approval schemes & user groups", ["view", "manage"]),
       m("settings", "Settings", ["view", "edit"]),
       m("financial-years", "Financial years", ["view", "manage"]),
       m("document-prefixes", "Document prefixes", ["view", "edit"]),

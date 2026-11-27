@@ -207,6 +207,21 @@ export function canEdit(workflow: DocumentWorkflow, status: string): boolean {
   return !workflow.lockedStatuses.includes(status);
 }
 
+/**
+ * The step an approval scheme guards: "Approve & confirm" for documents that
+ * go through PENDING_APPROVAL, otherwise the main action out of draft
+ * (post, issue, confirm, approve return, send).
+ */
+export function approvalTransition(workflow: DocumentWorkflow): { from: string; to: string } | null {
+  const pending = workflow.transitions.PENDING_APPROVAL;
+  if (pending) {
+    const r = pending.find((t) => t.intent === "primary");
+    return r ? { from: "PENDING_APPROVAL", to: r.to } : null;
+  }
+  const r = (workflow.transitions[workflow.initial] ?? []).find((t) => t.intent === "primary");
+  return r ? { from: workflow.initial, to: r.to } : null;
+}
+
 export function allowedTransitions(workflow: DocumentWorkflow, status: string): TransitionRule[] {
   return workflow.transitions[status] ?? [];
 }

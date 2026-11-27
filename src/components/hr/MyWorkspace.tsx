@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import LeaveForm, { type LeaveBalance } from "@/components/hr/LeaveForm";
 import ClaimForm from "@/components/hr/ClaimForm";
+import ClaimAttachment, { type ClaimAttachmentInfo } from "@/components/hr/ClaimAttachment";
 import { dayLabel, type CorrectionRow } from "@/components/hr/CorrectionRequests";
 import { AttCode, AttLegend, Card, Kpi, MonthPicker, WEEKDAY_SHORT, fmtDate, minutesLabel, CLAIM_CATEGORY_LABELS, apiErrorText } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
@@ -506,6 +507,7 @@ interface ClaimRow {
   description: string;
   status: string;
   decisionNote: string;
+  attachment?: ClaimAttachmentInfo | null;
 }
 
 function MyClaims() {
@@ -573,6 +575,7 @@ function MyClaims() {
                 <td>
                   {r.description}
                   {r.decisionNote && <div className="hrMuted">HR: {r.decisionNote}</div>}
+                  <ClaimAttachment baseUrl={`/api/hr/self/claims/${r.id}`} attachment={r.attachment} canEdit={r.status === "PENDING"} onChange={load} />
                 </td>
                 <td className="numCell">{formatMoney(r.amount)}</td>
                 <td>

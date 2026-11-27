@@ -7,6 +7,7 @@ import { recordAudit } from "@/lib/services/auditService";
 import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
 import { assertPayrollOpen } from "./attendance";
+import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
 export const applyLeaveSchema = z
@@ -262,7 +263,18 @@ export async function applyLeave(ctx: AuthContext, input: z.infer<typeof applyLe
   });
 
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CREATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { leaveNumber, days: count } });
+  await openApproval(ctx, "hr-leave", leaveApprovalRecord(app));
   return { id: String(app._id), leaveNumber, days: count };
+}
+
+function leaveApprovalRecord(app: AnyDoc) {
+  return {
+    id: app._id,
+    number: app.leaveNumber,
+    summary: `${app.days} day(s) · ${dayKey(toDay(app.fromDate))}${String(app.fromDate) !== String(app.toDate) ? ` to ${dayKey(toDay(app.toDate))}` : ""}`,
+    employeeId: app.employeeId,
+    requestedByUserId: app.appliedByUserId ?? app.createdBy,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -284,6 +296,8 @@ export async function approveLeave(ctx: AuthContext, id: string, note: string, o
   const app = await loadApp(ctx, id);
   await assertNotOwnLeave(ctx, app);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
+  const gate = await approvalGate(ctx, "hr-leave", leaveApprovalRecord(app), "approve", note);
+  if (!gate.proceed) return { id: String(app._id), status: "PENDING", approvalMessage: gate.message };
 
   const emp = await findEmployee(ctx.businessId, app.employeeId);
   const type = await LeaveType.findOne({ _id: app.leaveTypeId, businessId: ctx.businessId }).lean<AnyDoc>();
@@ -334,6 +348,7 @@ export async function rejectLeave(ctx: AuthContext, id: string, note: string, op
   const app = await loadApp(ctx, id);
   await assertNotOwnLeave(ctx, app);
   if (app.status !== "PENDING") throw AppError.badRequest(`This request is already ${app.status.toLowerCase()}`, "LEAVE_NOT_PENDING");
+  await approvalGate(ctx, "hr-leave", leaveApprovalRecord(app), "reject", note);
   app.set({ status: "REJECTED", decidedByUserId: ctx.userId, decidedAt: new Date(), decidedAs: opts.asManager ? "MANAGER" : "HR", decisionNote: note, updatedBy: ctx.userId });
   await app.save();
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "REJECTED", decidedAs: opts.asManager ? "MANAGER" : "HR" }, reason: note || undefined });
@@ -373,6 +388,7 @@ export async function cancelLeave(ctx: AuthContext, id: string, opts: { self: bo
     app.set({ status: "CANCELLED", decisionNote: opts.note ?? "", updatedBy: ctx.userId });
     await app.save();
   }
+  await cancelApproval(ctx.businessId, "hr-leave", app._id);
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.leave", documentType: "LeaveApplication", documentId: app._id, newValue: { status: "CANCELLED" }, reason: opts.note || undefined });
   return { id: String(app._id), status: "CANCELLED" };
 }

@@ -6,6 +6,8 @@ import { EmployeeLoan, ExpenseClaim, Employee, Payslip, PayrollRun, CLAIM_CATEGO
 import { moneyStringSchema } from "@/lib/validation/money";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { recordAudit } from "@/lib/services/auditService";
+import { MAX_FILE_BYTES, detectFileType, safeFileName } from "@/lib/storage/service";
+import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey } from "./calendar";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
@@ -211,6 +213,7 @@ function claimRow(c: AnyDoc, label?: { name: string; code: string; department: s
     amount: d(c.amount).toFixed(2),
     description: c.description,
     billReference: c.billReference,
+    attachment: c.attachment ? { fileName: c.attachment.fileName, mimeType: c.attachment.mimeType, size: c.attachment.size } : null,
     status: c.status,
     decisionNote: c.decisionNote,
     decidedAt: c.decidedAt,
@@ -241,7 +244,59 @@ export async function createClaim(ctx: AuthContext, input: z.infer<typeof claimC
     updatedBy: ctx.userId,
   });
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CREATE", module: "hr.claims", documentType: "ExpenseClaim", documentId: claim._id, newValue: { claimNumber, amount: input.amount } });
+  await openApproval(ctx, "hr-claim", claimApprovalRecord(claim));
   return { id: String(claim._id), claimNumber };
+}
+
+function claimApprovalRecord(c: AnyDoc) {
+  return { id: c._id, number: c.claimNumber, summary: c.description, amount: d(c.amount).toFixed(2), employeeId: c.employeeId, requestedByUserId: c.createdBy };
+}
+
+function advanceApprovalRecord(l: AnyDoc) {
+  return { id: l._id, number: l.loanNumber, summary: l.reason ?? "", amount: d(l.amount).toFixed(2), employeeId: l.employeeId, requestedByUserId: l.createdBy };
+}
+
+/* ---- Claim attachment (bill / receipt) ---- */
+
+async function claimFor(ctx: AuthContext, id: string, employeeId?: Types.ObjectId, withData = false) {
+  if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Claim not found");
+  const q = ExpenseClaim.findOne({ _id: id, businessId: ctx.businessId, ...(employeeId ? { employeeId } : {}) });
+  const claim = await (withData ? q.select("+attachment.data") : q);
+  if (!claim) throw AppError.notFound("Claim not found");
+  return claim;
+}
+
+/**
+ * Attaches (or replaces) the bill for a claim. Only JPG, PNG or PDF up to 10 MB,
+ * checked by the file's own bytes. Employees may change it only while the claim is pending.
+ */
+export async function setClaimAttachment(ctx: AuthContext, id: string, form: FormData, opts: { employeeId?: Types.ObjectId } = {}) {
+  const claim = await claimFor(ctx, id, opts.employeeId);
+  if (opts.employeeId && claim.status !== "PENDING") throw AppError.badRequest("The bill can only be changed while the claim is pending", "CLAIM_NOT_PENDING");
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) throw AppError.badRequest("Choose a file to attach", "NO_FILE");
+  if (file.size > MAX_FILE_BYTES) throw AppError.badRequest("File is larger than 10 MB", "FILE_TOO_LARGE");
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const type = detectFileType(bytes);
+  if (!type) throw AppError.badRequest("Only JPG, JPEG, PNG and PDF files can be attached", "UNSUPPORTED_FILE");
+  const attachment = { fileName: safeFileName(file.name || `${claim.claimNumber}.${type.ext}`), mimeType: type.mime, size: bytes.length, data: bytes, uploadedAt: new Date() };
+  await ExpenseClaim.updateOne({ _id: claim._id, businessId: ctx.businessId }, { $set: { attachment, updatedBy: ctx.userId } });
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.claims", documentType: "ExpenseClaim", documentId: claim._id, newValue: { attachment: attachment.fileName, size: attachment.size } });
+  return { fileName: attachment.fileName, mimeType: attachment.mimeType, size: attachment.size };
+}
+
+export async function removeClaimAttachment(ctx: AuthContext, id: string, opts: { employeeId?: Types.ObjectId } = {}) {
+  const claim = await claimFor(ctx, id, opts.employeeId);
+  if (opts.employeeId && claim.status !== "PENDING") throw AppError.badRequest("The bill can only be changed while the claim is pending", "CLAIM_NOT_PENDING");
+  await ExpenseClaim.updateOne({ _id: claim._id, businessId: ctx.businessId }, { $set: { attachment: null, updatedBy: ctx.userId } });
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.claims", documentType: "ExpenseClaim", documentId: claim._id, oldValue: { attachment: claim.attachment?.fileName } });
+}
+
+export async function getClaimAttachment(ctx: AuthContext, id: string, opts: { employeeId?: Types.ObjectId } = {}) {
+  const claim = await claimFor(ctx, id, opts.employeeId, true);
+  const a = claim.attachment;
+  if (!a?.data) throw AppError.notFound("No bill is attached to this claim");
+  return { data: Buffer.from(a.data), mimeType: a.mimeType, fileName: a.fileName };
 }
 
 export async function listClaims(ctx: AuthContext, params: z.infer<typeof claimListSchema>, opts: { employeeId?: Types.ObjectId } = {}) {
@@ -274,6 +329,8 @@ export async function decideClaim(ctx: AuthContext, id: string, decision: "APPRO
   const claim = await ExpenseClaim.findOne({ _id: id, businessId: ctx.businessId });
   if (!claim) throw AppError.notFound("Claim not found");
   if (claim.status !== "PENDING") throw AppError.badRequest(`This claim is already ${claim.status.toLowerCase()}`, "CLAIM_NOT_PENDING");
+  const gate = await approvalGate(ctx, "hr-claim", claimApprovalRecord(claim), decision === "APPROVED" ? "approve" : "reject", note);
+  if (!gate.proceed) return { id, status: "PENDING", approvalMessage: gate.message };
   claim.set({ status: decision, decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: note, updatedBy: ctx.userId });
   await claim.save();
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: decision === "APPROVED" ? "APPROVE" : "REJECT", module: "hr.claims", documentType: "ExpenseClaim", documentId: claim._id, reason: note || undefined });
@@ -289,6 +346,7 @@ export async function withdrawClaim(ctx: AuthContext, id: string) {
   if (claim.status !== "PENDING") throw AppError.badRequest("Only a pending claim can be withdrawn", "CLAIM_NOT_PENDING");
   claim.set({ status: "CANCELLED", updatedBy: ctx.userId });
   await claim.save();
+  await cancelApproval(ctx.businessId, "hr-claim", claim._id);
   return { id, status: "CANCELLED" };
 }
 
@@ -355,6 +413,7 @@ export async function requestAdvance(ctx: AuthContext, input: z.infer<typeof adv
     updatedBy: ctx.userId,
   });
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CREATE", module: "hr.loans", documentType: "EmployeeLoan", documentId: loan._id, newValue: { loanNumber, amount: input.amount, status: "REQUESTED" } });
+  await openApproval(ctx, "hr-advance", advanceApprovalRecord(loan));
   return { id: String(loan._id), loanNumber };
 }
 
@@ -381,6 +440,8 @@ export async function decideAdvance(ctx: AuthContext, id: string, input: z.infer
   const loan = await EmployeeLoan.findOne({ _id: id, businessId: ctx.businessId });
   if (!loan) throw AppError.notFound("Request not found");
   if (loan.status !== "REQUESTED") throw AppError.badRequest(`This request is already ${String(loan.status).toLowerCase()}`, "REQUEST_DECIDED");
+  const gate = await approvalGate(ctx, "hr-advance", advanceApprovalRecord(loan), input.action, input.note);
+  if (!gate.proceed) return { id, status: "REQUESTED", approvalMessage: gate.message };
   const base = { decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: input.note, updatedBy: ctx.userId };
   if (input.action === "approve") {
     loan.set({
@@ -418,6 +479,7 @@ export async function withdrawAdvanceRequest(ctx: AuthContext, id: string) {
   if (loan.status !== "REQUESTED") throw AppError.badRequest("Only a request waiting for a decision can be withdrawn", "REQUEST_DECIDED");
   loan.set({ status: "CANCELLED", updatedBy: ctx.userId });
   await loan.save();
+  await cancelApproval(ctx.businessId, "hr-advance", loan._id);
   return { id, status: "CANCELLED" };
 }
 

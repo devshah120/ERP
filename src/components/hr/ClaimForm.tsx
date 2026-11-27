@@ -4,6 +4,9 @@ import { useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { CLAIM_CATEGORY_LABELS, todayKey, type Option } from "./HrKit";
 import Select from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
+
+const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Expense claim form; with `employees` HR records it for someone, without it is the employee's own claim. */
 export default function ClaimForm({
@@ -18,9 +21,20 @@ export default function ClaimForm({
   onCancel?: () => void;
 }) {
   const isHr = Boolean(employees);
+  const toast = useToast();
   const [form, setForm] = useState({ employeeId: "", claimDate: todayKey(), category: "TRAVEL", amount: "", description: "", billReference: "" });
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function pickFile(f: File | null) {
+    setError(null);
+    if (f && f.size > MAX_BYTES) {
+      setError("The bill is larger than 10 MB");
+      return;
+    }
+    setFile(f);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -28,7 +42,17 @@ export default function ClaimForm({
     setError(null);
     try {
       const { employeeId, ...rest } = form;
-      const res = await apiFetch<{ claimNumber: string }>(submitUrl, { method: "POST", body: JSON.stringify(isHr ? { employeeId, ...rest } : rest) });
+      const res = await apiFetch<{ id: string; claimNumber: string }>(submitUrl, { method: "POST", body: JSON.stringify(isHr ? { employeeId, ...rest } : rest) });
+      if (file) {
+        const body = new FormData();
+        body.append("file", file);
+        try {
+          await apiFetch(`${submitUrl}/${res.id}/attachment`, { method: "POST", body });
+        } catch (err) {
+          // The claim exists; say so rather than letting a retry create a duplicate.
+          toast.error(`${res.claimNumber} saved, but the bill was not attached`, err instanceof ApiError ? err.message : undefined);
+        }
+      }
       onDone(res);
     } catch (err) {
       const detail = err instanceof ApiError && Array.isArray(err.errors) ? (err.errors as { message: string }[]).map((x) => x.message).join(", ") : "";
@@ -84,6 +108,11 @@ export default function ClaimForm({
         <div className="field">
           <label htmlFor="cl-bill">Bill / receipt no.</label>
           <input id="cl-bill" className="input" value={form.billReference} onChange={(e) => setForm({ ...form, billReference: e.target.value })} />
+        </div>
+        <div className="field">
+          <label htmlFor="cl-file">Attach bill / receipt</label>
+          <input id="cl-file" type="file" className="input" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+          <span className="fieldHint">{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : "JPG, PNG or PDF, up to 10 MB"}</span>
         </div>
         <div className="field fieldSpanFull">
           <label htmlFor="cl-desc">

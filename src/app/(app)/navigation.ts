@@ -432,6 +432,17 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
+        key: "approvals",
+        label: "Approvals",
+        keywords: "approval workflow",
+        icon: IconClipboard,
+        children: [
+          { href: "/approvals/queue", label: "Approval Queue", enabled: true, keywords: "approval queue pending awaiting approve reject inbox" },
+          { href: "/approvals/schemes", label: "Approval Scheme", enabled: true, keywords: "approval scheme workflow stages hierarchy reporting manager" },
+          { href: "/approvals/groups", label: "Approval User Groups", enabled: true, keywords: "approval user groups approvers team" },
+        ],
+      },
+      {
         key: "utilities",
         label: "Tools",
         keywords: "utilities",
@@ -642,6 +653,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/settings/print-formats": "settings.view",
   "/settings/notifications": "settings.view",
   "/logs": "audit-logs.view",
+  "/approvals/schemes": "approvals.view",
+  "/approvals/groups": "approvals.view",
 
   // HRMS
   "/hr/dashboard": "hr-dashboard.view",

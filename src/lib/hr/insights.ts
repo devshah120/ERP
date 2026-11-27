@@ -447,6 +447,113 @@ export async function hrReport(ctx: AuthContext, key: string, params: { year?: n
       };
     }
 
+    case "form-16": {
+      // FY starting April of `year`: Apr–Dec of year, Jan–Mar of year + 1.
+      const p = reportPeriod(year, true);
+      const runs = await PayrollRun.find({
+        businessId: ctx.businessId,
+        status: { $in: ["APPROVED", "PAID"] },
+        $or: [{ year, month: { $gte: 4 } }, { year: year + 1, month: { $lte: 3 } }],
+      }, { _id: 1 }).lean<AnyDoc[]>();
+      const slips = runs.length
+        ? await Payslip.find({ businessId: ctx.businessId, payrollRunId: { $in: runs.map((r) => r._id) } }).sort({ "employee.code": 1, year: 1, month: 1 }).lean<AnyDoc[]>()
+        : [];
+      const quarterOf = (m: number) => (m >= 4 && m <= 6 ? 0 : m >= 7 && m <= 9 ? 1 : m >= 10 ? 2 : 3);
+      const zero = () => new Decimal(0);
+      type Acc = { code: string; name: string; pan: string; designation: string; first: string; last: string; months: number; basic: Decimal; hra: Decimal; allowances: Decimal; gross: Decimal; pf: Decimal; pt: Decimal; tds: Decimal[] };
+      const byEmp = new Map<string, Acc>();
+      for (const s of slips) {
+        const k = String(s.employeeId);
+        const ym = `${s.year}-${String(s.month).padStart(2, "0")}`;
+        let a = byEmp.get(k);
+        if (!a) {
+          a = { code: s.employee?.code ?? "", name: s.employee?.name ?? "", pan: "", designation: "", first: ym, last: ym, months: 0, basic: zero(), hra: zero(), allowances: zero(), gross: zero(), pf: zero(), pt: zero(), tds: [zero(), zero(), zero(), zero()] };
+          byEmp.set(k, a);
+        }
+        // Latest snapshot wins for PAN and designation.
+        a.pan = s.employee?.panNumber || a.pan;
+        a.designation = s.employee?.designation || a.designation;
+        a.last = ym;
+        a.months += 1;
+        const basic = lineAmount(s.earnings, "BASIC");
+        const hra = lineAmount(s.earnings, "HRA");
+        const gross = d(s.grossEarnings);
+        a.basic = a.basic.plus(basic);
+        a.hra = a.hra.plus(hra);
+        a.allowances = a.allowances.plus(gross.minus(basic).minus(hra));
+        a.gross = a.gross.plus(gross);
+        a.pf = a.pf.plus(lineAmount(s.deductions, "PF"));
+        a.pt = a.pt.plus(lineAmount(s.deductions, "PT"));
+        const q = quarterOf(Number(s.month));
+        a.tds[q] = a.tds[q].plus(lineAmount(s.deductions, "TDS"));
+      }
+      const label = (ym: string) => monthLabel(Number(ym.slice(5)), Number(ym.slice(0, 4)));
+      // Standard deduction u/s 16(ia) under the new regime (default from FY 2024-25): ₹75,000, earlier ₹50,000; capped at gross.
+      const stdCap = new Decimal(year >= 2024 ? 75000 : 50000);
+      const rows = [...byEmp.values()].map((a) => {
+        const std = Decimal.min(stdCap, a.gross);
+        const taxable = Decimal.max(0, a.gross.minus(std).minus(a.pt));
+        const tdsTotal = a.tds.reduce((t, x) => t.plus(x), zero());
+        return {
+          employeeCode: a.code,
+          name: a.name,
+          pan: a.pan || "PAN NOT AVAILABLE",
+          designation: a.designation,
+          period: `${label(a.first)} – ${label(a.last)}`,
+          months: a.months,
+          basic: money(a.basic),
+          hra: money(a.hra),
+          allowances: money(a.allowances),
+          gross: money(a.gross),
+          standardDeduction: money(std),
+          professionalTax: money(a.pt),
+          taxableSalary: money(taxable),
+          pf80c: money(a.pf),
+          tdsQ1: money(a.tds[0]),
+          tdsQ2: money(a.tds[1]),
+          tdsQ3: money(a.tds[2]),
+          tdsQ4: money(a.tds[3]),
+          tdsTotal: money(tdsTotal),
+        };
+      });
+      const moneyKeys = ["basic", "hra", "allowances", "gross", "standardDeduction", "professionalTax", "taxableSalary", "pf80c", "tdsQ1", "tdsQ2", "tdsQ3", "tdsQ4", "tdsTotal"];
+      const totals = sumColumns(rows, moneyKeys);
+      return {
+        title: `Form 16 ${p.label}`,
+        filterNote:
+          "From approved and paid payrolls only. Part A: TDS by quarter (Q1 Apr–Jun, Q2 Jul–Sep, Q3 Oct–Dec, Q4 Jan–Mar). Part B: gross salary, standard deduction u/s 16(ia) and professional tax u/s 16(iii). HRA exemption u/s 10(13A), other Chapter VI-A deductions and income from other sources are not tracked here — add them from the employee's declarations before issuing the certificate. Employee PF is shown for 80C reference.",
+        columns: [
+          { key: "employeeCode", label: "Emp. code" },
+          { key: "name", label: "Name" },
+          { key: "pan", label: "PAN" },
+          { key: "designation", label: "Designation" },
+          { key: "period", label: "Period with employer" },
+          { key: "months", label: "Months paid", type: "number" },
+          { key: "basic", label: "Basic", type: "money" },
+          { key: "hra", label: "HRA", type: "money" },
+          { key: "allowances", label: "Other allowances", type: "money" },
+          { key: "gross", label: "Gross salary", type: "money" },
+          { key: "standardDeduction", label: "Std. deduction 16(ia)", type: "money" },
+          { key: "professionalTax", label: "Prof. tax 16(iii)", type: "money" },
+          { key: "taxableSalary", label: "Income under Salaries", type: "money" },
+          { key: "pf80c", label: "Employee PF (80C)", type: "money" },
+          { key: "tdsQ1", label: "TDS Q1", type: "money" },
+          { key: "tdsQ2", label: "TDS Q2", type: "money" },
+          { key: "tdsQ3", label: "TDS Q3", type: "money" },
+          { key: "tdsQ4", label: "TDS Q4", type: "money" },
+          { key: "tdsTotal", label: "Total TDS", type: "money" },
+        ],
+        rows,
+        totals,
+        summary: [
+          { label: "Employees", value: String(rows.length) },
+          { label: "Gross salary", value: totals.gross },
+          { label: "Total TDS", value: totals.tdsTotal },
+          { label: "PAN missing", value: String(rows.filter((r) => r.pan === "PAN NOT AVAILABLE").length) },
+        ],
+      };
+    }
+
     case "pf-statement": {
       const { slips } = await liveRun(ctx, year, month);
       const rows = slips

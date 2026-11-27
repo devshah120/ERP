@@ -11,7 +11,9 @@ import {
   debitNoteEntries,
 } from "@/lib/accounting/posting";
 import { serializeDoc } from "@/lib/resources/serialize";
-import { allowedTransitions } from "./workflows";
+import { allowedTransitions, approvalTransition } from "./workflows";
+import { approvalGate, openApproval, cancelApproval, currentApproverLabel } from "@/lib/approvals/service";
+import { approvalDocument } from "@/lib/approvals/catalog";
 import { getDocumentDefinition } from "./registry";
 import type { AuthContext } from "@/lib/auth/context";
 
@@ -108,6 +110,13 @@ export async function transitionDocument(
 
   if (rule.requiresReason && !reason?.trim()) {
     throw AppError.badRequest("A reason is required for this action", "REASON_REQUIRED");
+  }
+
+  // Approval scheme: the guarded step only happens once every stage has approved.
+  const step = approvalDocument(def.key) ? approvalTransition(def.workflow) : null;
+  if (step && doc.status === step.from && toStatus === step.to) {
+    const gate = await approvalGate(ctx, def.key, documentApprovalRecord(doc), "approve");
+    if (!gate.proceed) return { ...(serializeDoc(doc) as Record<string, unknown>), approvalMessage: gate.message };
   }
 
   const fromStatus = doc.status;
@@ -247,6 +256,17 @@ export async function transitionDocument(
     await session.endSession();
   }
 
+  // Submitting opens the approval; sending back or cancelling closes it.
+  let approvalMessage: string | undefined;
+  if (approvalDocument(def.key)) {
+    if (toStatus === "PENDING_APPROVAL") {
+      const req = await openApproval(ctx, def.key, documentApprovalRecord(doc));
+      if (req) approvalMessage = `Sent for approval. Waiting for ${await currentApproverLabel(ctx.businessId, req)}.`;
+    } else if (toStatus === "CANCELLED" || toStatus === "DRAFT") {
+      await cancelApproval(ctx.businessId, def.key, doc._id);
+    }
+  }
+
   await recordAudit({
     businessId: ctx.businessId,
     userId: ctx.userId,
@@ -259,6 +279,31 @@ export async function transitionDocument(
     reason,
   });
 
+  return approvalMessage ? { ...(serializeDoc(doc) as Record<string, unknown>), approvalMessage } : serializeDoc(doc);
+}
+
+function documentApprovalRecord(doc: AnyDoc) {
+  return {
+    id: doc._id,
+    number: doc.documentNumber,
+    amount: doc.totals?.grandTotal != null ? String(doc.totals.grandTotal) : null,
+    requestedByUserId: doc.createdBy ?? null,
+  };
+}
+
+/**
+ * Rejection from the approval queue: closes the request and, for a document
+ * waiting in PENDING_APPROVAL, sends it back to draft for the author to fix.
+ */
+export async function rejectDocumentApproval(docTypeKey: string, id: string, note: string, ctx: AuthContext) {
+  const def = getDocumentDefinition(docTypeKey);
+  if (!def) throw AppError.notFound("Unknown document type");
+  const doc = await def.model.findOne({ _id: id, businessId: ctx.businessId });
+  if (!doc) throw AppError.notFound(`${def.label} not found`);
+  await approvalGate(ctx, def.key, documentApprovalRecord(doc), "reject", note);
+  if (doc.status === "PENDING_APPROVAL" && allowedTransitions(def.workflow, doc.status).some((t) => t.to === "DRAFT")) {
+    return transitionDocument(docTypeKey, id, "DRAFT", note, ctx);
+  }
   return serializeDoc(doc);
 }
 

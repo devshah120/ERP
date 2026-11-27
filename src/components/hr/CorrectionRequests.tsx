@@ -125,8 +125,9 @@ export default function CorrectionRequests({
     setBusy(true);
     setActionError(null);
     try {
-      await apiFetch(decideUrl(pending.row.id), { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      toast.success(pending.action === "approve" ? `${pending.row.requestNumber} approved` : `${pending.row.requestNumber} rejected`);
+      const res = await apiFetch<{ approvalMessage?: string }>(decideUrl(pending.row.id), { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
+      if (res?.approvalMessage) toast.success(`${pending.row.requestNumber}: ${res.approvalMessage}`);
+      else toast.success(pending.action === "approve" ? `${pending.row.requestNumber} approved` : `${pending.row.requestNumber} rejected`);
       setPending(null);
       load();
     } catch (err) {

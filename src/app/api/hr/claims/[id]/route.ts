@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok } from "@/lib/http/response";
+import { okDecision } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { z } from "zod";
@@ -14,5 +14,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { id } = await params;
   const { action, note } = actionSchema.parse(await req.json());
   const result = await decideClaim(ctx, id, action === "approve" ? "APPROVED" : "REJECTED", note);
-  return ok(result, action === "approve" ? "Claim approved. It will be paid with the next payroll." : "Claim rejected");
+  return okDecision(result, action === "approve" ? "Claim approved. It will be paid with the next payroll." : "Claim rejected");
 });

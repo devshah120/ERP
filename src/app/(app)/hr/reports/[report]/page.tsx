@@ -49,7 +49,7 @@ export default function HrReportPage() {
 
   const needs = def.needs;
   const params: Record<string, number> =
-    needs === "month" ? { year: period.year, month: period.month } : needs === "year" ? { year: period.year } : needs === "period" ? { year: period.year, fy: financial ? 1 : 0 } : {};
+    needs === "month" ? { year: period.year, month: period.month } : needs === "year" ? { year: period.year } : needs === "period" ? { year: period.year, fy: financial ? 1 : 0 } : needs === "fy" ? { year: period.year, fy: 1 } : {};
   const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
 
   // Bumped by the refresh button to fetch the same report again.
@@ -113,6 +113,15 @@ export default function HrReportPage() {
               ))}
             </Select>
           </>
+        )}
+        {needs === "fy" && (
+          <Select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Financial year">
+            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
+              <option key={y} value={y}>
+                FY {y}-{String((y + 1) % 100).padStart(2, "0")} (Apr–Mar)
+              </option>
+            ))}
+          </Select>
         )}
         {needs === "year" && (
           <Select className="select" style={{ width: "auto" }} value={period.year} onChange={(e) => setPeriod({ ...period, year: Number(e.target.value) })} aria-label="Year">

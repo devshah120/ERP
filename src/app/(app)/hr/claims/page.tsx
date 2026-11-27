@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { fmtDate, CLAIM_CATEGORY_LABELS } from "@/components/hr/HrKit";
+import ClaimAttachment, { type ClaimAttachmentInfo } from "@/components/hr/ClaimAttachment";
 import { formatMoney } from "@/lib/format/number";
 import { IconCheck, IconClose, IconPlus, IconRefresh } from "@/components/icons";
 import Select from "@/components/ui/Select";
@@ -30,6 +31,7 @@ interface Row {
   amount: string;
   description: string;
   billReference: string;
+  attachment?: ClaimAttachmentInfo | null;
   status: string;
   decisionNote: string;
 }
@@ -96,8 +98,9 @@ function Claims() {
     setBusy(true);
     setActionError(null);
     try {
-      await apiFetch(`/api/hr/claims/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      toast.success(pending.action === "approve" ? `${pending.row.claimNumber} approved` : `${pending.row.claimNumber} rejected`, pending.action === "approve" ? "It will be paid with the next payroll, or settle it now on Claim Settlement." : undefined);
+      const res = await apiFetch<{ approvalMessage?: string }>(`/api/hr/claims/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
+      if (res?.approvalMessage) toast.success(`${pending.row.claimNumber}: ${res.approvalMessage}`);
+      else toast.success(pending.action === "approve" ? `${pending.row.claimNumber} approved` : `${pending.row.claimNumber} rejected`, pending.action === "approve" ? "It will be paid with the next payroll, or settle it now on Claim Settlement." : undefined);
       setPending(null);
       load();
     } catch (err) {
@@ -186,6 +189,7 @@ function Claims() {
                   {r.description}
                   {r.billReference && <div className="hrMuted">Bill {r.billReference}</div>}
                   {r.decisionNote && <div className="hrMuted">Note: {r.decisionNote}</div>}
+                  <ClaimAttachment baseUrl={`/api/hr/claims/${r.id}`} attachment={r.attachment} canEdit={canCreate && r.status === "PENDING"} onChange={load} />
                 </td>
                 <td className="numCell">{formatMoney(r.amount)}</td>
                 <td>

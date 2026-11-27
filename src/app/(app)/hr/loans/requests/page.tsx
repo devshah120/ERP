@@ -112,8 +112,9 @@ export default function AdvanceRequestsPage() {
     setBusy(true);
     setDialogError(null);
     try {
-      await apiFetch(`/api/hr/loans/requests/${approving.id}`, { method: "POST", body: JSON.stringify({ action: "approve", ...approval }) });
-      toast.success(`${approving.loanNumber} approved`, `Recovered from ${MONTH_NAMES[approval.startMonth - 1]} ${approval.startYear} payroll.`);
+      const res = await apiFetch<{ approvalMessage?: string }>(`/api/hr/loans/requests/${approving.id}`, { method: "POST", body: JSON.stringify({ action: "approve", ...approval }) });
+      if (res?.approvalMessage) toast.success(`${approving.loanNumber}: ${res.approvalMessage}`);
+      else toast.success(`${approving.loanNumber} approved`, `Recovered from ${MONTH_NAMES[approval.startMonth - 1]} ${approval.startYear} payroll.`);
       setApproving(null);
       load();
     } catch (err) {

@@ -7,6 +7,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, todayIn, loadCalendar, shiftFor } from "./calendar";
 import { computeTimes, assertPayrollOpen } from "./attendance";
 import { directReports } from "./leave";
+import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
 import { regularizationPolicy, assertRegularizationAllowed, reasonFor } from "./regularization";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, businessTimeZone, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
@@ -100,7 +101,18 @@ export async function requestCorrection(ctx: AuthContext, raw: z.input<typeof co
     documentId: doc._id,
     newValue: { requestNumber, date: dayKey(date), status: input.status, checkIn: input.checkIn, checkOut: input.checkOut, reason: reason?.name ?? "" },
   });
+  await openApproval(ctx, "hr-attendance-correction", correctionApprovalRecord(doc));
   return { id: String(doc._id), requestNumber };
+}
+
+function correctionApprovalRecord(req: AnyDoc) {
+  return {
+    id: req._id,
+    number: req.requestNumber,
+    summary: `${dayKey(toDay(req.date))} → ${String(req.requestedStatus ?? "").replace(/_/g, " ").toLowerCase()}${req.reasonName ? ` · ${req.reasonName}` : ""}`,
+    employeeId: req.employeeId,
+    requestedByUserId: req.appliedByUserId ?? req.createdBy,
+  };
 }
 
 /**
@@ -113,6 +125,8 @@ export async function requestCorrection(ctx: AuthContext, raw: z.input<typeof co
 export async function approveCorrection(ctx: AuthContext, id: string, note: string, opts: { asManager?: boolean } = {}) {
   const req = await loadRequest(ctx, id);
   if (req.status !== "PENDING") throw AppError.badRequest(`This request is already ${req.status.toLowerCase()}`, "CORRECTION_NOT_PENDING");
+  const gate = await approvalGate(ctx, "hr-attendance-correction", correctionApprovalRecord(req), "approve", note);
+  if (!gate.proceed) return { id: String(req._id), status: "PENDING", approvalMessage: gate.message };
   const date = toDay(req.date);
   await assertPayrollOpen(ctx.businessId, [date]);
 
@@ -183,6 +197,7 @@ export async function rejectCorrection(ctx: AuthContext, id: string, note: strin
   if (!note.trim()) throw AppError.badRequest("Give a reason for rejecting", "REASON_REQUIRED");
   const req = await loadRequest(ctx, id);
   if (req.status !== "PENDING") throw AppError.badRequest(`This request is already ${req.status.toLowerCase()}`, "CORRECTION_NOT_PENDING");
+  await approvalGate(ctx, "hr-attendance-correction", correctionApprovalRecord(req), "reject", note);
   const decidedAs = opts.asManager ? "MANAGER" : "HR";
   req.set({ status: "REJECTED", decidedByUserId: ctx.userId, decidedAt: new Date(), decidedAs, decisionNote: note, updatedBy: ctx.userId });
   await req.save();
@@ -198,6 +213,7 @@ export async function withdrawCorrection(ctx: AuthContext, id: string) {
   if (req.status !== "PENDING") throw AppError.badRequest("Only a pending request can be withdrawn.", "CORRECTION_NOT_PENDING");
   req.set({ status: "CANCELLED", updatedBy: ctx.userId });
   await req.save();
+  await cancelApproval(ctx.businessId, "hr-attendance-correction", req._id);
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.attendance", documentType: "AttendanceRequest", documentId: req._id, newValue: { requestStatus: "CANCELLED" } });
   return { id: String(req._id), status: "CANCELLED" };
 }

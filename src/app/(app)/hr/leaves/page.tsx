@@ -109,8 +109,9 @@ function LeaveRequests() {
     setBusy(true);
     setActionError(null);
     try {
-      await apiFetch(`/api/hr/leaves/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : pending.action === "reject" ? `${pending.row.leaveNumber} rejected` : `${pending.row.leaveNumber} cancelled`);
+      const res = await apiFetch<{ approvalMessage?: string }>(`/api/hr/leaves/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
+      if (res?.approvalMessage) toast.success(`${pending.row.leaveNumber}: ${res.approvalMessage}`);
+      else toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : pending.action === "reject" ? `${pending.row.leaveNumber} rejected` : `${pending.row.leaveNumber} cancelled`);
       setPending(null);
       load();
     } catch (err) {

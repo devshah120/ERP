@@ -28,7 +28,7 @@ export type Plan = (typeof PLANS)[number];
  * Permission modules every workspace has whatever it bought: people need to
  * sign in, manage colleagues and roles, and see the audit trail.
  */
-const CORE_PERMISSION_MODULES = new Set(["users", "roles", "audit-logs", "settings", "storage"]);
+const CORE_PERMISSION_MODULES = new Set(["users", "roles", "audit-logs", "settings", "storage", "approvals"]);
 
 /** Routes every workspace has. `/settings` itself is the business profile; its sub-pages are ERP defaults. */
 const CORE_ROUTES = new Set(["/users", "/user-roles", "/settings", "/logs", "/unauthorized"]);
@@ -49,6 +49,8 @@ export function productForPermission(permission: string): Product | null {
 export function productForHref(href: string): Product | null {
   const path = href.split("?")[0];
   if (CORE_ROUTES.has(path)) return null;
+  // Approvals serve every product.
+  if (path === "/approvals" || path.startsWith("/approvals/")) return null;
   if (path === "/hr" || path.startsWith("/hr/") || path.startsWith("/hr-")) return "HRMS";
   return "ERP";
 }

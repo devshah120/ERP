@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok } from "@/lib/http/response";
+import { okDecision } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { decideTeamLeave } from "@/lib/hr/leave";
@@ -14,5 +14,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   requirePermission(ctx, "hr-self.view");
   const { id } = await params;
   const { action, note } = actionSchema.parse(await req.json());
-  return ok(await decideTeamLeave(ctx, id, action, note), action === "approve" ? "Leave approved" : "Leave rejected");
+  return okDecision(await decideTeamLeave(ctx, id, action, note), action === "approve" ? "Leave approved" : "Leave rejected");
 });

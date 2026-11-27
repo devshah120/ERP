@@ -130,8 +130,9 @@ function TeamLeave({ onSummary }: { onSummary: (s: CorrectionSummary) => void })
     setBusy(true);
     setActionError(null);
     try {
-      await apiFetch(`/api/hr/self/team/leaves/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : `${pending.row.leaveNumber} rejected`);
+      const res = await apiFetch<{ approvalMessage?: string }>(`/api/hr/self/team/leaves/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
+      if (res?.approvalMessage) toast.success(`${pending.row.leaveNumber}: ${res.approvalMessage}`);
+      else toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : `${pending.row.leaveNumber} rejected`);
       setPending(null);
       load();
     } catch (err) {

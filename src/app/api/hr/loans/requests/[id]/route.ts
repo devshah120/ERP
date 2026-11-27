@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok } from "@/lib/http/response";
+import { okDecision } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { decideAdvance, advanceDecisionSchema } from "@/lib/hr/money";
@@ -13,5 +13,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { id } = await params;
   const input = advanceDecisionSchema.parse(await req.json());
   const result = await decideAdvance(ctx, id, input);
-  return ok(result, input.action === "approve" ? "Advance approved and issued" : "Request rejected");
+  return okDecision(result, input.action === "approve" ? "Advance approved and issued" : "Request rejected");
 });

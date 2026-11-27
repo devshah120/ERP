@@ -483,11 +483,11 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
     const saved = await apiFetch<DocRecord>(`${config.apiPath}/${id}`);
     const next = saved.availableTransitions?.find((t) => t.to !== "CANCELLED");
     if (!next) return null;
-    await apiFetch(`${config.apiPath}/${id}/transition`, {
+    const res = await apiFetch<{ approvalMessage?: string }>(`${config.apiPath}/${id}/transition`, {
       method: "POST",
       body: JSON.stringify({ toStatus: next.to }),
     });
-    return next.to;
+    return { to: next.to, approvalMessage: res?.approvalMessage };
   }
 
   async function handleSubmit(e?: FormEvent) {
@@ -520,7 +520,8 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
           // exists either way, so the error is reported on its own page.
           try {
             const moved = await submitAfterSave(doc.id);
-            if (moved) toast.success(`${config.singular} ${humanizeStatus(moved).toLowerCase()}`, doc.documentNumber);
+            if (moved?.approvalMessage) toast.success(moved.approvalMessage, doc.documentNumber);
+            else if (moved) toast.success(`${config.singular} ${humanizeStatus(moved.to).toLowerCase()}`, doc.documentNumber);
           } catch (err) {
             router.push(`${config.basePath}/${doc.id}`);
             throw err;
@@ -564,13 +565,18 @@ export default function DocumentFormView({ config, recordId }: { config: Documen
     setSuccess(null);
     setReasonError(null);
     try {
-      await apiFetch(`${config.apiPath}/${recordId}/transition`, {
+      const res = await apiFetch<{ approvalMessage?: string }>(`${config.apiPath}/${recordId}/transition`, {
         method: "POST",
         body: JSON.stringify({ toStatus: rule.to, reason }),
       });
       setPendingTransition(null);
-      setSuccess(`Moved to ${rule.to}`);
-      toast.success(`${config.singular} ${humanizeStatus(rule.to).toLowerCase()}`);
+      if (res?.approvalMessage) {
+        setSuccess(res.approvalMessage);
+        toast.success(res.approvalMessage);
+      } else {
+        setSuccess(`Moved to ${rule.to}`);
+        toast.success(`${config.singular} ${humanizeStatus(rule.to).toLowerCase()}`);
+      }
       await loadRecord();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Transition failed";

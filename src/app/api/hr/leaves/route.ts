@@ -10,7 +10,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-leaves.view");
   await upgradeHrRoles(ctx.businessId);
-  return ok(await listLeaves(ctx, leaveListSchema.parse(Object.fromEntries(req.nextUrl.searchParams))));
+  return ok(await listLeaves(ctx, leaveListSchema.parse(Object.fromEntries(req.nextUrl.searchParams)), { excludeOwnTeam: true }));
 });
 
 /** Files a leave request: one's own, or (Owner only) on an employee's behalf. */

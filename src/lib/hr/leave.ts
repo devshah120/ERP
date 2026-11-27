@@ -390,12 +390,33 @@ export const leaveListSchema = z.object({
   ...pageQuery,
 });
 
-export async function listLeaves(ctx: AuthContext, params: z.infer<typeof leaveListSchema>, opts: { employeeId?: Types.ObjectId; employeeIds?: Types.ObjectId[] } = {}) {
+export async function listLeaves(
+  ctx: AuthContext,
+  params: z.infer<typeof leaveListSchema>,
+  opts: { employeeId?: Types.ObjectId; employeeIds?: Types.ObjectId[]; excludeOwnTeam?: boolean } = {}
+) {
   const filter: Record<string, unknown> = { businessId: ctx.businessId };
   if (params.status) filter.status = params.status;
-  const scope = opts.employeeId ? { employeeId: opts.employeeId } : opts.employeeIds ? { employeeId: { $in: opts.employeeIds } } : {};
+  let scope: Record<string, unknown> = opts.employeeId ? { employeeId: opts.employeeId } : opts.employeeIds ? { employeeId: { $in: opts.employeeIds } } : {};
+  if (!opts.employeeId && !opts.employeeIds && opts.excludeOwnTeam) {
+    // The viewer's own direct reports are reviewed on Team Leave, not here.
+    const me = await ownEmployeeId(ctx);
+    if (me) {
+      const team = await Employee.find(
+        { businessId: ctx.businessId, reportingManagerId: new Types.ObjectId(me), _id: { $ne: new Types.ObjectId(me) }, deletedAt: null },
+        { _id: 1 }
+      ).lean<AnyDoc[]>();
+      if (team.length) scope = { employeeId: { $nin: team.map((e) => e._id) } };
+    }
+  }
   if (opts.employeeId || opts.employeeIds) Object.assign(filter, scope);
-  else if (params.employeeId && Types.ObjectId.isValid(params.employeeId)) filter.employeeId = new Types.ObjectId(params.employeeId);
+  else {
+    Object.assign(filter, scope);
+    if (params.employeeId && Types.ObjectId.isValid(params.employeeId)) {
+      const wanted = new Types.ObjectId(params.employeeId);
+      filter.employeeId = scope.employeeId ? { ...(scope.employeeId as object), $eq: wanted } : wanted;
+    }
+  }
   if (params.fromDate) filter.toDate = { $gte: toDay(params.fromDate) };
   if (params.toDate) filter.fromDate = { $lte: toDay(params.toDate) };
   if (params.query) {

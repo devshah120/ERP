@@ -385,10 +385,10 @@ export default function ResourceFormView({
 
       if (isEdit) {
         await apiFetch(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
-        const stamps = await sendImages(recordId!);
-        setState((s) => Object.entries(stamps).reduce((next, [name, stamp]) => setPath(next, name, stamp), s));
-        toast.success(`${config.singular} saved`);
+        await sendImages(recordId!);
         setDirty(false);
+        toast.success(`${config.singular} saved`);
+        router.push(config.basePath);
       } else {
         const record = await apiFetch<{ id: string }>(config.apiPath, {
           method: "POST",
@@ -397,7 +397,7 @@ export default function ResourceFormView({
         await sendImages(record.id);
         setDirty(false);
         toast.success(`${config.singular} created`);
-        router.push(`${config.basePath}/${record.id}`);
+        router.push(config.basePath);
       }
     } catch (err) {
       if (err instanceof ApiError) {

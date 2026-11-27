@@ -34,7 +34,7 @@ let refreshInFlight: Promise<boolean> | null = null;
  * triggers one refresh, not six — which matters because refresh tokens rotate
  * and a second concurrent use of the old one would be rejected.
  */
-function refreshSession(): Promise<boolean> {
+export function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = fetch("/api/auth/refresh", { method: "POST", credentials: "include" })
       .then((r) => r.ok)

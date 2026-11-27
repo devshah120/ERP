@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { apiFetch, ApiError, PASSWORD_CHANGE_REQUIRED_EVENT, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
+import { apiFetch, ApiError, PASSWORD_CHANGE_REQUIRED_EVENT, refreshSession, SESSION_EXPIRED_EVENT } from "@/lib/api/client";
 import { grants, homePathFor, normalizeProducts, productForHref, type Product } from "@/lib/products";
 
 export interface Me {
@@ -65,9 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const load = useCallback(async () => {
     try {
-      const data = await apiFetch<Me>("/api/auth/me");
+      let data = await apiFetch<Me & { stale?: boolean }>("/api/auth/me");
+      // HR changed this login's role, permissions or access since the token was issued:
+      // renew the token so the server enforces the new rights too, without signing out.
+      if (data.stale && (await refreshSession())) {
+        data = await apiFetch<Me & { stale?: boolean }>("/api/auth/me");
+      }
       signedIn.current = true;
-      setMe({ ...data, products: normalizeProducts(data.products) });
+      const next: Me = { ...data, products: normalizeProducts(data.products) };
+      delete (next as Me & { stale?: boolean }).stale;
+      setMe((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       if (data.mustChangePassword) {
         router.replace(`/change-password?next=${encodeURIComponent(pathRef.current)}`);
       }
@@ -86,6 +93,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // await, not synchronously in the effect — standard pattern, safe here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+  }, [load]);
+
+  // Pick up changes HR makes while this person is signed in: on returning to the tab and every minute.
+  useEffect(() => {
+    function recheck() {
+      if (signedIn.current && document.visibilityState === "visible") load();
+    }
+    const timer = window.setInterval(recheck, 60_000);
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+    };
   }, [load]);
 
   // A session that dies mid-use (refresh token revoked or expired) gets an

@@ -11,6 +11,9 @@ import { determineSupply } from "@/lib/gst/supply";
 import { toDecimal128 } from "./decimal128";
 import { allowedTransitions, canEdit } from "./workflows";
 import { getDocumentDefinition, type DocumentDefinition } from "./registry";
+import { documentApprovalRecord } from "./transitions";
+import { approvalDocument } from "@/lib/approvals/catalog";
+import { restartIfChanged, currentApproverLabel } from "@/lib/approvals/service";
 import type { AuthContext } from "@/lib/auth/context";
 
 interface LineInputShape {
@@ -393,6 +396,14 @@ export async function updateDocument(
     documentType: def.label,
     documentId: doc._id,
   });
+
+  // Edited while waiting for approval: approvals given so far no longer count; it starts again from stage 1.
+  if (approvalDocument(def.key)) {
+    const restarted = await restartIfChanged(ctx, def.key, documentApprovalRecord(doc), doc.status === "PENDING_APPROVAL");
+    if (restarted) {
+      return { ...(serializeDoc(doc) as Record<string, unknown>), approvalMessage: `Changed while waiting for approval, so approval started again. Waiting for ${await currentApproverLabel(ctx.businessId, restarted)}.` };
+    }
+  }
 
   return serializeDoc(doc);
 }

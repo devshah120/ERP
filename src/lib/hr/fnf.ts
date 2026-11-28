@@ -10,6 +10,7 @@ import { toDay, dayKey, eachDay, monthRange, loadCalendar, employedDuringFilter 
 import { summarizeMonth, type AttendanceRow } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { statutoryRules } from "./payrollSettings";
+import { approvalGate, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
 import { salaryForMonth, stateOn } from "./history";
 import { balancesFor } from "./leave";
 import { pendingArrearLines } from "./arrears";
@@ -371,6 +372,28 @@ export async function updateFnf(ctx: AuthContext, id: string, input: z.infer<typ
   return { id, netPayable: d(doc.netPayable).toFixed(2) };
 }
 
+/** What an F&F approver signs off: the employee, last day and every figure. Recalculating to different figures restarts approval. */
+function fnfApprovalRecord(doc: AnyDoc) {
+  const lines = (list: AnyDoc[] | undefined) => (list ?? []).map((l) => `${l.code ?? l.label}:${d(l.amount).toFixed(2)}`);
+  return {
+    id: doc._id,
+    number: doc.settlementNumber,
+    summary: `Last working day ${dayKey(toDay(doc.lastWorkingDay))}`,
+    amount: d(doc.netPayable).toFixed(2),
+    employeeId: doc.employeeId,
+    requestedByUserId: doc.createdBy ?? null,
+    fingerprint: approvalFingerprint([String(doc.employeeId), dayKey(toDay(doc.lastWorkingDay)), d(doc.netPayable).toFixed(2), lines(doc.earnings), lines(doc.deductions)]),
+  };
+}
+
+/** Rejection from the approval queue: the settlement stays a draft for HR to correct or delete. */
+export async function rejectFnfApproval(ctx: AuthContext, id: string, note: string) {
+  const doc = await loadFnf(ctx, id);
+  if (doc.status !== "DRAFT") throw AppError.badRequest(`This settlement is already ${doc.status.toLowerCase()}`, "FNF_NOT_DRAFT");
+  await approvalGate(ctx, "hr-fnf", fnfApprovalRecord(doc), "reject", note);
+  return { id, status: "DRAFT" };
+}
+
 /**
  * Approves a draft: outstanding loans are recovered, arrears marked paid and
  * the employee recorded as having left on the last working day, in one
@@ -386,6 +409,9 @@ export async function approveFnf(ctx: AuthContext, id: string) {
   if (money(fresh.netPayable).toFixed(2) !== d(doc.netPayable).toFixed(2)) {
     throw AppError.conflict(`The figures changed since this draft was calculated (net now ${money(fresh.netPayable).toFixed(2)}). Recalculate it before approving.`, "FNF_STALE");
   }
+  // Approval scheme: only the last stage's approval settles and records the exit.
+  const gate = await approvalGate(ctx, "hr-fnf", fnfApprovalRecord(doc), "approve");
+  if (!gate.proceed) return { id, status: "DRAFT", approvalMessage: gate.message };
 
   const session = await mongoose.startSession();
   try {
@@ -459,6 +485,7 @@ export async function cancelFnf(ctx: AuthContext, id: string, reason: string) {
     await session.endSession();
   }
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: wasDraft ? "DELETE" : "CANCEL", module: "hr.fnf", documentType: "FnfSettlement", documentId: doc._id, reason });
+  if (wasDraft) await cancelApproval(ctx.businessId, "hr-fnf", doc._id);
   return { id, status: wasDraft ? "DELETED" : "CANCELLED" };
 }
 

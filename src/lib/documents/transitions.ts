@@ -12,7 +12,7 @@ import {
 } from "@/lib/accounting/posting";
 import { serializeDoc } from "@/lib/resources/serialize";
 import { allowedTransitions, approvalTransition } from "./workflows";
-import { approvalGate, openApproval, cancelApproval, currentApproverLabel } from "@/lib/approvals/service";
+import { approvalGate, openApproval, cancelApproval, currentApproverLabel, approvalFingerprint } from "@/lib/approvals/service";
 import { approvalDocument } from "@/lib/approvals/catalog";
 import { getDocumentDefinition } from "./registry";
 import type { AuthContext } from "@/lib/auth/context";
@@ -282,12 +282,19 @@ export async function transitionDocument(
   return approvalMessage ? { ...(serializeDoc(doc) as Record<string, unknown>), approvalMessage } : serializeDoc(doc);
 }
 
-function documentApprovalRecord(doc: AnyDoc) {
+/** What an approver of a document signs off: party, total and every line's item, quantity, rate, discount, tax and total. */
+export function documentApprovalRecord(doc: AnyDoc) {
+  const s = (v: unknown) => (v == null ? "" : String(v));
   return {
     id: doc._id,
     number: doc.documentNumber,
     amount: doc.totals?.grandTotal != null ? String(doc.totals.grandTotal) : null,
     requestedByUserId: doc.createdBy ?? null,
+    fingerprint: approvalFingerprint({
+      party: s(doc.customerId ?? doc.vendorId),
+      total: s(doc.totals?.grandTotal),
+      lines: (doc.lines ?? []).map((l: AnyDoc) => [s(l.itemId), s(l.variantSku), s(l.quantity), s(l.rate), s(l.discountPercent), s(l.discountAmount), s(l.taxRatePercent), s(l.lineTotal)]),
+    }),
   };
 }
 

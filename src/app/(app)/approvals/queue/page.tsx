@@ -15,7 +15,8 @@ import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { formatMoney } from "@/lib/format/number";
 import { APPROVAL_DOCUMENTS, APPROVER_TYPE_LABELS, type ApproverType } from "@/lib/approvals/catalog";
-import { IconCheck, IconClose, IconRefresh } from "@/components/icons";
+import { IconCheck, IconClose, IconRefresh, IconClock } from "@/components/icons";
+import { RequestHistoryModal } from "@/components/approvals/ApprovalHistory";
 
 interface StageRow {
   stage: number;
@@ -25,6 +26,8 @@ interface StageRow {
   decidedAt: string | null;
   note: string;
   skippedReason: string;
+  escalatedReason: string;
+  override: boolean;
 }
 
 interface Row {
@@ -40,6 +43,7 @@ interface Row {
   status: string;
   waitingFor: string;
   canAct: boolean;
+  closedReason: string;
   stages: StageRow[];
 }
 
@@ -62,6 +66,7 @@ export default function ApprovalQueuePage() {
   const [pending, setPending] = useState<{ row: Row; action: "approve" | "reject" } | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,17 +196,23 @@ export default function ApprovalQueuePage() {
                 </td>
                 <td style={{ minWidth: "14rem" }}>
                   {r.stages.map((s) => (
-                    <div key={s.stage} className="hrMuted" title={s.note || s.skippedReason || undefined}>
+                    <div key={s.stage} className="hrMuted" title={s.note || s.skippedReason || s.escalatedReason || undefined}>
                       Stage-{s.stage} · {APPROVER_TYPE_LABELS[s.approverType]}: <b>{stageLabel(s)}</b>
                       {s.decidedByName ? ` by ${s.decidedByName}` : ""}
+                      {s.override ? " (owner override)" : ""}
+                      {s.escalatedReason && s.status === "PENDING" ? <div>{s.escalatedReason}</div> : null}
                     </div>
                   ))}
                   {r.waitingFor && <div style={{ marginTop: "0.25rem" }}>Waiting for {r.waitingFor}</div>}
+                  {r.closedReason && <div style={{ marginTop: "0.25rem" }}>{r.closedReason}</div>}
                 </td>
                 <td>
                   <StatusBadge status={r.status} />
                 </td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button type="button" className="button buttonGhost buttonSm" onClick={() => setHistoryId(r.id)} title="Every stage, decision and restart of this approval">
+                    <IconClock /> History
+                  </button>{" "}
                   {r.canAct && (
                     <>
                       <button type="button" className="button buttonSecondary buttonSm" onClick={() => (setActionError(null), setPending({ row: r, action: "approve" }))}>
@@ -220,6 +231,8 @@ export default function ApprovalQueuePage() {
       </div>
 
       {result && result.total > 0 && <Pagination page={page} pageSize={pageSize} total={result.total} onPage={setPage} onPageSize={(s) => (setPageSize(s), setPage(1))} />}
+
+      {historyId && <RequestHistoryModal id={historyId} onClose={() => setHistoryId(null)} />}
 
       {pending && (
         <ConfirmDialog

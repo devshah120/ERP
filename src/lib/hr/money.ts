@@ -7,7 +7,7 @@ import { moneyStringSchema } from "@/lib/validation/money";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { recordAudit } from "@/lib/services/auditService";
 import { MAX_FILE_BYTES, detectFileType, safeFileName } from "@/lib/storage/service";
-import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
+import { approvalGate, openApproval, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey } from "./calendar";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
@@ -249,11 +249,11 @@ export async function createClaim(ctx: AuthContext, input: z.infer<typeof claimC
 }
 
 function claimApprovalRecord(c: AnyDoc) {
-  return { id: c._id, number: c.claimNumber, summary: c.description, amount: d(c.amount).toFixed(2), employeeId: c.employeeId, requestedByUserId: c.createdBy };
+  return { id: c._id, number: c.claimNumber, summary: c.description, amount: d(c.amount).toFixed(2), employeeId: c.employeeId, requestedByUserId: c.createdBy, fingerprint: approvalFingerprint([String(c.employeeId), d(c.amount).toFixed(2), String(c.description ?? ""), String(c.claimDate ?? "")]) };
 }
 
 function advanceApprovalRecord(l: AnyDoc) {
-  return { id: l._id, number: l.loanNumber, summary: l.reason ?? "", amount: d(l.amount).toFixed(2), employeeId: l.employeeId, requestedByUserId: l.createdBy };
+  return { id: l._id, number: l.loanNumber, summary: l.reason ?? "", amount: d(l.amount).toFixed(2), employeeId: l.employeeId, requestedByUserId: l.createdBy, fingerprint: approvalFingerprint([String(l.employeeId), d(l.amount).toFixed(2), d(l.emiAmount).toFixed(2)]) };
 }
 
 /* ---- Claim attachment (bill / receipt) ---- */

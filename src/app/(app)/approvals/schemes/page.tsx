@@ -9,6 +9,8 @@ import { useToast } from "@/components/ui/Toast";
 import { ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { APPROVER_TYPES, APPROVER_TYPE_LABELS, MAX_APPROVAL_STAGES, type ApproverType } from "@/lib/approvals/catalog";
+import { SchemeHistoryModal } from "@/components/approvals/ApprovalHistory";
+import { IconClock } from "@/components/icons";
 
 interface StageForm {
   approverType: ApproverType | "";
@@ -43,6 +45,7 @@ export default function ApprovalSchemePage() {
   const [stages, setStages] = useState<StageForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -129,7 +132,19 @@ export default function ApprovalSchemePage() {
 
   return (
     <>
-      <PageHeader title="Approval Scheme" description="Defines the workflow and hierarchy for transaction approvals: up to three stages, each approved by the reporting manager, a specific user or a user group." />
+      <PageHeader
+        title="Approval Scheme"
+        description="Defines the workflow and hierarchy for transaction approvals: up to three stages, each approved by the reporting manager, a specific user or a user group."
+        actions={
+          <button type="button" className="button buttonSecondary" onClick={() => setShowHistory(true)} disabled={!schemes} title="Who changed which scheme, when, and what it was before">
+            <IconClock /> History
+          </button>
+        }
+      />
+
+      {showHistory && schemes && (
+        <SchemeHistoryModal documents={schemes.map((s) => ({ document: s.document, label: s.label }))} initialDocument={document} onClose={() => setShowHistory(false)} />
+      )}
 
       {error !== null && <ErrorState message={error instanceof ApiError ? error.message : "Could not load approval schemes."} onRetry={load} />}
       {!schemes && !error && <SkeletonBlock />}
@@ -252,7 +267,10 @@ export default function ApprovalSchemePage() {
                 )}
                 {canManage && (
                   <div className="formActionsBar">
-                    <span className="formActionsNote">Requests already waiting keep the stages they started with. New ones follow the scheme as saved.</span>
+                    <span className="formActionsNote">
+                      Requests already waiting keep the stages they started with. New ones follow the scheme as saved. Nobody approves their own request, and a stage
+                      with no one to act on it (no reporting manager, approver disabled, empty group) goes to the workspace owner.
+                    </span>
                     <button type="button" className="button buttonPrimary" onClick={save} disabled={saving}>
                       {saving && <span className="spinner" />} Save scheme
                     </button>

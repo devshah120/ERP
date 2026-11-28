@@ -23,6 +23,8 @@ export const APPROVAL_DOCUMENTS = [
   { key: "hr-claim", label: "ESS Claim Request", module: "HR", product: "HRMS", amount: true, href: "/hr/claims" },
   { key: "hr-advance", label: "ESS Advance Request", module: "HR", product: "HRMS", amount: true, href: "/hr/loans/requests" },
   { key: "hr-attendance-correction", label: "Attendance Correction", module: "HR", product: "HRMS", amount: false, href: "/hr/attendance/requests" },
+  { key: "hr-payroll", label: "Payroll Run", module: "HR", product: "HRMS", amount: true, href: "/hr/payroll/:id" },
+  { key: "hr-fnf", label: "Full & Final Settlement", module: "HR", product: "HRMS", amount: true, href: "/hr/payroll/fnf/:id" },
 ] as const;
 
 export type ApprovalDocumentKey = (typeof APPROVAL_DOCUMENTS)[number]["key"];

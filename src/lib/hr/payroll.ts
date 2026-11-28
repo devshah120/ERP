@@ -15,6 +15,7 @@ import { monthVariables, variableKey } from "./variables";
 import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { statutoryRules, getPayrollSettings } from "./payrollSettings";
+import { approvalGate, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
 import { applyDueChanges, salaryForMonth } from "./history";
 import { postPayrollAccrual, postPayrollPayment, reversePayrollAccrual } from "./payrollPosting";
 import { pendingArrearLines, settleArrears, reopenArrears } from "./arrears";
@@ -296,6 +297,26 @@ export async function recomputeRun(ctx: AuthContext, id: string) {
  * reimbursed claims are marked paid, all in one transaction. From here the
  * month's attendance and leave are frozen.
  */
+/** What a payroll approver signs off: the month, headcount and totals. Recalculating to different figures restarts approval. */
+function payrollApprovalRecord(run: AnyDoc) {
+  return {
+    id: run._id,
+    number: run.runNumber,
+    summary: `${monthLabel(run.month, run.year)} · ${run.employeeCount} employee(s)`,
+    amount: d(run.totalNet).toFixed(2),
+    requestedByUserId: run.createdBy ?? null,
+    fingerprint: approvalFingerprint([run.year, run.month, run.employeeCount, d(run.totalGross).toFixed(2), d(run.totalDeductions).toFixed(2), d(run.totalNet).toFixed(2), d(run.totalEmployerContribution).toFixed(2)]),
+  };
+}
+
+/** Rejection from the approval queue: the run stays a draft for HR to correct, recalculate or delete. */
+export async function rejectRunApproval(ctx: AuthContext, id: string, note: string) {
+  const run = await loadRun(ctx, id);
+  if (run.status !== "DRAFT") throw AppError.badRequest(`This payroll is already ${run.status.toLowerCase()}`, "PAYROLL_NOT_DRAFT");
+  await approvalGate(ctx, "hr-payroll", payrollApprovalRecord(run), "reject", note);
+  return { id, status: "DRAFT" };
+}
+
 /** Payroll Settings → "Restrict salary if leaves are pending": refuses approval while leave in the month awaits a decision. */
 async function assertNoPendingLeave(ctx: AuthContext, run: AnyDoc) {
   const settings = await getPayrollSettings(ctx.businessId);
@@ -317,6 +338,9 @@ export async function approveRun(ctx: AuthContext, id: string, input: { payUnmar
   if (slips.length === 0) throw AppError.badRequest("This payroll has no payslips", "PAYROLL_EMPTY");
   const { unmarkedDays, unmarkedEmployees } = await assertAttendanceSettled(ctx, run, slips, input.payUnmarkedAsPresent === true);
   await assertNoPendingLeave(ctx, run);
+  // Approval scheme: only the last stage's approval locks the month and posts the payroll.
+  const gate = await approvalGate(ctx, "hr-payroll", payrollApprovalRecord(run), "approve");
+  if (!gate.proceed) return { id, status: "DRAFT", unmarkedDaysPaid: 0, approvalMessage: gate.message };
 
   const session = await mongoose.startSession();
   try {
@@ -474,6 +498,8 @@ export async function cancelRun(ctx: AuthContext, id: string, reason: string) {
     documentId: run._id,
     reason,
   });
+  // A deleted draft can no longer be approved: close its open approval.
+  if (wasDraft) await cancelApproval(ctx.businessId, "hr-payroll", run._id);
   return { id, status: wasDraft ? "DELETED" : "CANCELLED" };
 }
 

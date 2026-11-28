@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okDecision } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { z } from "zod";
@@ -26,7 +27,7 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
     return ok(await recomputeRun(ctx, id), "Payroll recalculated");
   }
   requirePermission(ctx, "hr-payroll.approve");
-  if (action === "approve") return ok(await approveRun(ctx, id, approveRunSchema.parse(body)), "Payroll approved");
+  if (action === "approve") return okDecision(await approveRun(ctx, id, approveRunSchema.parse(body)), "Payroll approved");
   if (action === "pay") return ok(await markRunPaid(ctx, id, payRunSchema.parse(body)), "Payroll marked paid");
   const result = await cancelRun(ctx, id, cancelRunSchema.parse(body).reason);
   return ok(result, result.status === "DELETED" ? "Draft payroll deleted" : "Payroll cancelled");

@@ -1,9 +1,12 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
+import { createHash } from "crypto";
 import Decimal from "decimal.js";
 import { z } from "zod";
 import { AppError } from "@/lib/errors/AppError";
 import { ApprovalScheme, ApprovalUserGroup, ApprovalRequest } from "@/models/approval";
 import { User } from "@/models/User";
+import { Role } from "@/models/Role";
+import { AuditLog } from "@/models/AuditLog";
 import { Employee } from "@/models/hr";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { recordAudit } from "@/lib/services/auditService";
@@ -19,6 +22,17 @@ import { APPROVAL_DOCUMENTS, APPROVER_TYPES, APPROVER_TYPE_LABELS, MAX_APPROVAL_
  * stage, and only the last one lets the module carry out the approval.
  * Rejecting at any stage closes the request and lets the module reject.
  * Without a scheme (or with "Approval Req." off) everything works as before.
+ *
+ * Safeguards:
+ * - Nobody approves their own request (only the workspace owner may, and it
+ *   is recorded as an owner override).
+ * - A record changed after it was sent (amount, lines, dates…) starts again
+ *   from stage 1: its fingerprint no longer matches the request's.
+ * - A stage nobody can act on (no reporting manager, approver disabled or the
+ *   requester themselves, empty or inactive group) goes to the workspace
+ *   owner rather than being skipped, so approval is never silently bypassed.
+ *   Only a stage under its amount limit is skipped.
+ * - Two approvers deciding the same stage at once: the second is refused.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,6 +41,11 @@ type AnyDoc = any;
 const d = (v: unknown) => new Decimal(v ? String(v) : "0");
 const isOwner = (ctx: AuthContext) => ctx.permissions.includes("*");
 const oid = (v: unknown) => (v ? new Types.ObjectId(String(v)) : null);
+/** The document belongs to a product this workspace has. */
+const inProducts = (ctx: AuthContext, document: string) => {
+  const p = approvalDocument(document)?.product;
+  return Boolean(p && ctx.products.includes(p));
+};
 
 export interface ApprovalRecord {
   id: Types.ObjectId | string;
@@ -37,6 +56,21 @@ export interface ApprovalRecord {
   /** HR: whose request it is. ERP: left out, found from requestedByUserId. */
   employeeId?: Types.ObjectId | string | null;
   requestedByUserId?: Types.ObjectId | string | null;
+  /** What is being approved, from approvalFingerprint(); a change restarts approval. */
+  fingerprint?: string;
+}
+
+/** A short stable hash of what is being approved (amount, party, lines, dates…). */
+export function approvalFingerprint(parts: unknown): string {
+  return createHash("sha256").update(JSON.stringify(parts ?? null)).digest("hex").slice(0, 32);
+}
+
+/** "1. Specific User (Asha Rao) if > ₹5000.00", for history and lists. */
+function describeStages(stages: AnyDoc[], users: Map<string, string>, groups: Map<string, string>): string[] {
+  return stages.map((st, i) => {
+    const who = st.userId ? users.get(String(st.userId)) ?? "removed user" : st.groupId ? groups.get(String(st.groupId)) ?? "removed group" : "";
+    return `${i + 1}. ${APPROVER_TYPE_LABELS[st.approverType as ApproverType]}${who ? ` (${who})` : ""}${st.minAmount != null ? ` if > ₹${d(st.minAmount).toFixed(2)}` : ""}`;
+  });
 }
 
 export type GateResult = { proceed: true } | { proceed: false; message: string };
@@ -144,6 +178,11 @@ export async function saveScheme(ctx: AuthContext, document: string, input: z.in
   }
 
   const before = await ApprovalScheme.findOne({ businessId: ctx.businessId, document }).lean<AnyDoc>();
+  const named = [...(before?.stages ?? []), ...stages];
+  const [nUsers, nGroups] = await Promise.all([
+    userNames(ctx.businessId, named.map((x: AnyDoc) => x.userId)),
+    groupNames(ctx.businessId, named.map((x: AnyDoc) => x.groupId)),
+  ]);
   await ApprovalScheme.updateOne(
     { businessId: ctx.businessId, document },
     { $set: { approvalRequired: input.approvalRequired, stages, updatedBy: ctx.userId }, $setOnInsert: { createdBy: ctx.userId } },
@@ -155,8 +194,9 @@ export async function saveScheme(ctx: AuthContext, document: string, input: z.in
     action: before ? "UPDATE" : "CREATE",
     module: "approvals",
     documentType: "ApprovalScheme",
-    oldValue: before ? { document, approvalRequired: before.approvalRequired, stages: (before.stages ?? []).length } : undefined,
-    newValue: { document, approvalRequired: input.approvalRequired, stages: stages.map((s) => s.approverType) },
+    // Full before/after in words, so the History panel can show exactly what changed.
+    oldValue: before ? { document, approvalRequired: Boolean(before.approvalRequired), stages: describeStages(before.stages ?? [], nUsers, nGroups) } : undefined,
+    newValue: { document, approvalRequired: input.approvalRequired, stages: describeStages(stages, nUsers, nGroups) },
   });
   return getScheme(ctx, document);
 }
@@ -223,6 +263,83 @@ export async function pickableUsers(ctx: AuthContext) {
 }
 
 /* ------------------------------------------------------------------ */
+/* History                                                             */
+/* ------------------------------------------------------------------ */
+
+/** Who changed which scheme when, newest first; one document or all. */
+export async function schemeHistory(ctx: AuthContext, document?: string) {
+  const allowed = APPROVAL_DOCUMENTS.filter((x) => ctx.products.includes(x.product)).map((x) => x.key as string);
+  const filter: Record<string, unknown> = { businessId: ctx.businessId, module: "approvals", documentType: "ApprovalScheme" };
+  filter["newValue.document"] = document && allowed.includes(document) ? document : { $in: allowed };
+  const rows = await AuditLog.find(filter).sort({ createdAt: -1 }).limit(200).lean<AnyDoc[]>();
+  const names = await userNames(ctx.businessId, rows.map((r) => r.userId));
+  const words = (v: AnyDoc) => (Array.isArray(v?.stages) ? v.stages.map((s: unknown) => (typeof s === "string" ? s : APPROVER_TYPE_LABELS[s as ApproverType] ?? String(s))) : typeof v?.stages === "number" ? [`${v.stages} stage(s)`] : []);
+  return rows.map((r) => ({
+    id: String(r._id),
+    at: r.createdAt,
+    by: names.get(String(r.userId)) ?? "Unknown user",
+    document: r.newValue?.document ?? "",
+    documentLabel: approvalDocument(r.newValue?.document)?.label ?? r.newValue?.document ?? "",
+    action: r.oldValue ? "Changed" : "Created",
+    before: r.oldValue ? { approvalRequired: Boolean(r.oldValue.approvalRequired), stages: words(r.oldValue) } : null,
+    after: { approvalRequired: Boolean(r.newValue?.approvalRequired), stages: words(r.newValue) },
+  }));
+}
+
+/** Whether this user may see a request's history: approvals viewers, the requester, anyone named on a stage, or a member of a stage's group. */
+async function maySee(ctx: AuthContext, req: AnyDoc): Promise<boolean> {
+  if (isOwner(ctx) || ctx.permissions.includes("approvals.view")) return true;
+  const me = String(ctx.userId);
+  if (String(req.requestedByUserId) === me) return true;
+  if ((req.currentApproverUserIds ?? []).some((u: unknown) => String(u) === me)) return true;
+  if ((req.stages ?? []).some((s: AnyDoc) => String(s.userId) === me || String(s.decidedByUserId) === me)) return true;
+  const groupIds = (req.stages ?? []).map((s: AnyDoc) => s.groupId).filter(Boolean);
+  return groupIds.length > 0 && Boolean(await ApprovalUserGroup.exists({ businessId: ctx.businessId, _id: { $in: groupIds }, userIds: ctx.userId }));
+}
+
+/** Every approval round of the request's record (restarts included), newest first, with each stage's decision. */
+export async function requestHistory(ctx: AuthContext, id: string) {
+  if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Approval not found");
+  const req = await ApprovalRequest.findOne({ _id: id, businessId: ctx.businessId }).lean<AnyDoc>();
+  if (!req || !inProducts(ctx, req.document)) throw AppError.notFound("Approval not found");
+  if (!(await maySee(ctx, req))) throw AppError.forbidden("You are not part of this approval", "APPROVAL_PRIVATE");
+  const rounds = await ApprovalRequest.find({ businessId: ctx.businessId, document: req.document, recordId: req.recordId }).sort({ createdAt: -1 }).lean<AnyDoc[]>();
+  const allStages = rounds.flatMap((r) => r.stages ?? []);
+  const [users, groups] = await Promise.all([
+    userNames(ctx.businessId, allStages.map((s: AnyDoc) => s.userId)),
+    groupNames(ctx.businessId, allStages.map((s: AnyDoc) => s.groupId)),
+  ]);
+  return {
+    document: req.document,
+    documentLabel: approvalDocument(req.document)?.label ?? req.document,
+    recordNumber: req.recordNumber,
+    href: approvalHref(req.document, String(req.recordId)),
+    rounds: rounds.map((r) => ({
+      id: String(r._id),
+      status: r.status,
+      closedReason: r.closedReason ?? "",
+      requestedByName: r.requestedByName,
+      requestedAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      amount: r.amount != null ? d(r.amount).toFixed(2) : null,
+      summary: r.summary,
+      stages: (r.stages ?? []).map((s: AnyDoc) => ({
+        stage: s.stage,
+        approver: `${APPROVER_TYPE_LABELS[s.approverType as ApproverType]}${s.userId ? ` (${users.get(String(s.userId)) ?? "removed user"})` : s.groupId ? ` (${groups.get(String(s.groupId)) ?? "removed group"})` : ""}`,
+        limit: s.minAmount != null ? d(s.minAmount).toFixed(2) : null,
+        status: s.status,
+        decidedByName: s.decidedByName,
+        decidedAt: s.decidedAt,
+        note: s.note,
+        skippedReason: s.skippedReason,
+        escalatedReason: s.escalatedReason ?? "",
+        override: Boolean(s.override),
+      })),
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Engine                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -235,6 +352,26 @@ async function latestRequest(businessId: Types.ObjectId, document: string, recor
   return ApprovalRequest.findOne({ businessId, document, recordId: oid(recordId) }).sort({ createdAt: -1 });
 }
 
+/** Active users holding the owner role (permission "*"): who a stage goes to when nobody else can act on it. */
+async function ownerUserIds(businessId: Types.ObjectId): Promise<Types.ObjectId[]> {
+  const roles = await Role.find({ businessId, permissions: "*" }, { _id: 1 }).lean<AnyDoc[]>();
+  if (!roles.length) return [];
+  const users = await User.find({ businessId, roleId: { $in: roles.map((r) => r._id) }, status: "ACTIVE" }, { _id: 1 }).lean<AnyDoc[]>();
+  return users.map((u) => u._id as Types.ObjectId);
+}
+
+/** Saves a request, turning a lost race (someone else decided first) into a clear conflict. */
+async function saveRequest(req: AnyDoc) {
+  try {
+    await req.save();
+  } catch (err) {
+    if (err instanceof mongoose.Error.VersionError) {
+      throw AppError.conflict("Someone else decided this approval a moment ago. Refresh to see where it stands.", "APPROVAL_CONFLICT");
+    }
+    throw err;
+  }
+}
+
 /** The user id of the reporting manager of the request's employee, if there is one. */
 async function reportingManagerUserId(businessId: Types.ObjectId, employeeId: unknown): Promise<Types.ObjectId | null> {
   if (!employeeId) return null;
@@ -245,11 +382,13 @@ async function reportingManagerUserId(businessId: Types.ObjectId, employeeId: un
 }
 
 /**
- * Moves the request to the first stage from `from` that applies and has an
- * approver. Stages under their amount limit, and Reporting Manager stages
- * with no manager set, are skipped. Returns false when no stage is left.
+ * Moves the request to the first stage from `from` that applies. Only a
+ * stage under its amount limit is skipped. A stage nobody can act on goes to
+ * the workspace owner (escalatedReason says why). Returns false when no
+ * stage is left.
  */
 async function activateFrom(req: AnyDoc, from: number): Promise<boolean> {
+  const requester = String(req.requestedByUserId ?? "");
   for (let i = from; i < req.stages.length; i++) {
     const st = req.stages[i];
     if (st.minAmount != null && req.amount != null && !d(req.amount).gt(d(st.minAmount))) {
@@ -259,18 +398,29 @@ async function activateFrom(req: AnyDoc, from: number): Promise<boolean> {
     }
     let users: Types.ObjectId[] = [];
     let group: Types.ObjectId | null = null;
+    let escalate = "";
     if (st.approverType === "REPORTING_MANAGER") {
       const mgr = await reportingManagerUserId(req.businessId, req.employeeId);
-      if (!mgr) {
-        st.status = "SKIPPED";
-        st.skippedReason = "No reporting manager with a login is set";
-        continue;
-      }
-      users = [mgr];
+      if (!mgr) escalate = "No reporting manager with a login is set";
+      else if (String(mgr) === requester) escalate = "The reporting manager raised this request";
+      else users = [mgr];
     } else if (st.approverType === "SPECIFIC_USER") {
-      users = st.userId ? [st.userId] : [];
+      const u = st.userId ? await User.findOne({ _id: st.userId, businessId: req.businessId }, { status: 1 }).lean<AnyDoc>() : null;
+      if (!u || u.status === "DISABLED") escalate = "The named approver no longer has an active login";
+      else if (String(st.userId) === requester) escalate = "The named approver raised this request";
+      else users = [st.userId];
     } else {
-      group = st.groupId ?? null;
+      const g = st.groupId ? await ApprovalUserGroup.findOne({ _id: st.groupId, businessId: req.businessId, deletedAt: null, status: "ACTIVE" }, { userIds: 1 }).lean<AnyDoc>() : null;
+      const others = (g?.userIds ?? []).filter((u: unknown) => String(u) !== requester);
+      const active = others.length ? await User.countDocuments({ businessId: req.businessId, _id: { $in: others }, status: { $ne: "DISABLED" } }) : 0;
+      if (!g) escalate = "The user group is inactive or deleted";
+      else if (active === 0) escalate = "No one else in the user group has an active login";
+      else group = st.groupId;
+    }
+    if (escalate) {
+      users = await ownerUserIds(req.businessId);
+      group = null;
+      st.escalatedReason = `${escalate}, so the workspace owner approves`;
     }
     st.status = "PENDING";
     req.currentStage = st.stage;
@@ -312,28 +462,58 @@ export async function openApproval(ctx: AuthContext, document: string, rec: Appr
     requestedByUserId: requestedBy,
     requestedByName: names.get(String(requestedBy)) ?? "",
     employeeId,
+    fingerprint: rec.fingerprint ?? "",
     status: "PENDING",
     stages: scheme.stages.map((s: AnyDoc, i: number) => ({ stage: i + 1, approverType: s.approverType, userId: s.userId, groupId: s.groupId, minAmount: s.minAmount, status: "WAITING" })),
   });
   if (!(await activateFrom(req, 0))) {
     // Nothing applies (all under limit / no manager): treat as approved straight away.
     req.status = "APPROVED";
-    await req.save();
+    await saveRequest(req);
     return null;
   }
-  await req.save();
+  await saveRequest(req);
   return req;
 }
 
-/** Whether this user may act on the request's current stage. */
-async function mayAct(ctx: AuthContext, req: AnyDoc): Promise<boolean> {
-  if (isOwner(ctx)) return true;
+/** Closes a request without a decision (the record changed), keeping its stage history. */
+async function supersede(ctx: AuthContext, req: AnyDoc, reason: string) {
+  req.status = "CANCELLED";
+  req.closedReason = reason;
+  req.currentApproverUserIds = [];
+  req.currentGroupId = null;
+  await saveRequest(req);
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CANCEL", module: "approvals", documentType: approvalDocument(req.document)?.label ?? req.document, documentId: req.recordId, reason });
+}
+
+const CHANGED = "Changed after it was sent for approval, so approval started again from stage 1";
+
+/**
+ * After a record is edited: if what was sent for approval changed, the open
+ * request is closed and (with `reopen`) a fresh one starts from stage 1.
+ * Returns the new request, or null when nothing changed or none was reopened.
+ */
+export async function restartIfChanged(ctx: AuthContext, document: string, rec: ApprovalRecord, reopen: boolean) {
+  if (!rec.fingerprint) return null;
+  const open = await ApprovalRequest.findOne({ businessId: ctx.businessId, document, recordId: oid(rec.id), status: "PENDING" });
+  if (!open || !open.fingerprint || open.fingerprint === rec.fingerprint) return null;
+  await supersede(ctx, open, CHANGED);
+  return reopen ? openApproval(ctx, document, rec) : null;
+}
+
+/** Whether this user is the current stage's approver by name or group (the owner's override aside). */
+async function isNamedApprover(ctx: AuthContext, req: AnyDoc): Promise<boolean> {
   if (String(req.requestedByUserId) === String(ctx.userId)) return false;
   if ((req.currentApproverUserIds ?? []).some((u: unknown) => String(u) === String(ctx.userId))) return true;
   if (req.currentGroupId) {
     return Boolean(await ApprovalUserGroup.exists({ _id: req.currentGroupId, businessId: ctx.businessId, deletedAt: null, status: "ACTIVE", userIds: ctx.userId }));
   }
   return false;
+}
+
+/** Whether this user may act on the request's current stage: its approver, or the workspace owner (recorded as an override). */
+async function mayAct(ctx: AuthContext, req: AnyDoc): Promise<boolean> {
+  return isOwner(ctx) || (await isNamedApprover(ctx, req));
 }
 
 /** "Stage-2 · Reporting Manager (Asha Rao)" */
@@ -361,7 +541,15 @@ export async function approvalGate(ctx: AuthContext, document: string, rec: Appr
     if (req?.status === "PENDING") await ApprovalRequest.updateOne({ _id: req._id }, { $set: { status: "CANCELLED" } });
     return { proceed: true };
   }
-  // A finished approval whose module step failed afterwards (e.g. balance check) can be retried.
+  // Changed since it was sent: what was approved so far no longer counts.
+  let changed = false;
+  if (req && (req.status === "PENDING" || req.status === "APPROVED") && rec.fingerprint && req.fingerprint && req.fingerprint !== rec.fingerprint) {
+    await supersede(ctx, req, CHANGED);
+    req = null;
+    changed = true;
+  }
+
+  // A finished approval whose module step failed afterwards (e.g. balance check) can be retried, for the same content only.
   if (req?.status === "APPROVED" && action === "approve") return { proceed: true };
   if (req?.status === "REJECTED" && action === "reject") return { proceed: true };
 
@@ -370,6 +558,11 @@ export async function approvalGate(ctx: AuthContext, document: string, rec: Appr
     req = await openApproval(ctx, document, rec);
     if (!req) return { proceed: true };
     justOpened = true;
+  }
+
+  // The approver acted on the old content: they review the new one first.
+  if (changed) {
+    return { proceed: false, message: `This record changed after it was sent for approval, so approval started again. Waiting for ${await currentApproverLabel(ctx.businessId, req)}.` };
   }
 
   if (!(await mayAct(ctx, req))) {
@@ -386,20 +579,21 @@ export async function approvalGate(ctx: AuthContext, document: string, rec: Appr
   st.decidedByName = me;
   st.decidedAt = new Date();
   st.note = note;
+  st.override = !(await isNamedApprover(ctx, req));
 
   if (action === "reject") {
     req.status = "REJECTED";
     req.currentApproverUserIds = [];
     req.currentGroupId = null;
-    await req.save();
-    await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "REJECT", module: "approvals", documentType: approvalDocument(document)?.label ?? document, documentId: req.recordId, newValue: { stage: st.stage }, reason: note || undefined });
+    await saveRequest(req);
+    await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "REJECT", module: "approvals", documentType: approvalDocument(document)?.label ?? document, documentId: req.recordId, newValue: { stage: st.stage, ownerOverride: st.override }, reason: note || undefined });
     return { proceed: true };
   }
 
   const more = await activateFrom(req, req.stages.indexOf(st) + 1);
   if (!more) req.status = "APPROVED";
-  await req.save();
-  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "APPROVE", module: "approvals", documentType: approvalDocument(document)?.label ?? document, documentId: req.recordId, newValue: { stage: st.stage, final: !more }, reason: note || undefined });
+  await saveRequest(req);
+  await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "APPROVE", module: "approvals", documentType: approvalDocument(document)?.label ?? document, documentId: req.recordId, newValue: { stage: st.stage, final: !more, ownerOverride: st.override }, reason: note || undefined });
   if (more) return { proceed: false, message: `Stage-${st.stage} approved. Now waiting for ${await currentApproverLabel(ctx.businessId, req)}.` };
   return { proceed: true };
 }
@@ -453,6 +647,7 @@ export async function approvalQueue(ctx: AuthContext, params: z.infer<typeof que
       status: r.status,
       waitingFor: r.status === "PENDING" ? await currentApproverLabel(ctx.businessId, r) : "",
       canAct: r.status === "PENDING" && (await mayAct(ctx, r)),
+      closedReason: r.closedReason ?? "",
       stages: (r.stages ?? []).map((s: AnyDoc) => ({
         stage: s.stage,
         approverType: s.approverType,
@@ -461,6 +656,8 @@ export async function approvalQueue(ctx: AuthContext, params: z.infer<typeof que
         decidedAt: s.decidedAt,
         note: s.note,
         skippedReason: s.skippedReason,
+        escalatedReason: s.escalatedReason ?? "",
+        override: Boolean(s.override),
       })),
     });
   }
@@ -471,7 +668,8 @@ export async function approvalQueue(ctx: AuthContext, params: z.infer<typeof que
 export async function requestForAction(ctx: AuthContext, id: string) {
   if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Approval not found");
   const req = await ApprovalRequest.findOne({ _id: id, businessId: ctx.businessId });
-  if (!req) throw AppError.notFound("Approval not found");
+  // A product the workspace no longer has can't be acted on.
+  if (!req || !inProducts(ctx, req.document)) throw AppError.notFound("Approval not found");
   if (req.status !== "PENDING") throw AppError.conflict(`This approval is already ${String(req.status).toLowerCase()}`, "APPROVAL_CLOSED");
   if (!(await mayAct(ctx, req))) throw AppError.forbidden(`Waiting for ${await currentApproverLabel(ctx.businessId, req)}.`, "APPROVAL_NOT_YOURS");
   return req;

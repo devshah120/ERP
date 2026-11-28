@@ -64,6 +64,10 @@ const requestStageSchema = new Schema(
     decidedAt: { type: Date, default: null },
     note: { type: String, default: "" },
     skippedReason: { type: String, default: "" },
+    /** Why the stage went to the workspace owner instead (no reporting manager, approver disabled, empty group…). */
+    escalatedReason: { type: String, default: "" },
+    /** The workspace owner decided a stage that was not theirs. */
+    override: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -87,8 +91,13 @@ const approvalRequestSchema = new Schema(
     currentApproverUserIds: { type: [Schema.Types.ObjectId], default: [] },
     currentGroupId: { type: Schema.Types.ObjectId, default: null },
     stages: { type: [requestStageSchema], default: [] },
+    /** What was sent for approval (amount, lines, dates…). A change restarts approval from stage 1. */
+    fingerprint: { type: String, default: "" },
+    /** Why a request was closed without a decision, e.g. changed after it was sent. */
+    closedReason: { type: String, default: "" },
   },
-  { timestamps: true }
+  // Two approvers deciding the same stage at once: the second save fails instead of both counting.
+  { timestamps: true, optimisticConcurrency: true }
 );
 approvalRequestSchema.index({ businessId: 1, document: 1, recordId: 1, createdAt: -1 });
 approvalRequestSchema.index({ businessId: 1, status: 1, currentApproverUserIds: 1 });

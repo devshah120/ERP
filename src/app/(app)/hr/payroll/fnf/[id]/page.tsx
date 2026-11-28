@@ -94,14 +94,15 @@ export default function FnfDetailPage() {
     setBusy(true);
     setDialogError(null);
     try {
-      const r = await apiFetch<{ status: string }>(`/api/hr/payroll/fnf/${id}`, { method: "POST", body: JSON.stringify({ action, ...extra }) });
+      const r = await apiFetch<{ status: string; approvalMessage?: string }>(`/api/hr/payroll/fnf/${id}`, { method: "POST", body: JSON.stringify({ action, ...extra }) });
       setDialog(null);
       if (r.status === "DELETED") {
         toast.success("Draft deleted");
         router.push("/hr/payroll/fnf");
         return;
       }
-      toast.success(action === "approve" ? "Settlement approved" : action === "pay" ? "Settlement marked paid" : "Settlement cancelled");
+      if (r.approvalMessage) toast.success(r.approvalMessage);
+      else toast.success(action === "approve" ? "Settlement approved" : action === "pay" ? "Settlement marked paid" : "Settlement cancelled");
       load();
     } catch (err) {
       setDialogError(err instanceof ApiError ? err.message : "Something went wrong");

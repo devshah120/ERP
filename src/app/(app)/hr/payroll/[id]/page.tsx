@@ -100,14 +100,16 @@ export default function PayrollRunPage() {
     setBusy(true);
     setDialogError(null);
     try {
-      const res = await apiFetch<{ status?: string }>(`/api/hr/payroll/${id}`, { method: "POST", body: JSON.stringify({ action, ...extra }) });
+      const res = await apiFetch<{ status?: string; approvalMessage?: string }>(`/api/hr/payroll/${id}`, { method: "POST", body: JSON.stringify({ action, ...extra }) });
       setDialog(null);
       if (res.status === "DELETED") {
         toast.success("Draft payroll deleted");
         router.push("/hr/payroll");
         return;
       }
-      toast.success(action === "recompute" ? "Payroll recalculated" : action === "approve" ? "Payroll approved" : action === "pay" ? "Payroll marked paid" : "Payroll cancelled");
+      // An approval scheme may only have moved it on a stage: say so rather than "approved".
+      if (res.approvalMessage) toast.success(res.approvalMessage);
+      else toast.success(action === "recompute" ? "Payroll recalculated" : action === "approve" ? "Payroll approved" : action === "pay" ? "Payroll marked paid" : "Payroll cancelled");
       load();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Something went wrong";

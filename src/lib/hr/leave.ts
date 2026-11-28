@@ -7,7 +7,7 @@ import { recordAudit } from "@/lib/services/auditService";
 import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
 import { assertPayrollOpen } from "./attendance";
-import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
+import { approvalGate, openApproval, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
 export const applyLeaveSchema = z
@@ -274,6 +274,7 @@ function leaveApprovalRecord(app: AnyDoc) {
     summary: `${app.days} day(s) · ${dayKey(toDay(app.fromDate))}${String(app.fromDate) !== String(app.toDate) ? ` to ${dayKey(toDay(app.toDate))}` : ""}`,
     employeeId: app.employeeId,
     requestedByUserId: app.appliedByUserId ?? app.createdBy,
+    fingerprint: approvalFingerprint([String(app.employeeId), String(app.leaveTypeId), dayKey(toDay(app.fromDate)), dayKey(toDay(app.toDate)), Boolean(app.halfDay), String(app.days)]),
   };
 }
 

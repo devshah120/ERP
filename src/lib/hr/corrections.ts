@@ -7,7 +7,7 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, todayIn, loadCalendar, shiftFor } from "./calendar";
 import { computeTimes, assertPayrollOpen } from "./attendance";
 import { directReports } from "./leave";
-import { approvalGate, openApproval, cancelApproval } from "@/lib/approvals/service";
+import { approvalGate, openApproval, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
 import { regularizationPolicy, assertRegularizationAllowed, reasonFor } from "./regularization";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, businessTimeZone, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
@@ -112,6 +112,7 @@ function correctionApprovalRecord(req: AnyDoc) {
     summary: `${dayKey(toDay(req.date))} → ${String(req.requestedStatus ?? "").replace(/_/g, " ").toLowerCase()}${req.reasonName ? ` · ${req.reasonName}` : ""}`,
     employeeId: req.employeeId,
     requestedByUserId: req.appliedByUserId ?? req.createdBy,
+    fingerprint: approvalFingerprint([String(req.employeeId), dayKey(toDay(req.date)), String(req.requestedStatus ?? ""), String(req.checkIn ?? ""), String(req.checkOut ?? "")]),
   };
 }
 

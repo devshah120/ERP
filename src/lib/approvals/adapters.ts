@@ -5,6 +5,8 @@ import { EmployeeLoan } from "@/models/hr";
 import { approveLeave, rejectLeave } from "@/lib/hr/leave";
 import { decideClaim, decideAdvance } from "@/lib/hr/money";
 import { approveCorrection, rejectCorrection } from "@/lib/hr/corrections";
+import { approveRun, rejectRunApproval } from "@/lib/hr/payroll";
+import { approveFnf, rejectFnfApproval } from "@/lib/hr/fnf";
 import { dayKey, toDay } from "@/lib/hr/calendar";
 import { getDocumentDefinition } from "@/lib/documents/registry";
 import { approvalTransition, allowedTransitions } from "@/lib/documents/workflows";
@@ -53,6 +55,23 @@ export async function actOnApproval(ctx: AuthContext, req: AnyDoc, action: "appr
       const c = withPermissions(ctx, ["hr-attendance.edit"]);
       if (action === "reject") return rejectCorrection(c, id, note || "Rejected in approval queue");
       return approveCorrection(c, id, note);
+    }
+    case "hr-payroll": {
+      const c = withPermissions(ctx, ["hr-payroll.approve"]);
+      // Unmarked attendance can only be paid as present from the Payroll screen, where the approver sees the days.
+      if (action === "reject") return rejectRunApproval(c, id, note);
+      try {
+        return await approveRun(c, id, { payUnmarkedAsPresent: false });
+      } catch (err) {
+        if (err instanceof AppError && err.code === "UNMARKED_ATTENDANCE") {
+          throw AppError.badRequest(`${err.message} Approve it from the Payroll screen, where you can choose to pay those days as present.`, "UNMARKED_ATTENDANCE");
+        }
+        throw err;
+      }
+    }
+    case "hr-fnf": {
+      const c = withPermissions(ctx, ["hr-payroll.approve"]);
+      return action === "approve" ? approveFnf(c, id) : rejectFnfApproval(c, id, note);
     }
     default: {
       const def = getDocumentDefinition(req.document);

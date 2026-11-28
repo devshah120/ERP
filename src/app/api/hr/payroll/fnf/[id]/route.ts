@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okDecision } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import { AppError } from "@/lib/errors/AppError";
 import "@/models";
@@ -31,7 +32,7 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { id } = await params;
   const body = await req.json();
   const { action, reason } = actionSchema.parse(body);
-  if (action === "approve") return ok(await approveFnf(ctx, id), "Settlement approved");
+  if (action === "approve") return okDecision(await approveFnf(ctx, id), "Settlement approved");
   if (action === "pay") return ok(await markFnfPaid(ctx, id, payFnfSchema.parse(body)), "Settlement marked paid");
   if (reason.length < 3) throw AppError.badRequest("Give a reason for cancelling", "REASON_REQUIRED");
   const r = await cancelFnf(ctx, id, reason);

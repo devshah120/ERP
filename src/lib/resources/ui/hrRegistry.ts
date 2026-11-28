@@ -110,7 +110,6 @@ const designations = master("hr-designations", "Designations", "Designation", {
 });
 
 const grades = master("hr-grades", "Grades", "Grade", {
-  permissions: { create: "hr-designations.create", edit: "hr-designations.edit", delete: "hr-designations.delete" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Grade", filterParam: "name", sortField: "name" },
@@ -200,7 +199,6 @@ const holidays = master("hr-holidays", "Holidays", "Holiday", {
 });
 
 const holidayCalendars = master("hr-holiday-calendars", "Holiday Calendars", "Holiday calendar", {
-  permissions: { create: "hr-holidays.create", edit: "hr-holidays.edit", delete: "hr-holidays.delete" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Calendar", filterParam: "name", sortField: "name" },
@@ -255,7 +253,6 @@ const leaveTypes = master("hr-leave-types", "Leave Types", "Leave type", {
 });
 
 const leaveGroups = master("hr-leave-groups", "Leave Groups", "Leave group", {
-  permissions: { create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Leave group", filterParam: "name", sortField: "name" },
@@ -293,7 +290,6 @@ const leaveGroups = master("hr-leave-groups", "Leave Groups", "Leave group", {
 });
 
 const gradeLeaveGroups = master("hr-grade-leave-groups", "Assign Leave Group to Grade", "Leave group assignment", {
-  permissions: { create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
   columns: [
     { key: "leaveGroupId", label: "Leave group", type: "reference", reference: LEAVE_GROUP_REF, filterParam: "leaveGroup" },
     { key: "gradeId", label: "Grade", type: "reference", reference: GRADE_REF, filterParam: "grade" },
@@ -314,7 +310,6 @@ const gradeLeaveGroups = master("hr-grade-leave-groups", "Assign Leave Group to 
 });
 
 const attendanceReasons = master("hr-attendance-reasons", "Attendance Reg. Reasons", "Reason", {
-  permissions: { create: "hr-attendance.edit", edit: "hr-attendance.edit", delete: "hr-attendance.edit" },
   columns: [
     { key: "name", label: "Reason", filterParam: "name", sortField: "name" },
     { key: "reasonType", label: "Reason type", type: "label", labels: { SYSTEM: "System Defined", USER: "User Defined" }, sortField: "reasonType" },
@@ -788,10 +783,8 @@ const appraisals = master("hr-appraisals", "Appraisals", "Appraisal", {
   ],
 });
 
-const PAYROLL_PERMS = { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" };
 
 const salaryStructures = master("hr-salary-structures", "Salary Structures", "Salary structure", {
-  permissions: PAYROLL_PERMS,
   help: "hr-salary-structures",
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
@@ -848,7 +841,6 @@ const salaryStructures = master("hr-salary-structures", "Salary Structures", "Sa
 });
 
 const ptSlabs = master("hr-pt-slabs", "PT Slabs", "PT slab", {
-  permissions: PAYROLL_PERMS,
   help: "hr-pt-slabs",
   titleField: "state",
   columns: [
@@ -877,7 +869,6 @@ const ptSlabs = master("hr-pt-slabs", "PT Slabs", "PT slab", {
 
 const payComponents = master("hr-pay-components", "Pay Components", "Pay component", {
   help: "hr-pay-components",
-  permissions: { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Component", filterParam: "name", sortField: "name" },
@@ -903,7 +894,6 @@ const payComponents = master("hr-pay-components", "Pay Components", "Pay compone
 const MONTH_OPTIONS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => ({ value: String(i + 1), label: m }));
 
 const incentiveMatrices = master("hr-incentive-matrices", "Incentive Matrix", "Incentive matrix", {
-  permissions: { create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
   columns: [
     { key: "code", label: "Code", filterParam: "code", sortField: "code" },
     { key: "name", label: "Matrix", filterParam: "name", sortField: "name" },

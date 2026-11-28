@@ -3,6 +3,7 @@
 import { useMemo, useState, type ComponentType, type SVGProps } from "react";
 import Link from "next/link";
 import { useAuth } from "@/app/(app)/AuthProvider";
+import { getRequiredPermission } from "@/app/(app)/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { PAYROLL_SETUP_STEPS, WORKFORCE_GUIDE } from "@/lib/hr/payrollHelp";
 import PageHeader from "@/components/ui/PageHeader";
@@ -12,23 +13,23 @@ import { useToast } from "@/components/ui/Toast";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { IconWallet, IconCalendar, IconBuilding, IconFactory, IconUsers, IconBook, IconPlus } from "@/components/icons";
 
-type Card = { href: string; title: string; description: string; permission: string };
+type Card = { href: string; title: string; description: string };
 type Category = { key: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; cards: Card[] };
 
-/** Every HR setup screen, grouped as HR thinks of them. Each card links to an existing screen. */
+/** Every HR setup screen, grouped as HR thinks of them. Each card links to an existing screen and shows with that screen's menu permission. */
 const CATEGORIES: Category[] = [
   {
     key: "payroll",
     label: "Payroll",
     icon: IconWallet,
     cards: [
-      { href: "/hr/settings/payroll", title: "Payroll Settings", description: "Monthly or annual salary entry, salary restrictions, employee defaults.", permission: "hr-payroll.view" },
-      { href: "/hr/settings/pf", title: "PF Settings", description: "Provident fund rates and the wage ceiling.", permission: "hr-payroll.view" },
-      { href: "/hr/settings/esic", title: "ESIC Settings", description: "Employee State Insurance rates and gross limit.", permission: "hr-payroll.view" },
-      { href: "/hr-pt-slabs", title: "PT Slabs", description: "Professional tax by monthly gross for your state.", permission: "hr-payroll.view" },
-      { href: "/hr-salary-structures", title: "Salary Structures", description: "Split a gross into basic, HRA, conveyance and allowances.", permission: "hr-payroll.view" },
-      { href: "/hr-pay-components", title: "Pay Components", description: "Monthly extras: bonus, overtime, incentive, recoveries.", permission: "hr-payroll.view" },
-      { href: "/hr-incentive-matrices", title: "Incentive Matrix", description: "Yearly attendance incentive slabs.", permission: "hr-payroll.view" },
+      { href: "/hr/settings/payroll", title: "Payroll Settings", description: "Monthly or annual salary entry, salary restrictions, employee defaults." },
+      { href: "/hr/settings/pf", title: "PF Settings", description: "Provident fund rates and the wage ceiling." },
+      { href: "/hr/settings/esic", title: "ESIC Settings", description: "Employee State Insurance rates and gross limit." },
+      { href: "/hr-pt-slabs", title: "PT Slabs", description: "Professional tax by monthly gross for your state." },
+      { href: "/hr-salary-structures", title: "Salary Structures", description: "Split a gross into basic, HRA, conveyance and allowances." },
+      { href: "/hr-pay-components", title: "Pay Components", description: "Monthly extras: bonus, overtime, incentive, recoveries." },
+      { href: "/hr-incentive-matrices", title: "Incentive Matrix", description: "Yearly attendance incentive slabs." },
     ],
   },
   {
@@ -36,15 +37,15 @@ const CATEGORIES: Category[] = [
     label: "Attendance & Leave",
     icon: IconCalendar,
     cards: [
-      { href: "/hr-shifts", title: "Shifts", description: "Shift timings, grace and weekly offs.", permission: "hr-shifts.view" },
-      { href: "/hr/shifts/assign/employees", title: "Assign Shift to Employees", description: "Put employees on a shift in bulk.", permission: "hr-shifts.view" },
-      { href: "/hr-holiday-calendars", title: "Holiday Calendars", description: "Holiday lists per state or location.", permission: "hr-holidays.view" },
-      { href: "/hr/holidays/assign", title: "Assign Holiday Calendar", description: "Which employees follow which calendar.", permission: "hr-holidays.view" },
-      { href: "/hr-leave-types", title: "Leave Types", description: "Casual, sick, earned leave and their quotas.", permission: "hr-leave-types.view" },
-      { href: "/hr-leave-groups", title: "Leave Groups", description: "Bundles of leave entitlements.", permission: "hr-leave-types.view" },
-      { href: "/hr-grade-leave-groups", title: "Assign Leave Group to Grade", description: "Leave entitlement by grade.", permission: "hr-leave-types.view" },
-      { href: "/hr/attendance/regularization", title: "Attendance Regularization", description: "Which days employees may ask to correct.", permission: "hr-attendance.view" },
-      { href: "/hr-attendance-reasons", title: "Attendance Reg. Reasons", description: "Reasons offered on correction requests.", permission: "hr-attendance.view" },
+      { href: "/hr-shifts", title: "Shifts", description: "Shift timings, grace and weekly offs." },
+      { href: "/hr/shifts/assign/employees", title: "Assign Shift to Employees", description: "Put employees on a shift in bulk." },
+      { href: "/hr-holiday-calendars", title: "Holiday Calendars", description: "Holiday lists per state or location." },
+      { href: "/hr/holidays/assign", title: "Assign Holiday Calendar", description: "Which employees follow which calendar." },
+      { href: "/hr-leave-types", title: "Leave Types", description: "Casual, sick, earned leave and their quotas." },
+      { href: "/hr-leave-groups", title: "Leave Groups", description: "Bundles of leave entitlements." },
+      { href: "/hr-grade-leave-groups", title: "Assign Leave Group to Grade", description: "Leave entitlement by grade." },
+      { href: "/hr/attendance/regularization", title: "Attendance Regularization", description: "Which days employees may ask to correct." },
+      { href: "/hr-attendance-reasons", title: "Attendance Reg. Reasons", description: "Reasons offered on correction requests." },
     ],
   },
   {
@@ -52,9 +53,9 @@ const CATEGORIES: Category[] = [
     label: "Company",
     icon: IconBuilding,
     cards: [
-      { href: "/hr-departments", title: "Departments", description: "Departments and their heads.", permission: "hr-departments.view" },
-      { href: "/hr-designations", title: "Designations", description: "Job titles.", permission: "hr-designations.view" },
-      { href: "/hr-grades", title: "Grades", description: "Bands that decide leave entitlement.", permission: "hr-designations.view" },
+      { href: "/hr-departments", title: "Departments", description: "Departments and their heads." },
+      { href: "/hr-designations", title: "Designations", description: "Job titles." },
+      { href: "/hr-grades", title: "Grades", description: "Bands that decide leave entitlement." },
     ],
   },
   {
@@ -62,9 +63,9 @@ const CATEGORIES: Category[] = [
     label: "Contract Labour",
     icon: IconFactory,
     cards: [
-      { href: "/hr-contractors", title: "Contractors", description: "Labour agencies, wage and overtime terms.", permission: "hr-contractors.view" },
-      { href: "/hr-contract-workers", title: "Workers", description: "Daily-wage workers and their contractors.", permission: "hr-contract-workers.view" },
-      { href: "/hr/shifts/assign/contractors", title: "Assign Shift to Contractors", description: "Shift timings that decide overtime.", permission: "hr-contractors.view" },
+      { href: "/hr-contractors", title: "Contractors", description: "Labour agencies, wage and overtime terms." },
+      { href: "/hr-contract-workers", title: "Workers", description: "Daily-wage workers and their contractors." },
+      { href: "/hr/shifts/assign/contractors", title: "Assign Shift to Contractors", description: "Shift timings that decide overtime." },
     ],
   },
 ];
@@ -80,7 +81,14 @@ export default function HrSettingsPage() {
   const [demoError, setDemoError] = useState<string | null>(null);
 
   const visible = useMemo(
-    () => CATEGORIES.map((c) => ({ ...c, cards: c.cards.filter((card) => hasPermission(card.permission)) })).filter((c) => c.cards.length > 0),
+    () =>
+      CATEGORIES.map((c) => ({
+        ...c,
+        cards: c.cards.filter((card) => {
+          const perm = getRequiredPermission(card.href);
+          return !perm || hasPermission(perm);
+        }),
+      })).filter((c) => c.cards.length > 0),
     [hasPermission]
   );
   const q = query.trim().toLowerCase();
@@ -110,7 +118,7 @@ export default function HrSettingsPage() {
         actions={
           <>
             <SearchBox value={query} onChange={setQuery} placeholder="Search settings…" width="16rem" />
-            {hasPermission("hr-payroll.process") && (
+            {hasPermission("hr-salary-structures.create") && hasPermission("hr-pt-slabs.create") && (
               <button type="button" className="button buttonSecondary" onClick={() => setConfirmDemo(true)}>
                 <IconPlus /> Create demo data
               </button>
@@ -119,7 +127,7 @@ export default function HrSettingsPage() {
         }
       />
 
-      {hasPermission("hr-payroll.view") && (
+      {hasPermission("hr-payroll-settings.view") && (
         <section className="formSection" style={{ marginBottom: "1rem" }}>
           <div className="formSectionHead">
             <div className="formSectionTitle">Payroll setup, in order</div>

@@ -69,6 +69,16 @@ export function requirePermission(ctx: AuthContext, permission: string): void {
   throw AppError.forbidden(`Missing required permission: ${permission}`);
 }
 
+/**
+ * Throws 403 unless the context holds at least one of the permissions — for
+ * data that two screens show (the stock report on its own menu entry and
+ * inside Stock on Hand). The first key is the one named in the error.
+ */
+export function requireAnyPermission(ctx: AuthContext, permissions: readonly string[]): void {
+  if (permissions.some((p) => hasPermission(ctx, p))) return;
+  requirePermission(ctx, permissions[0]);
+}
+
 /** Throws 403 when the permission's module belongs to a product this workspace has not bought. */
 export function requireProductFor(ctx: AuthContext, permission: string): void {
   const product = productForPermission(permission);

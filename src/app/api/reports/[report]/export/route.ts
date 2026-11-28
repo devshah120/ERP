@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { AppError } from "@/lib/errors/AppError";
 import { getAuthContext } from "@/lib/auth/context";
-import { reportQuerySchema, runReport, getReport } from "@/lib/reports/service";
+import { reportQuerySchema, runReport, getReport, assertCanRunReport } from "@/lib/reports/service";
 import { buildExportResponse } from "@/lib/export/exporter";
 import { describeFilters, resolveFormat, assertNotTruncated, EXPORT_PAGE_SIZE } from "@/lib/export/shared";
 import "@/models";
@@ -18,6 +18,7 @@ export const GET = withApiHandler(async (req: NextRequest, { params }) => {
   if (!def) throw AppError.notFound("Unknown report");
 
   const ctx = getAuthContext(req);
+  assertCanRunReport(ctx, report);
   const searchParams = Object.fromEntries(req.nextUrl.searchParams);
   const format = resolveFormat(searchParams.format);
 

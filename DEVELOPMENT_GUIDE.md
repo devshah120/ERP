@@ -57,7 +57,9 @@ MongoDB Database (Replica Set)
 
 #### A. Multi-Tenancy, Auth & RBAC
 - **Context Extraction**: `getAuthContext(req)` in API routes and `getServerAuthContext()` in Server Components verify JWTs and yield `userId`, `businessId`, `roleId`, `permissions`, `branchIds`, and `warehouseIds`.
-- **Permission Catalog** (`src/lib/auth/permissionCatalog.ts`): Centralized list of `<module>.<action>` permissions. Owner role carries wildcard `*`.
+- **Permission Catalog** (`src/lib/auth/permissionCatalog.ts`): Centralized list of `<module>.<action>` permissions. Owner role carries wildcard `*`. **Every menu entry has its own module**: each ERP report (`report-<key>.view`), HR report (`hr-report-<key>.view`), analysis screen (`analysis-<module>.view`) and settings screen (`settings-<section>.view/edit`, `hr-payroll-settings.*`, …); a screen that is only a step of a bigger module (Disburse Payroll) uses that module's actions. A new screen needs its key in the catalog and in `ROUTE_PERMISSIONS` (`navigation.ts`), checked on the server; `test/permissions.test.ts` fails otherwise.
+- **Role editor** (`src/components/admin/RoleEditor.tsx`, layout in `roleEditorLayout.ts`): built from `NAV_SECTIONS`, so roles are granted menu by menu, sub-menu by sub-menu, like the sidebar; rights no menu uses are listed last. `requires` on a module ticks the lookups its forms need.
+- **Moving a screen onto its own permission**: add the old keys that opened it to `LEGACY_GRANTS` and bump `PERMISSIONS_VERSION`. Roles with an older `Role.permissionsVersion` are upgraded once (`src/lib/auth/roleUpgrade.ts`: at sign-in, token refresh, `/api/auth/me` and the roles list), so nobody loses access and the new key can then be revoked on its own.
 - **Tenant Isolation**: `TenantRepository<T>` enforces `businessId` as the first argument in all queries.
 
 #### B. The Generic Resource Framework (Masters)

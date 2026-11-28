@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { z } from "zod";
 import { User } from "@/models/User";
 import { Role } from "@/models/Role";
+import { upgradeBusinessRoles } from "@/lib/auth/roleUpgrade";
 import { AuditLog, AUDIT_ACTIONS } from "@/models/AuditLog";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,6 +36,8 @@ export async function listUsers(businessId: Types.ObjectId) {
 }
 
 export async function listRoles(businessId: Types.ObjectId) {
+  // The editor must show (and save back) lists written for the current catalog.
+  await upgradeBusinessRoles(businessId);
   const [roles, counts] = await Promise.all([
     Role.find({ businessId }).sort({ isSystemRole: -1, name: 1 }).lean<AnyDoc[]>(),
     User.aggregate([{ $match: { businessId } }, { $group: { _id: "$roleId", n: { $sum: 1 } } }]),

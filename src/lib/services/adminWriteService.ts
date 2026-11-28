@@ -8,7 +8,8 @@ import { Session } from "@/models/Session";
 import { Business } from "@/models/Business";
 import { hashPassword, isPasswordStrongEnough } from "@/lib/auth/password";
 import { recordAudit } from "@/lib/services/auditService";
-import { ALL_PERMISSION_KEYS } from "@/lib/auth/permissionCatalog";
+import { ALL_PERMISSION_KEYS, PERMISSIONS_VERSION } from "@/lib/auth/permissionCatalog";
+import { upgradeBusinessRoles } from "@/lib/auth/roleUpgrade";
 import type { AuthContext } from "@/lib/auth/context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,6 +208,8 @@ export async function createRole(input: z.infer<typeof roleCreateSchema>, ctx: A
  */
 export async function updateRole(id: string, input: z.infer<typeof roleUpdateSchema>, ctx: AuthContext) {
   if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Role not found");
+  // Upgrade first, so a save that changes only the name never stamps an old list as current.
+  await upgradeBusinessRoles(ctx.businessId);
   const role = await Role.findOne({ _id: id, businessId: ctx.businessId });
   if (!role) throw AppError.notFound("Role not found");
   if (role.isSystemRole) throw AppError.badRequest(`"${role.name}" is a system role and cannot be changed`, "SYSTEM_ROLE");
@@ -217,7 +220,10 @@ export async function updateRole(id: string, input: z.infer<typeof roleUpdateSch
     role.name = input.name;
   }
   if (input.description !== undefined) role.description = input.description;
-  if (input.permissions) role.permissions = input.permissions;
+  if (input.permissions) {
+    role.permissions = input.permissions;
+    role.permissionsVersion = PERMISSIONS_VERSION;
+  }
   if (input.isActive !== undefined) role.isActive = input.isActive;
   role.updatedBy = ctx.userId;
   await role.save();

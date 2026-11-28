@@ -15,14 +15,18 @@ import { useToast } from "@/components/ui/Toast";
 import SimpleField from "@/components/forms/SimpleField";
 import { IconArrowLeft, IconInfo, IconChevronDown } from "@/components/icons";
 import HelpPanel from "@/components/hr/HelpPanel";
+import AccessDenied from "@/components/ui/AccessDenied";
+import { PERMISSION_MODULES } from "@/lib/auth/permissionCatalog";
 import type { FieldConfig } from "@/lib/resources/ui/types";
 
-/** One settings section as an editable form. Read-only without settings.edit (or the section's own edit permission). */
+/** One settings section as an editable form: shown with the section's view permission, editable with its edit permission. */
 export default function SettingsFormView({ sectionKey }: { sectionKey: string }) {
   const section = SETTINGS_SECTIONS[sectionKey];
   const { hasPermission } = useAuth();
   const toast = useToast();
-  const canEdit = hasPermission(section.editPermission ?? "settings.edit");
+  const canEdit = hasPermission(section.editPermission);
+  const canView = canEdit || hasPermission(section.viewPermission);
+  const rightsLabel = PERMISSION_MODULES.get(section.editPermission.split(".")[0])?.label ?? section.title;
 
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [options, setOptions] = useState<Record<string, { value: string; label: string }[]>>({});
@@ -105,6 +109,8 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
     );
   }
 
+  if (!canView) return <AccessDenied detail={`Opening ${section.title} needs the ${rightsLabel} · view permission.`} />;
+
   return (
     <>
       <PageHeader
@@ -127,7 +133,7 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
         </div>
         {!canEdit && (
           <div className="banner bannerLocked" style={{ marginBottom: "1rem" }}>
-            <span>You can view these settings. Changing them needs {section.editPermission ? `the ${section.editPermission} permission` : "the Settings · edit permission"}.</span>
+            <span>You can view these settings. Changing them needs the {rightsLabel} · edit permission.</span>
           </div>
         )}
         {error && (

@@ -7,11 +7,13 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
-import { PERMISSION_GROUPS as ALL_PERMISSION_GROUPS } from "@/lib/auth/permissionCatalog";
+import { ALL_PERMISSION_KEYS } from "@/lib/auth/permissionCatalog";
 import { useAuth } from "@/app/(app)/AuthProvider";
-import { permissionInProducts } from "@/lib/products";
+import type { Product } from "@/lib/products";
+import { buildRoleEditorLayout, layoutKeys, togglePermissions } from "@/components/admin/roleEditorLayout";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
+import SearchBox from "@/components/ui/SearchBox";
 import { SkeletonBlock } from "@/components/ui/States";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -41,11 +43,14 @@ const ACTION_LABELS: Record<string, string> = {
   "manage-registers": "Open/close registers",
   "approve-all": "Approve anyone's (HR)",
   allocate: "Allocate",
+  process: "Process",
 };
 
 /**
- * Create or edit a custom role. Permissions are shown module by module with
- * one checkbox per action, so it's clear exactly what the role can do.
+ * Create or edit a custom role. Permissions are laid out like the sidebar:
+ * section → menu → the rights that control its sub-menus, one checkbox per
+ * action, so every menu and sub-menu (reports and settings included) can be
+ * granted on its own. Rights with no menu entry close the list.
  */
 export default function RoleEditor({ roleId }: { roleId?: string }) {
   const router = useRouter();
@@ -54,14 +59,10 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
   const { me } = useAuth();
   const productKey = (me?.products ?? ["ERP"]).join(",");
 
-  // Only the modules this workspace has bought: an HRMS-only customer never sees sales or stock permissions.
-  const PERMISSION_GROUPS = useMemo(() => {
-    const products = productKey.split(",") as ("ERP" | "HRMS")[];
-    return ALL_PERMISSION_GROUPS.map((g) => ({
-      ...g,
-      modules: g.modules.filter((mod) => permissionInProducts(`${mod.key}.${mod.actions[0]}`, products)),
-    })).filter((g) => g.modules.length > 0);
-  }, [productKey]);
+  // Only the menus this workspace has bought: an HRMS-only customer never sees sales or stock permissions.
+  const layout = useMemo(() => buildRoleEditorLayout(productKey.split(",") as Product[]), [productKey]);
+  const allKeys = useMemo(() => layoutKeys(layout), [layout]);
+  const [query, setQuery] = useState("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -105,31 +106,44 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
   useUnsavedChangesWarning(dirty && !saving);
   const locked = Boolean(role?.isSystemRole);
 
+  // Any action brings the module's view (and the lookups its forms need); view off turns the module off.
   function toggle(keys: string[], on: boolean) {
-    setPerms((prev) => {
-      const next = new Set(prev);
-      for (const k of keys) {
-        if (on) next.add(k);
-        else next.delete(k);
-      }
-      // Any action implies being able to see the module.
-      for (const k of keys) {
-        const [mod, action] = k.split(".");
-        if (on && action !== "view") next.add(`${mod}.view`);
-      }
-      return next;
-    });
+    setPerms((prev) => togglePermissions(prev, keys, on));
     setDirty(true);
   }
 
-  const total = useMemo(() => PERMISSION_GROUPS.reduce((n, g) => n + g.modules.reduce((m, mod) => m + mod.actions.length, 0), 0), [PERMISSION_GROUPS]);
+  const total = allKeys.length;
+  const selected = allKeys.filter((k) => perms.has(k)).length;
+
+  // Search narrows to menus, sub-menus and rights whose names match.
+  const q = query.trim().toLowerCase();
+  const visibleLayout = useMemo(() => {
+    if (!q) return layout;
+    const hit = (text: string) => text.toLowerCase().includes(q);
+    return layout
+      .map((section) => ({
+        ...section,
+        menus: section.menus
+          .map((menu) => {
+            if (hit(menu.label) || hit(section.label)) return menu;
+            return {
+              ...menu,
+              rows: menu.rows.filter((r) => hit(r.module.label) || r.screens.some(hit)),
+              openToAll: menu.openToAll.filter(hit),
+            };
+          })
+          .filter((menu) => menu.rows.length > 0 || menu.openToAll.length > 0),
+      }))
+      .filter((section) => section.menus.length > 0);
+  }, [layout, q]);
 
   async function save() {
     if (locked) return;
     setSaving(true);
     setError(null);
     try {
-      const body = JSON.stringify({ name, description: description || undefined, permissions: [...perms] });
+      // Only keys the catalog knows: a retired key left on an old role would be refused.
+      const body = JSON.stringify({ name, description: description || undefined, permissions: [...perms].filter((p) => ALL_PERMISSION_KEYS.has(p)) });
       if (isEdit) {
         await apiFetch(`/api/admin/roles/${roleId}`, { method: "PATCH", body });
         toast.success("Role saved", role && role.members > 0 ? "Members get the new access the next time their session refreshes." : undefined);
@@ -172,7 +186,7 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
           </Link>
         }
         title={isEdit ? name || "Role" : "New role"}
-        description={`${perms.size} of ${total} permissions selected.`}
+        description={`${selected} of ${total} permissions selected.`}
         actions={
           isEdit &&
           !locked && (
@@ -223,55 +237,84 @@ export default function RoleEditor({ roleId }: { roleId?: string }) {
             </div>
           </section>
 
-          {PERMISSION_GROUPS.map((group) => {
-            const groupKeys = group.modules.flatMap((m) => m.actions.map((a) => `${m.key}.${a}`));
-            const allOn = groupKeys.every((k) => perms.has(k));
-            return (
-              <section key={group.label} className="formSection">
-                <div className="formSectionHead" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <h2 className="formSectionTitle" style={{ flex: 1 }}>
-                    {group.label}
-                  </h2>
-                  <button type="button" className="button buttonGhost buttonSm" onClick={() => toggle(groupKeys, !allOn)}>
-                    {allOn ? "Clear all" : "Select all"}
-                  </button>
-                </div>
-                <div className="formSectionBody" style={{ padding: 0 }}>
-                  <table className="table">
-                    <tbody>
-                      {group.modules.map((mod) => {
-                        const keys = mod.actions.map((a) => `${mod.key}.${a}`);
-                        const all = keys.every((k) => perms.has(k));
-                        return (
-                          <tr key={mod.key}>
-                            <td style={{ width: "16rem" }}>
-                              <label className="checkboxRow" style={{ fontWeight: 600 }}>
-                                <input type="checkbox" checked={all} onChange={(e) => toggle(keys, e.target.checked)} />
-                                {mod.label}
-                              </label>
-                            </td>
-                            <td>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem 1.25rem" }}>
-                                {mod.actions.map((a) => {
-                                  const key = `${mod.key}.${a}`;
-                                  return (
-                                    <label key={key} className="checkboxRow">
-                                      <input type="checkbox" checked={perms.has(key)} onChange={(e) => toggle([key], e.target.checked)} />
-                                      {ACTION_LABELS[a] ?? a}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            );
-          })}
+          <div className="roleEditorToolbar">
+            <SearchBox value={query} onChange={setQuery} placeholder="Find a menu, screen or report…" width="20rem" />
+            <span className="cellMuted" style={{ flex: 1 }}>
+              Laid out like the sidebar. Ticking any action also ticks View, and the lists its forms pick from.
+            </span>
+            <button type="button" className="button buttonGhost buttonSm" onClick={() => toggle(allKeys, selected < total)}>
+              {selected < total ? "Select everything" : "Clear everything"}
+            </button>
+          </div>
+
+          {visibleLayout.length === 0 && <p className="cellMuted">Nothing matches “{query}”.</p>}
+
+          {visibleLayout.map((section) => (
+            <div key={section.key} className="roleEditorSection">
+              <h2 className="roleEditorSectionTitle">{section.label}</h2>
+              {section.menus.map((menu) => {
+                const menuKeys = menu.rows.flatMap((r) => r.module.actions.map((a) => `${r.module.key}.${a}`));
+                const allOn = menuKeys.length > 0 && menuKeys.every((k) => perms.has(k));
+                return (
+                  <section key={menu.key} className="formSection">
+                    <div className="formSectionHead" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <h3 className="formSectionTitle" style={{ flex: 1 }}>
+                        {menu.label}
+                      </h3>
+                      {menuKeys.length > 0 && (
+                        <button type="button" className="button buttonGhost buttonSm" onClick={() => toggle(menuKeys, !allOn)}>
+                          {allOn ? "Clear all" : "Select all"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="formSectionBody" style={{ padding: 0 }}>
+                      <table className="table">
+                        <tbody>
+                          {menu.rows.map(({ module: mod, screens }) => {
+                            const keys = mod.actions.map((a) => `${mod.key}.${a}`);
+                            const all = keys.every((k) => perms.has(k));
+                            const single = screens.length === 1;
+                            return (
+                              <tr key={mod.key}>
+                                <td style={{ width: "20rem" }}>
+                                  <label className="checkboxRow" style={{ fontWeight: 600 }}>
+                                    <input type="checkbox" checked={all} onChange={(e) => toggle(keys, e.target.checked)} />
+                                    {single ? screens[0] : mod.label}
+                                  </label>
+                                  {!single && screens.length > 0 && <div className="roleEditorScreens">Sub-menus: {screens.join(", ")}</div>}
+                                  {single && screens[0].toLowerCase() !== mod.label.toLowerCase() && <div className="roleEditorScreens">Rights: {mod.label}</div>}
+                                </td>
+                                <td>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem 1.25rem" }}>
+                                    {mod.actions.map((a) => {
+                                      const key = `${mod.key}.${a}`;
+                                      return (
+                                        <label key={key} className="checkboxRow">
+                                          <input type="checkbox" checked={perms.has(key)} onChange={(e) => toggle([key], e.target.checked)} />
+                                          {ACTION_LABELS[a] ?? a}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {menu.openToAll.length > 0 && (
+                            <tr>
+                              <td colSpan={2} className="cellMuted">
+                                {menu.openToAll.join(", ")}: open to every signed-in user.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ))}
         </fieldset>
 
         {!locked && (

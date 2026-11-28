@@ -1,10 +1,29 @@
 import Decimal from "decimal.js";
 import { AppError } from "@/lib/errors/AppError";
-import { getReport, listReports, REPORTS } from "./registry";
+import { hasPermission, requireAnyPermission, type AuthContext } from "@/lib/auth/context";
+import { reportPermission } from "@/lib/auth/permissionCatalog";
+import { getReport, listReports as listAllReports, REPORTS } from "./registry";
 import { reportQuerySchema } from "./types";
 import type { ReportColumnDef, ReportContext, ReportQuery, ReportRow } from "./types";
 
-export { reportQuerySchema, getReport, listReports, REPORTS };
+export { reportQuerySchema, getReport, REPORTS };
+
+/** Reports that Stock on Hand also shows, so its own permission reads them too. */
+const STOCK_ON_HAND_REPORTS = new Set(["stock-summary", "stock-ledger"]);
+
+/** Any one of these opens the report: its own permission (Roles & Permissions → Reports). */
+export function reportAccessPermissions(key: string): string[] {
+  return STOCK_ON_HAND_REPORTS.has(key) ? [reportPermission(key), "inventory.view"] : [reportPermission(key)];
+}
+
+export function assertCanRunReport(ctx: AuthContext, key: string): void {
+  requireAnyPermission(ctx, reportAccessPermissions(key));
+}
+
+/** The report catalogue, limited to the reports the caller may open. */
+export function listReports(ctx: AuthContext) {
+  return listAllReports().filter((r) => reportAccessPermissions(r.key).some((p) => hasPermission(ctx, p)));
+}
 export type { ReportQuery, ReportColumnDef };
 
 export interface ReportResult {

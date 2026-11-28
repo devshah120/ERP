@@ -140,7 +140,7 @@ const designations = define("hr-designations", "Designation", {
   defaultSortDir: "asc",
 });
 
-/** Grades ride on the designation permissions so existing HR roles can use them at once. */
+/** Grades (own permissions; roles saved before got them from the designation ones, see LEGACY_GRANTS). */
 const grades: ResourceDefinition = {
   ...define("hr-grades", "Grade", {
     model: HrGrade,
@@ -156,7 +156,7 @@ const grades: ResourceDefinition = {
     defaultSort: "code",
     defaultSortDir: "asc",
   }),
-  permissions: { view: "hr-designations.view", create: "hr-designations.create", edit: "hr-designations.edit", delete: "hr-designations.delete" },
+  permissions: permissionsFor("hr-grades"),
 };
 
 const shifts = define("hr-shifts", "Shift", {
@@ -216,7 +216,7 @@ const holidays = define("hr-holidays", "Holiday", {
   toDocument: documentConverter({ dates: ["date"], refs: ["calendarId"] }),
 });
 
-/** Holiday calendars ride on the holiday permissions so existing HR roles can use them at once. */
+/** Holiday calendars, with their own permissions. */
 const holidayCalendars: ResourceDefinition = {
   ...define("hr-holiday-calendars", "Holiday calendar", {
     model: HolidayCalendar,
@@ -235,7 +235,7 @@ const holidayCalendars: ResourceDefinition = {
     defaultSortDir: "asc",
     afterWrite: async (ctx, _kind, doc) => keepSingleDefault(ctx.businessId, doc),
   }),
-  permissions: { view: "hr-holidays.view", create: "hr-holidays.create", edit: "hr-holidays.edit", delete: "hr-holidays.delete" },
+  permissions: permissionsFor("hr-holiday-calendars"),
 };
 
 const leaveTypes = define("hr-leave-types", "Leave type", {
@@ -266,7 +266,7 @@ const leaveGroupLine = z.object({
   annualQuota: z.coerce.number().min(0, "Days can't be negative").max(365),
 });
 
-/** Leave groups are leave policy, so they ride on the leave-type permissions. */
+/** Leave groups, with their own permissions. */
 const leaveGroups: ResourceDefinition = {
   ...define("hr-leave-groups", "Leave group", {
     model: LeaveGroup,
@@ -296,12 +296,12 @@ const leaveGroups: ResourceDefinition = {
     defaultSortDir: "asc",
     toDocument: documentConverter({ lines: { leaveTypes: { refs: ["leaveTypeId"] } } }),
   }),
-  permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+  permissions: permissionsFor("hr-leave-groups"),
 };
 
 const idRef = (message: string) => z.string().trim().regex(/^[a-f\d]{24}$/i, message);
 
-/** "Assign Leave Group to Grade": leave policy, so it rides on the leave-type permissions. */
+/** "Assign Leave Group to Grade", with its own permissions. */
 const gradeLeaveGroups: ResourceDefinition = {
   ...define("hr-grade-leave-groups", "Leave group assignment", {
     model: GradeLeaveGroup,
@@ -326,10 +326,10 @@ const gradeLeaveGroups: ResourceDefinition = {
       assertGradeGroupAllowed(ctx, input.gradeId && String(input.gradeId) !== String(before.gradeId) ? input.gradeId : null, input.leaveGroupId, before._id),
     toDocument: documentConverter({ refs: ["gradeId", "leaveGroupId"] }),
   }),
-  permissions: { view: "hr-leave-types.view", create: "hr-leave-types.create", edit: "hr-leave-types.edit", delete: "hr-leave-types.delete" },
+  permissions: permissionsFor("hr-grade-leave-groups"),
 };
 
-/** Reasons for attendance correction requests; they ride on the attendance permissions. */
+/** Reasons for attendance correction requests, with their own permissions (self-service reads them through /api/hr/self). */
 const attendanceReasons: ResourceDefinition = {
   ...define("hr-attendance-reasons", "Attendance reason", {
     model: AttendanceReason,
@@ -345,7 +345,7 @@ const attendanceReasons: ResourceDefinition = {
     defaultSortDir: "asc",
     beforeList: ensureAttendanceReasons,
   }),
-  permissions: { view: "hr-attendance.view", create: "hr-attendance.edit", edit: "hr-attendance.edit", delete: "hr-attendance.edit" },
+  permissions: permissionsFor("hr-attendance-reasons"),
 };
 
 const announcements = define("hr-announcements", "Announcement", {
@@ -721,7 +721,7 @@ const appraisals = define("hr-appraisals", "Appraisal", {
 /* Payroll                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Variable pay components ride on the payroll permissions so existing HR roles can use them at once. */
+/** Variable pay components, with their own permissions. */
 const payComponents: ResourceDefinition = {
   ...define("hr-pay-components", "Pay component", {
     model: PayComponent,
@@ -739,7 +739,7 @@ const payComponents: ResourceDefinition = {
     defaultSort: "code",
     defaultSortDir: "asc",
   }),
-  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  permissions: permissionsFor("hr-pay-components"),
 };
 
 const incentiveSlab = z.object({
@@ -747,7 +747,7 @@ const incentiveSlab = z.object({
   incentiveDays: z.coerce.number().min(0, "Can't be negative").max(60, "At most 60 days"),
 });
 
-/** Attendance incentive matrices ride on the payroll permissions. */
+/** Attendance incentive matrices, with their own permissions. */
 const incentiveMatrices: ResourceDefinition = {
   ...define("hr-incentive-matrices", "Incentive matrix", {
     model: IncentiveMatrix,
@@ -789,7 +789,7 @@ const incentiveMatrices: ResourceDefinition = {
     defaultSort: "name",
     defaultSortDir: "asc",
   }),
-  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  permissions: permissionsFor("hr-incentive-matrices"),
 };
 
 const structureLine = z.object({
@@ -798,7 +798,7 @@ const structureLine = z.object({
   value: z.coerce.number().min(0, "Can't be negative").max(10_000_000).default(0),
 });
 
-/** Salary structures (HR Settings → Payroll) ride on the payroll permissions. */
+/** Salary structures (HR Settings → Payroll), with their own permissions. */
 const salaryStructures: ResourceDefinition = {
   ...define("hr-salary-structures", "Salary structure", {
     model: SalaryStructure,
@@ -824,7 +824,7 @@ const salaryStructures: ResourceDefinition = {
     defaultSort: "name",
     defaultSortDir: "asc",
   }),
-  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  permissions: permissionsFor("hr-salary-structures"),
 };
 
 /** Professional-tax slabs; once any is active, payroll takes PT from them. */
@@ -851,7 +851,7 @@ const ptSlabs: ResourceDefinition = {
     defaultSortDir: "asc",
     toDocument: documentConverter({ money: ["minGross", "maxGross", "amount", "februaryAmount"] }),
   }),
-  permissions: { view: "hr-payroll.view", create: "hr-payroll.process", edit: "hr-payroll.process", delete: "hr-payroll.process" },
+  permissions: permissionsFor("hr-pt-slabs"),
 };
 
 export const HR_RESOURCES: Record<string, ResourceDefinition> = {

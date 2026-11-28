@@ -146,8 +146,10 @@ export interface SettingsSection {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   schema: z.ZodObject<any>;
   fields: FieldConfig[];
-  /** Permission to change it, when not settings.edit (e.g. an HR policy edited by HR). */
-  editPermission?: string;
+  /** Permission that shows the screen in the menu (reading the values needs only a sign-in: forms pre-fill from them). */
+  viewPermission: string;
+  /** Permission to change it. */
+  editPermission: string;
   /** Where the screen's back link goes, when not the Settings page. */
   back?: { href: string; label: string };
   /** Collapsible groups (accordion), each listing its field names; without them the fields show as one form. */
@@ -175,6 +177,8 @@ const GENDERS = [
 export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   items: {
     key: "items",
+    viewPermission: "settings-items.view",
+    editPermission: "settings-items.edit",
     title: "Item Settings",
     description: "Starting values for every new product, so the common case needs no typing.",
     usedBy: "Pre-filled on the New product form. Existing products are not changed.",
@@ -189,6 +193,8 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   sales: {
     key: "sales",
+    viewPermission: "settings-sales.view",
+    editPermission: "settings-sales.edit",
     title: "Sales Settings",
     description: "Defaults applied when a new quotation, order or invoice is started.",
     usedBy:
@@ -203,6 +209,8 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   purchase: {
     key: "purchase",
+    viewPermission: "settings-purchase.view",
+    editPermission: "settings-purchase.edit",
     title: "Purchase Settings",
     description: "Defaults applied when a new purchase order or supplier bill is started.",
     usedBy: "Pre-filled on new purchase documents, along with the default Purchase Terms & Conditions template.",
@@ -215,6 +223,8 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   pos: {
     key: "pos",
+    viewPermission: "settings-pos.view",
+    editPermission: "settings-pos.edit",
     title: "POS Settings",
     description: "How the billing counter behaves.",
     usedBy: "Read by Open Register on every sale and by the printed receipt.",
@@ -248,6 +258,8 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   "print-formats": {
     key: "print-formats",
+    viewPermission: "settings-print-formats.view",
+    editPermission: "settings-print-formats.edit",
     title: "Print Formats",
     description: "Pick the layout used when printing each document type.",
     usedBy: "The POS receipt, POS bill reprints and the Print screen of every sales and purchase document.",
@@ -257,6 +269,8 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   notifications: {
     key: "notifications",
+    viewPermission: "settings-notifications.view",
+    editPermission: "settings-notifications.edit",
     title: "Notifications",
     description: "Which findings appear under the bell in the header.",
     usedBy: "Filters the alerts in the header bell. The dashboard itself still shows every finding.",
@@ -270,12 +284,13 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   "attendance-regularization": {
     key: "attendance-regularization",
+    viewPermission: "hr-attendance-regularization.view",
+    editPermission: "hr-attendance-regularization.edit",
     title: "Attendance Regularization",
     description: "Which days employees may ask to have their attendance corrected, and how many.",
     usedBy:
       "Checked when an employee raises a correction request and again when a manager or HR approves it. Limits count days back (or ahead) from the day the request is raised; 0 means no limit.",
     schema: attendanceRegularizationSchema,
-    editPermission: "hr-attendance.edit",
     back: { href: "/hr/attendance/requests", label: "Attendance corrections" },
     fields: [
       { name: "applicable", label: "Attendance regularization applicable", type: "checkbox", fullWidth: true, hint: "Off: employees cannot raise correction requests" },
@@ -295,12 +310,13 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   "hr-payroll-settings": {
     key: "hr-payroll-settings",
+    viewPermission: "hr-payroll-settings.view",
+    editPermission: "hr-payroll-settings.edit",
     title: "Payroll Settings",
     description: "Workspace-wide payroll rules: how salary amounts are entered, what holds a payroll back, and employee defaults.",
     usedBy:
       "The employee form (salary split, defaults, mandatory fields), payslip generation (PF account check), payroll approval (pending leave check) and the payslip PDF (bank name).",
     schema: hrPayrollSettingsSchema,
-    editPermission: "hr-payroll.process",
     back: { href: "/hr/settings", label: "HR Settings" },
     help: "hr-payroll-settings",
     groups: [
@@ -334,11 +350,12 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   "hr-pf-settings": {
     key: "hr-pf-settings",
+    viewPermission: "hr-pf-settings.view",
+    editPermission: "hr-pf-settings.edit",
     title: "PF Settings",
     description: "Provident fund rates and wage ceiling.",
     usedBy: "Every payslip generated from now on, for employees with “Deduct Provident Fund” ticked. Approved payslips keep the amounts they were made with.",
     schema: hrPfSettingsSchema,
-    editPermission: "hr-payroll.process",
     back: { href: "/hr/settings", label: "HR Settings" },
     help: "hr-pf-settings",
     fields: [
@@ -351,11 +368,12 @@ export const SETTINGS_SECTIONS: Record<string, SettingsSection> = {
   },
   "hr-esic-settings": {
     key: "hr-esic-settings",
+    viewPermission: "hr-esic-settings.view",
+    editPermission: "hr-esic-settings.edit",
     title: "ESIC Settings",
     description: "Employee State Insurance rates and gross limit.",
     usedBy: "Every payslip generated from now on, for employees with “Deduct ESI” ticked. Approved payslips keep the amounts they were made with.",
     schema: hrEsicSettingsSchema,
-    editPermission: "hr-payroll.process",
     back: { href: "/hr/settings", label: "HR Settings" },
     help: "hr-esic-settings",
     fields: [

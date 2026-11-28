@@ -293,7 +293,8 @@ export default function BarcodeLabelsPage() {
     }
   }
 
-  if (!hasPermission("items.view")) return <AccessDenied detail="Printing labels needs the Products · view permission." />;
+  if (!hasPermission("barcode-labels.view") || !hasPermission("items.view"))
+    return <AccessDenied detail="Printing labels needs the Label printing · view and Products · view permissions." />;
 
   const business = me?.business ?? null;
   const sample: LabelRow = rows[0] ?? { key: 0, itemId: "", name: "Product name", variant: "M / Black", code: "SAMPLE-001", qty: 1, mrp: "499", packedOn: today() };

@@ -9,6 +9,7 @@ import { FinancialYear } from "@/models/FinancialYear";
 import { Employee } from "@/models/hr";
 import { AppError } from "@/lib/errors/AppError";
 import { normalizeProducts } from "@/lib/products";
+import { currentRolePermissions } from "@/lib/auth/roleUpgrade";
 import "@/models";
 
 /**
@@ -37,7 +38,7 @@ export const GET = withApiHandler(async (req: NextRequest) => {
   // The access token is a snapshot from sign-in. When the role, its permissions,
   // branch/warehouse access or the workspace's products changed since, the
   // client renews its token (no sign-out needed) and loads this again.
-  const permissions = role?.permissions ?? [];
+  const permissions = await currentRolePermissions(role);
   const products = normalizeProducts(business?.products);
   const sameSet = (a: readonly string[], b: readonly string[]) =>
     a.length === b.length && [...a].sort().join("|") === [...b].sort().join("|");

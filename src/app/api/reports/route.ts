@@ -5,8 +5,8 @@ import { getAuthContext } from "@/lib/auth/context";
 import { listReports } from "@/lib/reports/service";
 import "@/models";
 
-/** Catalogue of available reports, used by the Reports index screen. */
+/** Catalogue of the reports the caller may open, used by the Reports index screen. */
 export const GET = withApiHandler(async (req: NextRequest) => {
-  getAuthContext(req); // authenticated users only
-  return ok({ reports: listReports() });
+  const ctx = getAuthContext(req);
+  return ok({ reports: listReports(ctx) });
 });

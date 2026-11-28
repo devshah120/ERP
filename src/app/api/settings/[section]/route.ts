@@ -9,8 +9,8 @@ import "@/models";
 /**
  * Reading settings needs only a signed-in user: the billing counter, the
  * product form and every document form read them to pre-fill values.
- * Changing them needs settings.edit, or the section's own permission (an HR
- * policy is changed by HR).
+ * Changing them needs the section's own edit permission (settings-items.edit,
+ * hr-payroll-settings.edit, …: one per settings screen in Roles & Permissions).
  *
  * "document-defaults" is a derived view (?docType=sales-invoices), not a
  * stored section.

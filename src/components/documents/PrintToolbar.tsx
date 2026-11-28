@@ -76,7 +76,7 @@ export default function PrintToolbar({ label, choice }: { label: string; choice?
             </Select>
           </label>
         )}
-        {changed && hasPermission("settings.edit") && (
+        {changed && hasPermission("settings-print-formats.edit") && (
           <button type="button" className="button buttonSecondary" onClick={makeDefault} disabled={saving}>
             {saving && <span className="spinner" />} Make default
           </button>

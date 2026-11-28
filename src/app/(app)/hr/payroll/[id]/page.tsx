@@ -15,6 +15,7 @@ import { ErrorState, SkeletonBlock, EmptyState } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
 import { Kpi, todayKey, downloadHref } from "@/components/hr/HrKit";
 import { formatMoney } from "@/lib/format/number";
+import { hrReportPermission } from "@/lib/auth/permissionCatalog";
 import { IconArrowLeft, IconCheck, IconDownload, IconRefresh } from "@/components/icons";
 
 interface Line {
@@ -154,12 +155,16 @@ export default function PayrollRunPage() {
           <>
             {run.status !== "CANCELLED" && (
               <>
-                <a href={downloadHref("/api/hr/reports/salary-register", reportParams, "xlsx")} className="button buttonSecondary">
-                  <IconDownload /> Salary register
-                </a>
-                <a href={downloadHref("/api/hr/reports/bank-transfer", reportParams, "xlsx")} className="button buttonSecondary">
-                  <IconDownload /> Bank sheet
-                </a>
+                {hasPermission(hrReportPermission("salary-register")) && (
+                  <a href={downloadHref("/api/hr/reports/salary-register", reportParams, "xlsx")} className="button buttonSecondary">
+                    <IconDownload /> Salary register
+                  </a>
+                )}
+                {hasPermission(hrReportPermission("bank-transfer")) && (
+                  <a href={downloadHref("/api/hr/reports/bank-transfer", reportParams, "xlsx")} className="button buttonSecondary">
+                    <IconDownload /> Bank sheet
+                  </a>
+                )}
                 <a href={`/api/hr/payroll/${run.id}/pdf`} className="button buttonSecondary" download title="Every payslip of this run in one PDF, one page each">
                   <IconDownload /> All payslips (PDF)
                 </a>

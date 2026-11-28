@@ -16,6 +16,7 @@ import { resolveGstState } from "@/lib/gst/states";
 import { seedWorkspace, slugifyDomain, uniqueDomain } from "@/lib/services/provisioningService";
 import type { RegisterInput, LoginInput } from "@/lib/validation/authSchemas";
 import { normalizeProducts } from "@/lib/products";
+import { currentRolePermissions } from "@/lib/auth/roleUpgrade";
 
 export interface RegisterResult {
   businessId: string;
@@ -419,7 +420,7 @@ export async function login(input: LoginInput, meta: { userAgent?: string; ip?: 
   await user.save();
 
   const role = await Role.findOne({ _id: user.roleId, businessId: user.businessId }).lean();
-  const permissions = role?.permissions ?? [];
+  const permissions = await currentRolePermissions(role);
 
   const { accessToken, refreshToken } = await issueSession(user, permissions, meta);
 
@@ -474,7 +475,7 @@ export async function refreshSession(
   }
 
   const role = await Role.findOne({ _id: user.roleId, businessId: user.businessId }).lean();
-  const permissions = role?.permissions ?? [];
+  const permissions = await currentRolePermissions(role);
 
   // Rotate: revoke the presented token and issue a fresh pair — limits the
   // blast radius of a leaked refresh token to a single use.
@@ -734,5 +735,5 @@ export async function changePassword(
 
   user.mustChangePassword = false;
   const role = await Role.findOne({ _id: user.roleId, businessId }).lean();
-  return issueSession(user, role?.permissions ?? [], meta);
+  return issueSession(user, await currentRolePermissions(role), meta);
 }

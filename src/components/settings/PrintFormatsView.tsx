@@ -21,6 +21,7 @@ import { ScaledSheet } from "@/components/print/PrintArea";
 import PageHeader from "@/components/ui/PageHeader";
 import Modal from "@/components/ui/Modal";
 import { SkeletonBlock } from "@/components/ui/States";
+import AccessDenied from "@/components/ui/AccessDenied";
 import { useToast } from "@/components/ui/Toast";
 import { IconAlertCircle, IconArrowLeft, IconCheck, IconEye, IconFile, IconPlus } from "@/components/icons";
 
@@ -49,7 +50,8 @@ function ChevronRight(props: React.SVGProps<SVGSVGElement>) {
 export default function PrintFormatsView({ initialType }: { initialType?: string }) {
   const { me, hasPermission } = useAuth();
   const toast = useToast();
-  const canEdit = hasPermission("settings.edit");
+  const canEdit = hasPermission("settings-print-formats.edit");
+  const canView = canEdit || hasPermission("settings-print-formats.view");
 
   const [values, setValues] = useState<Record<string, string> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +100,8 @@ export default function PrintFormatsView({ initialType }: { initialType?: string
       setSavingId(null);
     }
   }
+
+  if (!canView) return <AccessDenied detail="Opening Print Templates needs the Print templates · view permission." />;
 
   return (
     <>

@@ -1,5 +1,6 @@
 import type { SVGProps, ComponentType } from "react";
 import { HR_REPORTS, INCENTIVE_REPORT_KEYS } from "@/lib/hr/reportCatalog";
+import { ANALYSIS_PERMISSIONS, analysisPermission, hrReportPermission, reportPermission } from "@/lib/auth/permissionCatalog";
 import {
   IconDashboard,
   IconSales,
@@ -559,7 +560,11 @@ export function creatableModules(): { label: string; href: string; group: string
   );
 }
 
-/** Permission required to view a specific route in the sidebar / palette. */
+/**
+ * Permission required to view a specific route in the sidebar / palette.
+ * Every menu entry has its own module here (reports and settings pages
+ * included), and the role editor lists them under the same menus.
+ */
 const ROUTE_PERMISSIONS: Record<string, string> = {
   // Contacts
   "/customers": "customers.view",
@@ -569,9 +574,9 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
 
   // Items & Stock
   "/items": "items.view",
-  "/inventory": "items.view",
+  "/inventory": "inventory.view",
   "/stock-adjustments": "stock-adjustments.view",
-  "/stock-ledger": "items.view",
+  "/stock-ledger": reportPermission("stock-ledger"),
   "/categories": "categories.view",
   "/brands": "brands.view",
   "/units": "units.view",
@@ -613,38 +618,33 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/receipts": "receipts.view",
   "/payments": "payments.view",
   "/bank-accounts": "bank-accounts.view",
-  "/bank-transactions": "bank-accounts.view",
+  "/bank-transactions": reportPermission("bank-transactions"),
   "/expenses": "expenses.view",
   "/bank-reconciliation": "bank-reconciliation.view",
   "/chart-of-accounts": "chart-of-accounts.view",
   "/account-vouchers": "vouchers.view",
-  "/general-ledger": "chart-of-accounts.view",
-  "/reports/trial-balance": "chart-of-accounts.view",
-  "/reports/profit-and-loss": "chart-of-accounts.view",
+  "/general-ledger": reportPermission("general-ledger"),
+  "/reports/trial-balance": reportPermission("trial-balance"),
+  "/reports/profit-and-loss": reportPermission("profit-and-loss"),
+  "/cash-flow": reportPermission("cash-flow"),
+  "/owner-cash-flow": reportPermission("owner-cash-flow"),
+  "/manager-cash-flow": reportPermission("manager-cash-flow"),
 
   // Reports
-  "/reports/sales-register": "sales-invoices.view",
-  "/reports/sales-detail": "sales-invoices.view",
-  "/reports/purchase-register": "purchase-invoices.view",
-  "/reports/purchase-detail": "purchase-invoices.view",
-  "/reports/gst-hsn-summary": "sales-invoices.view",
-  "/reports/stock-summary": "items.view",
-  "/reports/customer-report": "customers.view",
-  "/reports/vendor-report": "vendors.view",
-  "/reports/item-report": "items.view",
+  ...Object.fromEntries(
+    ["sales-register", "sales-detail", "purchase-register", "purchase-detail", "gst-hsn-summary", "stock-summary", "stock-ledger", "customer-report", "vendor-report", "item-report", "target-vs-actual"].map((k) => [
+      `/reports/${k}`,
+      reportPermission(k),
+    ])
+  ),
 
   // Analytics
-  "/analysis/sales": "analytics.view",
-  "/analysis/purchase": "analytics.view",
-  "/analysis/inventory": "analytics.view",
-  "/analysis/customers": "analytics.view",
-  "/analysis/vendors": "analytics.view",
-  "/analysis/accounting": "analytics.view",
+  ...Object.fromEntries(ANALYSIS_PERMISSIONS.map((a) => [`/analysis/${a.key}`, analysisPermission(a.key)])),
 
   // Admin
   "/users": "users.view",
   "/user-roles": "roles.view",
-  "/barcode-labels": "items.view",
+  "/barcode-labels": "barcode-labels.view",
   "/tally-export": "tally-export.view",
   "/document-prefixes": "document-prefixes.view",
   "/tax-rates": "tax-rates.view",
@@ -652,12 +652,12 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/additional-charges": "additional-charges.view",
   "/settings": "settings.view",
   "/settings/financial-years": "financial-years.view",
-  "/settings/items": "settings.view",
-  "/settings/sales": "settings.view",
-  "/settings/purchase": "settings.view",
-  "/settings/pos": "settings.view",
-  "/settings/print-formats": "settings.view",
-  "/settings/notifications": "settings.view",
+  "/settings/items": "settings-items.view",
+  "/settings/sales": "settings-sales.view",
+  "/settings/purchase": "settings-purchase.view",
+  "/settings/pos": "settings-pos.view",
+  "/settings/print-formats": "settings-print-formats.view",
+  "/settings/notifications": "settings-notifications.view",
   "/logs": "audit-logs.view",
   "/approvals/schemes": "approvals.view",
   "/approvals/groups": "approvals.view",
@@ -676,7 +676,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-employees": "hr-employees.view",
   "/hr-departments": "hr-departments.view",
   "/hr-designations": "hr-designations.view",
-  "/hr-grades": "hr-designations.view",
+  "/hr-grades": "hr-grades.view",
   "/hr-assets": "hr-assets.view",
   "/hr/assets/allocation": "hr-assets.view",
   "/hr/assets/return": "hr-assets.view",
@@ -685,16 +685,16 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/attendance/register": "hr-attendance.view",
   "/hr/attendance/employee": "hr-attendance.view",
   "/hr/attendance/requests": "hr-attendance.view",
-  "/hr/attendance/regularization": "hr-attendance.view",
-  "/hr-attendance-reasons": "hr-attendance.view",
+  "/hr/attendance/regularization": "hr-attendance-regularization.view",
+  "/hr-attendance-reasons": "hr-attendance-reasons.view",
   "/hr/leaves": "hr-leaves.view",
   "/hr/leaves/balances": "hr-leaves.view",
   "/hr-leave-types": "hr-leave-types.view",
-  "/hr-leave-groups": "hr-leave-types.view",
-  "/hr-grade-leave-groups": "hr-leave-types.view",
+  "/hr-leave-groups": "hr-leave-groups.view",
+  "/hr-grade-leave-groups": "hr-grade-leave-groups.view",
   "/hr-shifts": "hr-shifts.view",
   "/hr-holidays": "hr-holidays.view",
-  "/hr-holiday-calendars": "hr-holidays.view",
+  "/hr-holiday-calendars": "hr-holiday-calendars.view",
   "/hr/holidays/assign": "hr-holidays.view",
   "/hr/shifts/assign/employees": "hr-shifts.view",
   "/hr/shifts/assign/contractors": "hr-shifts.view",
@@ -702,7 +702,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/payroll/variables": "hr-payroll.view",
   "/hr/payroll/variables/import": "hr-payroll.process",
   "/hr/payroll/incentive": "hr-payroll.view",
-  "/hr-incentive-matrices": "hr-payroll.view",
+  "/hr-incentive-matrices": "hr-incentive-matrices.view",
   "/hr/payroll/approve": "hr-payroll.view",
   "/hr/payroll/disburse": "hr-payroll.view",
   "/hr/payroll/rollback": "hr-payroll.view",
@@ -713,13 +713,13 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/payroll/arrears/da": "hr-payroll.view",
   "/hr/payroll/gratuity": "hr-payroll.view",
   "/hr/payroll/fnf": "hr-payroll.view",
-  "/hr-pay-components": "hr-payroll.view",
+  "/hr-pay-components": "hr-pay-components.view",
   "/hr/settings": "hr-employees.view",
-  "/hr/settings/payroll": "hr-payroll.view",
-  "/hr/settings/pf": "hr-payroll.view",
-  "/hr/settings/esic": "hr-payroll.view",
-  "/hr-salary-structures": "hr-payroll.view",
-  "/hr-pt-slabs": "hr-payroll.view",
+  "/hr/settings/payroll": "hr-payroll-settings.view",
+  "/hr/settings/pf": "hr-pf-settings.view",
+  "/hr/settings/esic": "hr-esic-settings.view",
+  "/hr-salary-structures": "hr-salary-structures.view",
+  "/hr-pt-slabs": "hr-pt-slabs.view",
   "/hr/loans": "hr-loans.view",
   "/hr/loans/requests": "hr-loans.view",
   "/hr/claims": "hr-claims.view",
@@ -732,8 +732,9 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr-job-openings": "hr-job-openings.view",
   "/hr-candidates": "hr-candidates.view",
   "/hr-appraisals": "hr-appraisals.view",
-  "/hr/reports": "hr-reports.view",
-  ...Object.fromEntries(HR_REPORTS.map((r) => [`/hr/reports/${r.key}`, "hr-reports.view"])),
+  // /hr/reports opens the salary register.
+  "/hr/reports": hrReportPermission("salary-register"),
+  ...Object.fromEntries(HR_REPORTS.map((r) => [`/hr/reports/${r.key}`, hrReportPermission(r.key)])),
 };
 
 export function getRequiredPermission(href: string): string | null {
@@ -783,20 +784,21 @@ const CREATE_PERMISSIONS: Record<string, string> = {
   "/hr-employees/new": "hr-employees.create",
   "/hr-departments/new": "hr-departments.create",
   "/hr-designations/new": "hr-designations.create",
-  "/hr-grades/new": "hr-designations.create",
+  "/hr-grades/new": "hr-grades.create",
   "/hr-assets/new": "hr-assets.create",
   "/hr-announcements/new": "hr-announcements.create",
   "/hr/leaves/new": "hr-leaves.create",
   "/hr-leave-types/new": "hr-leave-types.create",
-  "/hr-leave-groups/new": "hr-leave-types.create",
-  "/hr-grade-leave-groups/new": "hr-leave-types.create",
-  "/hr-incentive-matrices/new": "hr-payroll.process",
-  "/hr-salary-structures/new": "hr-payroll.process",
-  "/hr-pt-slabs/new": "hr-payroll.process",
-  "/hr-attendance-reasons/new": "hr-attendance.edit",
+  "/hr-leave-groups/new": "hr-leave-groups.create",
+  "/hr-grade-leave-groups/new": "hr-grade-leave-groups.create",
+  "/hr-incentive-matrices/new": "hr-incentive-matrices.create",
+  "/hr-salary-structures/new": "hr-salary-structures.create",
+  "/hr-pt-slabs/new": "hr-pt-slabs.create",
+  "/hr-pay-components/new": "hr-pay-components.create",
+  "/hr-attendance-reasons/new": "hr-attendance-reasons.create",
   "/hr-shifts/new": "hr-shifts.create",
   "/hr-holidays/new": "hr-holidays.create",
-  "/hr-holiday-calendars/new": "hr-holidays.create",
+  "/hr-holiday-calendars/new": "hr-holiday-calendars.create",
   "/hr/loans/new": "hr-loans.create",
   "/hr/claims/new": "hr-claims.create",
   "/hr-contractors/new": "hr-contractors.create",

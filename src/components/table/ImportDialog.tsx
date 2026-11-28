@@ -143,8 +143,11 @@ export default function ImportDialog({
     setError(null);
     try {
       const body = await send("commit", { skipDuplicates: String(skipDuplicates) });
+      // With an approval scheme for adding these records, the whole file waits for approval.
+      const held = body?.data?.pendingApproval === true;
       setDone(body.message ?? "Imported");
-      toast.success("Import complete", body.message);
+      if (held) toast.info("Import sent for approval", body.message);
+      else toast.success("Import complete", body.message);
       setPreview(null);
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { isHeld } from "@/lib/approvals/catalog";
 import { getPath } from "@/lib/resources/ui/paths";
 import type { ResourceUi, ColumnConfig } from "@/lib/resources/ui/types";
 import { useAuth } from "@/app/(app)/AuthProvider";
@@ -260,7 +261,11 @@ export default function ResourceListView({ config }: { config: ResourceUi }) {
 
     setConfirm(null);
     setSelected(new Set());
-    if (failed.length === 0) {
+    // Deleting may need approval: those are held, not deleted.
+    const held = results.filter((r) => r.status === "fulfilled" && isHeld(r.value)).length;
+    if (held > 0 && failed.length === 0) {
+      toast.info(`${held} deletion${held === 1 ? "" : "s"} sent for approval`, held < ids.length ? `${ids.length - held} deleted now.` : "They are deleted once approved.");
+    } else if (failed.length === 0) {
       toast.success(`Deleted ${ids.length} record${ids.length === 1 ? "" : "s"}`, "Historical documents that used them are unaffected.");
     } else {
       toast.error(`Deleted ${ids.length - failed.length} of ${ids.length}`, `${failed.length} could not be deleted.`);

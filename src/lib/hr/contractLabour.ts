@@ -7,7 +7,8 @@ import { Employee, Shift } from "@/models/hr";
 import { Contractor, ContractWorker, ContractAttendance, CONTRACT_ATTENDANCE_STATUSES } from "@/models/contractLabour";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, monthRange, minutesOf, loadCalendar, shiftFor, dayKind, holidaysFor, type HrCalendar, type ShiftRule } from "./calendar";
-import { computeTimes } from "./attendance";
+import { computeTimes, type ApprovedRun } from "./attendance";
+import { holdForApproval } from "@/lib/approvals/service";
 import { shiftHours } from "./shiftHours";
 import { toForest } from "./orgTree";
 import { objectId, type AnyDoc } from "./common";
@@ -301,7 +302,7 @@ export const saveLabourSheetSchema = z.object({
 });
 
 /** Saves a day's attendance for many workers at once (one row per worker per day). */
-export async function saveLabourSheet(ctx: AuthContext, input: z.infer<typeof saveLabourSheetSchema>) {
+export async function saveLabourSheet(ctx: AuthContext, input: z.infer<typeof saveLabourSheetSchema>, opts: ApprovedRun = {}) {
   const date = toDay(input.date);
   const [{ workers, contractors }, cal] = await Promise.all([workersOn(ctx, date), loadCalendar(ctx.businessId, date, date)]);
   const byId = new Map(workers.map((w) => [String(w._id), w]));
@@ -341,6 +342,23 @@ export async function saveLabourSheet(ctx: AuthContext, input: z.infer<typeof sa
         upsert: true,
       },
     });
+  }
+  if (!opts.approved && ops.length > 0) {
+    const byContractor = new Map<string, number>();
+    for (const r of input.rows) byContractor.set(r.contractorId, (byContractor.get(r.contractorId) ?? 0) + 1);
+    const held = await holdForApproval(ctx, {
+      document: "hr-labour-attendance",
+      targetKey: `labour-attendance:${dayKey(date)}`,
+      summary: `Labour attendance of ${ops.length} worker(s) for ${dayKey(date)}, ${(overtimeMinutes / 60).toFixed(1)} h overtime`,
+      details: [
+        { label: "Date", value: dayKey(date) },
+        { label: "Workers", value: String(ops.length) },
+        { label: "Overtime", value: `${(overtimeMinutes / 60).toFixed(1)} hours` },
+        ...[...byContractor].map(([cid, n]) => ({ label: String(contractors.get(cid)?.name ?? "Contractor"), value: `${n} worker(s)` })),
+      ],
+      payload: input,
+    });
+    if (held) return held;
   }
   if (ops.length > 0) await ContractAttendance.bulkWrite(ops);
 

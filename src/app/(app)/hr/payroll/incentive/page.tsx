@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -108,6 +109,10 @@ export default function AttendanceIncentivePage() {
     setPostError(null);
     try {
       const res = await apiFetch<{ added: number; removed: number; amount: string; payout: string; draftPayroll: string | null }>("/api/hr/payroll/incentive", { method: "POST", body: JSON.stringify(params) });
+      if (notifyHeld(toast, res)) {
+        setConfirming(false);
+        return void load();
+      }
       toast.success(
         `Incentive added to ${res.payout} payroll for ${res.added} employee${res.added === 1 ? "" : "s"}`,
         res.draftPayroll ? `Regenerate draft ${res.draftPayroll} so it includes the incentive.` : "It is paid when that month's payroll is generated."

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchBox from "@/components/ui/SearchBox";
@@ -124,6 +125,11 @@ export default function ShiftAssignView({ target }: { target: "employees" | "con
         method: "PUT",
         body: JSON.stringify({ ids: [...selected], shiftId: assignTo === "default" ? null : assignTo }),
       });
+      if (notifyHeld(toast, res)) {
+        setSelected(new Set());
+        setAssignTo("");
+        return void (await load());
+      }
       toast.success(`${selected.size} ${selected.size === 1 ? t.one : t.many} now on ${res.shift ?? "the default shift"}`, "Attendance marked from now on uses this shift.");
       setSelected(new Set());
       setAssignTo("");

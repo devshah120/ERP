@@ -21,5 +21,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const { year, month } = monthQuery.parse({ year: form.get("year"), month: form.get("month") });
   const commit = String(form.get("commit") ?? "") === "true";
   const result = await importVariables(ctx, await parseImportFile(file), year, month, commit);
-  return ok(result, result.committed ? "Variable pay imported" : undefined);
+  return ok(result, result.approvalMessage ?? (result.committed ? "Variable pay imported" : undefined));
 });

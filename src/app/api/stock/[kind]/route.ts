@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok, created } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { AppError } from "@/lib/errors/AppError";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import {
@@ -40,7 +41,7 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const body = await req.json();
   if (resolved === "stock-adjustments") {
     const doc = await createAdjustment(adjustmentCreateSchema.parse(body), ctx);
-    return created(doc, "Stock adjustment posted");
+    return okOrHeld(doc, "Stock adjustment posted", 201);
   }
   const doc = await createTransfer(transferCreateSchema.parse(body), ctx);
   return created(doc, "Stock transfer completed");

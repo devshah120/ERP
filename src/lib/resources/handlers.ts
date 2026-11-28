@@ -9,6 +9,8 @@ import { getNextMasterCode } from "@/lib/services/masterNumberingService";
 import { recordAudit } from "@/lib/services/auditService";
 import { serializeDoc } from "@/lib/resources/serialize";
 import type { ResourceDefinition } from "@/lib/resources/types";
+import type { HeldResult } from "@/lib/approvals/catalog";
+import { holdResourceWrite } from "@/lib/approvals/resourceApprovals";
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,70 +144,82 @@ export function getHandler(def: ResourceDefinition) {
   };
 }
 
-export function createHandler(def: ResourceDefinition) {
-  return async (req: NextRequest) => {
-    const ctx = getAuthContext(req);
-    requirePermission(ctx, def.permissions.create);
-
-    const body = await req.json();
-    const input = def.createSchema.parse(body) as Record<string, unknown>;
-    const side = takeSideFields(def, input);
-    if (def.prepareWrite) await def.prepareWrite(ctx, input);
-    const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
-    if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
-    if (def.validateCreate) await def.validateCreate(ctx, side, input);
-
-    if (def.autoCode) {
-      const existing = payload[def.autoCode.field];
-      if (!existing) {
-        payload[def.autoCode.field] = await getNextMasterCode({
-          businessId: ctx.businessId,
-          entityType: def.autoCode.entityType,
-          prefix: def.autoCode.prefix,
-        });
-      }
-    }
-
-    payload.createdBy = ctx.userId;
-    payload.updatedBy = ctx.userId;
-
-    const repo = new TenantRepository(def.model);
-    const doc = await repo.create(ctx.businessId, payload);
-
-    await auditWrite(ctx, def, "CREATE", doc._id, undefined, payload);
-    if (def.afterWrite) await def.afterWrite(ctx, "CREATE", doc, undefined, side);
-
-    return created(serializeDoc(doc), `${def.label} created successfully`);
-  };
+/** Options for the write cores below: `approved` = the approval engine is running a change its scheme has approved, so it is not held again. */
+export interface ResourceWriteOptions {
+  approved?: boolean;
+  /** Approved update: the record's updatedAt when the change was sent; a later edit makes the held change stale. */
+  baseUpdatedAt?: string | null;
 }
 
-export function updateHandler(def: ResourceDefinition) {
-  return async (req: NextRequest, id: string) => {
-    const ctx = getAuthContext(req);
-    requirePermission(ctx, def.permissions.edit);
+type WriteResult = { held: HeldResult } | { doc: Record<string, unknown> };
 
-    if (!Types.ObjectId.isValid(id)) throw AppError.notFound(`${def.label} not found`);
+/**
+ * Create, shared by the form endpoint and the approval engine. Every check
+ * runs first, so a change sent for approval was already valid when sent; an
+ * active scheme then holds it (nothing is written) until it is approved.
+ */
+export async function createResourceRecord(def: ResourceDefinition, ctx: AuthContext, body: unknown, opts: ResourceWriteOptions = {}): Promise<WriteResult> {
+  const input = def.createSchema.parse(body) as Record<string, unknown>;
+  const side = takeSideFields(def, input);
+  if (def.prepareWrite) await def.prepareWrite(ctx, input);
+  const payload = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
+  if (def.beforeCreate) await def.beforeCreate(ctx.businessId, 1);
+  if (def.validateCreate) await def.validateCreate(ctx, side, input);
 
-    const body = await req.json();
-    const input = def.updateSchema.parse(body) as Record<string, unknown>;
-    const side = takeSideFields(def, input);
+  if (!opts.approved) {
+    const held = await holdResourceWrite(ctx, def, { op: "create", body, input });
+    if (held) return { held };
+  }
 
-    const repo = new TenantRepository(def.model);
-    const before = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
-    if (!before) throw AppError.notFound(`${def.label} not found`);
-    if (def.prepareWrite) await def.prepareWrite(ctx, input, before);
-    const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
-    update.updatedBy = ctx.userId;
-    if (def.validateUpdate) await def.validateUpdate(ctx, side, before, input);
+  if (def.autoCode) {
+    const existing = payload[def.autoCode.field];
+    if (!existing) {
+      payload[def.autoCode.field] = await getNextMasterCode({
+        businessId: ctx.businessId,
+        entityType: def.autoCode.entityType,
+        prefix: def.autoCode.prefix,
+      });
+    }
+  }
 
-    const doc = await repo.findByIdAndUpdate(ctx.businessId, id, update);
-    if (!doc) throw AppError.notFound(`${def.label} not found`);
+  payload.createdBy = ctx.userId;
+  payload.updatedBy = ctx.userId;
 
-    await auditWrite(ctx, def, "UPDATE", doc._id, serializeDoc(before), update);
-    if (def.afterWrite) await def.afterWrite(ctx, "UPDATE", doc, before, side);
+  const repo = new TenantRepository(def.model);
+  const doc = await repo.create(ctx.businessId, payload);
 
-    return ok(serializeDoc(doc), `${def.label} updated successfully`);
-  };
+  await auditWrite(ctx, def, "CREATE", doc._id, undefined, payload);
+  if (def.afterWrite) await def.afterWrite(ctx, "CREATE", doc, undefined, side);
+  return { doc: serializeDoc(doc) as Record<string, unknown> };
+}
+
+export async function updateResourceRecord(def: ResourceDefinition, ctx: AuthContext, id: string, body: unknown, opts: ResourceWriteOptions = {}): Promise<WriteResult> {
+  if (!Types.ObjectId.isValid(id)) throw AppError.notFound(`${def.label} not found`);
+  const input = def.updateSchema.parse(body) as Record<string, unknown>;
+  const side = takeSideFields(def, input);
+
+  const repo = new TenantRepository(def.model);
+  const before = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
+  if (!before) throw AppError.notFound(`${def.label} not found`);
+  if (opts.approved && opts.baseUpdatedAt && before.updatedAt && new Date(before.updatedAt).toISOString() !== opts.baseUpdatedAt) {
+    throw AppError.conflict(`This ${def.label.toLowerCase()} was changed by someone else after the change was sent, so the approved change was not applied. Send it again from the current record.`, "APPROVAL_STALE");
+  }
+  if (def.prepareWrite) await def.prepareWrite(ctx, input, before);
+  const update = { ...(def.toDocument ? def.toDocument(input) : input), ...def.baseFilter };
+  update.updatedBy = ctx.userId;
+  if (def.validateUpdate) await def.validateUpdate(ctx, side, before, input);
+
+  if (!opts.approved) {
+    const held = await holdResourceWrite(ctx, def, { op: "update", id, body, input, before });
+    if (held) return { held };
+  }
+
+  const doc = await repo.findByIdAndUpdate(ctx.businessId, id, update);
+  if (!doc) throw AppError.notFound(`${def.label} not found`);
+
+  await auditWrite(ctx, def, "UPDATE", doc._id, serializeDoc(before), update);
+  if (def.afterWrite) await def.afterWrite(ctx, "UPDATE", doc, before, side);
+  return { doc: serializeDoc(doc) as Record<string, unknown> };
 }
 
 /**
@@ -213,27 +227,53 @@ export function updateHandler(def: ResourceDefinition) {
  * rows are flagged rather than removed (Section 38). Hard deletes would orphan
  * documents that legally must stay reproducible.
  */
+export async function deleteResourceRecord(def: ResourceDefinition, ctx: AuthContext, id: string, opts: ResourceWriteOptions = {}): Promise<{ held: HeldResult } | { deleted: true }> {
+  if (!Types.ObjectId.isValid(id)) throw AppError.notFound(`${def.label} not found`);
+
+  const repo = new TenantRepository(def.model);
+  const current = await repo.findOne(ctx.businessId, { _id: id, ...NOT_DELETED, ...def.baseFilter });
+  if (!current) throw AppError.notFound(`${def.label} not found`);
+  if (!opts.approved) {
+    const held = await holdResourceWrite(ctx, def, { op: "delete", id, before: current });
+    if (held) return { held };
+  }
+  const doc = await repo.findByIdAndUpdate(ctx.businessId, id, {
+    deletedAt: new Date(),
+    status: "INACTIVE",
+    updatedBy: ctx.userId,
+  });
+  if (!doc) throw AppError.notFound(`${def.label} not found`);
+
+  await auditWrite(ctx, def, "DELETE", doc._id, undefined, undefined);
+  return { deleted: true };
+}
+
+export function createHandler(def: ResourceDefinition) {
+  return async (req: NextRequest) => {
+    const ctx = getAuthContext(req);
+    requirePermission(ctx, def.permissions.create);
+    const res = await createResourceRecord(def, ctx, await req.json());
+    if ("held" in res) return ok(res.held, res.held.approvalMessage, 202);
+    return created(res.doc, `${def.label} created successfully`);
+  };
+}
+
+export function updateHandler(def: ResourceDefinition) {
+  return async (req: NextRequest, id: string) => {
+    const ctx = getAuthContext(req);
+    requirePermission(ctx, def.permissions.edit);
+    const res = await updateResourceRecord(def, ctx, id, await req.json());
+    if ("held" in res) return ok(res.held, res.held.approvalMessage, 202);
+    return ok(res.doc, `${def.label} updated successfully`);
+  };
+}
+
 export function deleteHandler(def: ResourceDefinition) {
   return async (req: NextRequest, id: string) => {
     const ctx = getAuthContext(req);
     requirePermission(ctx, def.permissions.delete);
-
-    if (!Types.ObjectId.isValid(id)) throw AppError.notFound(`${def.label} not found`);
-
-    const repo = new TenantRepository(def.model);
-    if (def.baseFilter) {
-      const inSlice = await repo.findOne(ctx.businessId, { _id: id, ...def.baseFilter });
-      if (!inSlice) throw AppError.notFound(`${def.label} not found`);
-    }
-    const doc = await repo.findByIdAndUpdate(ctx.businessId, id, {
-      deletedAt: new Date(),
-      status: "INACTIVE",
-      updatedBy: ctx.userId,
-    });
-    if (!doc) throw AppError.notFound(`${def.label} not found`);
-
-    await auditWrite(ctx, def, "DELETE", doc._id, undefined, undefined);
-
+    const res = await deleteResourceRecord(def, ctx, id);
+    if ("held" in res) return ok(res.held, res.held.approvalMessage, 202);
     return ok(null, `${def.label} deleted successfully`);
   };
 }

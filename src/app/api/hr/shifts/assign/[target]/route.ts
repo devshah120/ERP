@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { AppError } from "@/lib/errors/AppError";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
@@ -28,5 +29,5 @@ export const PUT = withApiHandler(async (req: NextRequest, { params }) => {
   const { target, module } = targetOf((await params).target);
   requirePermission(ctx, "hr-shifts.edit");
   requirePermission(ctx, `${module}.edit`);
-  return ok(await assignShift(ctx, target, shiftAssignSchema.parse(await req.json())), "Shift assigned");
+  return okOrHeld(await assignShift(ctx, target, shiftAssignSchema.parse(await req.json())), "Shift assigned");
 });

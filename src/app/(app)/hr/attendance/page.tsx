@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -123,6 +124,7 @@ export default function DailyAttendancePage() {
         .filter((r) => dirty.has(r.employeeId) && !r.record?.fromLeave)
         .map((r) => ({ employeeId: r.employeeId, ...drafts[r.employeeId] }));
       const res = await apiFetch<{ saved: number; skipped: number }>("/api/hr/attendance", { method: "PUT", body: JSON.stringify({ date: sheet.date, rows }) });
+      if (notifyHeld(toast, res)) return void (await load());
       toast.success(`Saved attendance for ${res.saved} employee${res.saved === 1 ? "" : "s"}`, res.skipped ? `${res.skipped} on approved leave were left as they are.` : undefined);
       await load();
     } catch (err) {

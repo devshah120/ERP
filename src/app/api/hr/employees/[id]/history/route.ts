@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { employmentHistory, recordChange, changeSchema } from "@/lib/hr/history";
@@ -19,5 +20,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   requirePermission(ctx, "hr-employees.edit");
   const { id } = await params;
   const result = await recordChange(ctx, id, changeSchema.parse(await req.json()));
-  return created(result, result.scheduled ? `Change scheduled from ${result.effectiveDate}` : "Change recorded");
+  return okOrHeld(result, (r) => (r.scheduled ? `Change scheduled from ${r.effectiveDate}` : "Change recorded"), 201);
 });

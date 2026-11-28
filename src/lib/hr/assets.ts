@@ -9,6 +9,8 @@ import { AssetAllocation, Employee, HrAsset, ASSET_CONDITIONS, ASSET_RETURN_OUTC
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, todayIn } from "./calendar";
 import { nextHrNumber, employeeLabels, escapeRegex, objectId, pageQuery, businessTimeZone, type AnyDoc } from "./common";
+import { holdForApproval } from "@/lib/approvals/service";
+import type { ApprovedRun } from "./attendance";
 
 /*
  * Asset management: the register (HrAsset master), allocations of an asset
@@ -72,10 +74,34 @@ export const allocateSchema = z
   });
 
 /** Hands an available asset to an employee on the rolls. */
-export async function allocateAsset(ctx: AuthContext, input: z.infer<typeof allocateSchema>) {
-  const emp = await Employee.findOne({ _id: input.employeeId, businessId: ctx.businessId, deletedAt: null }, { name: 1, employmentStatus: 1 }).lean<AnyDoc>();
+export async function allocateAsset(ctx: AuthContext, input: z.infer<typeof allocateSchema>, opts: ApprovedRun = {}) {
+  const emp = await Employee.findOne({ _id: input.employeeId, businessId: ctx.businessId, deletedAt: null }, { name: 1, employeeCode: 1, employmentStatus: 1 }).lean<AnyDoc>();
   if (!emp) throw AppError.notFound("Employee not found");
   if (!(WORKING_STATUSES as readonly string[]).includes(emp.employmentStatus)) throw AppError.badRequest(`${emp.name} is no longer on the rolls`, "EMPLOYEE_NOT_WORKING");
+  if (!opts.approved) {
+    const asset = await HrAsset.findOne({ _id: input.assetId, businessId: ctx.businessId, deletedAt: null }).lean<AnyDoc>();
+    if (!asset) throw AppError.notFound("Asset not found");
+    if (asset.status !== "ACTIVE") throw AppError.badRequest(`${asset.assetTag} is inactive`, "ASSET_INACTIVE");
+    if ((asset.assetStatus ?? "AVAILABLE") !== "AVAILABLE") throw AppError.badRequest(`${asset.assetTag} is not available (${String(asset.assetStatus).toLowerCase().replace("_", " ")})`, "ASSET_NOT_AVAILABLE");
+    const held = await holdForApproval(ctx, {
+      document: "hr-asset-allocation",
+      targetKey: `asset:${asset._id}`,
+      recordId: asset._id,
+      number: asset.assetTag,
+      summary: `Issue ${asset.assetTag} ${asset.name ?? ""} to ${emp.employeeCode ?? ""} ${emp.name}`.replace(/\s+/g, " "),
+      details: [
+        { label: "Asset", value: `${asset.assetTag} ${asset.name ?? ""}`.trim() },
+        { label: "Employee", value: `${emp.employeeCode ?? ""} ${emp.name}`.trim() },
+        { label: "Issued on", value: input.allocatedOn },
+        { label: "Expected back", value: input.expectedReturnDate || "—" },
+        { label: "Condition", value: input.condition },
+        { label: "Notes", value: input.notes ?? "" },
+      ],
+      employeeId: emp._id,
+      payload: input,
+    });
+    if (held) return held;
+  }
 
   const session = await mongoose.startSession();
   let out: { id: string; allocationNumber: string } | null = null;
@@ -137,8 +163,40 @@ export const returnSchema = z
 const STATUS_AFTER: Record<(typeof ASSET_RETURN_OUTCOMES)[number], string> = { RETURNED: "AVAILABLE", DAMAGED: "UNDER_REPAIR", LOST: "LOST" };
 
 /** Takes an asset back (or records it lost); the asset becomes available, goes for repair, or is marked lost. */
-export async function returnAsset(ctx: AuthContext, id: string, input: z.infer<typeof returnSchema>) {
+export async function returnAsset(ctx: AuthContext, id: string, input: z.infer<typeof returnSchema>, opts: ApprovedRun = {}) {
   if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Allocation not found");
+  if (!opts.approved) {
+    const row = await AssetAllocation.findOne({ _id: id, businessId: ctx.businessId }).lean<AnyDoc>();
+    if (!row) throw AppError.notFound("Allocation not found");
+    if (row.status !== "ALLOCATED") throw AppError.badRequest(`${row.allocationNumber} was already returned`, "ALREADY_RETURNED");
+    if (toDay(input.returnedOn) < toDay(row.allocatedOn)) throw AppError.badRequest("The return date is before the asset was allocated", "BAD_RETURN_DATE");
+    const [asset, emp] = await Promise.all([
+      HrAsset.findOne({ _id: row.assetId, businessId: ctx.businessId }, { assetTag: 1, name: 1 }).lean<AnyDoc>(),
+      Employee.findOne({ _id: row.employeeId, businessId: ctx.businessId }, { employeeCode: 1, name: 1 }).lean<AnyDoc>(),
+    ]);
+    const recovery = d(input.recoveryAmount);
+    const held = await holdForApproval(ctx, {
+      document: "hr-asset-return",
+      targetKey: `asset:${row.assetId}`,
+      recordId: row._id,
+      number: row.allocationNumber,
+      summary: `${input.outcome === "LOST" ? "Record lost" : input.outcome === "DAMAGED" ? "Take back damaged" : "Take back"} ${asset?.assetTag ?? ""} from ${emp?.employeeCode ?? ""} ${emp?.name ?? ""}${recovery.gt(0) ? `, recover ${recovery.toFixed(2)}` : ""}`.replace(/\s+/g, " "),
+      details: [
+        { label: "Allocation", value: row.allocationNumber },
+        { label: "Asset", value: `${asset?.assetTag ?? ""} ${asset?.name ?? ""}`.trim() },
+        { label: "Employee", value: `${emp?.employeeCode ?? ""} ${emp?.name ?? ""}`.trim() },
+        { label: "Outcome", value: input.outcome },
+        { label: "Condition", value: input.condition ?? "—" },
+        { label: "Recovery", value: recovery.toFixed(2) },
+        { label: "Returned on", value: input.returnedOn },
+        { label: "Notes", value: input.notes ?? "" },
+      ],
+      amount: recovery.toFixed(2),
+      employeeId: row.employeeId,
+      payload: { id, input },
+    });
+    if (held) return held;
+  }
   const session = await mongoose.startSession();
   let out: { id: string; assetStatus: string; allocationNumber: string } | null = null;
   try {

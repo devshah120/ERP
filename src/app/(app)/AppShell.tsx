@@ -23,6 +23,7 @@ import {
 import { useShortcuts } from "@/lib/shortcuts/ShortcutProvider";
 import CommandPalette from "@/components/shell/CommandPalette";
 import NotificationsMenu from "@/components/shell/NotificationsMenu";
+import ApprovalInbox from "@/components/shell/ApprovalInbox";
 import UserMenu from "@/components/shell/UserMenu";
 import { FinancialYearMenu } from "@/components/shell/HeaderWidgets";
 import {
@@ -267,6 +268,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             </>
           )}
+          <ApprovalInbox />
           {hasProduct("ERP") && <NotificationsMenu />}
           <UserMenu variant="topbar" />
         </div>

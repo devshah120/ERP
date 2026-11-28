@@ -10,7 +10,9 @@ import { toDecimal128 } from "@/lib/documents/decimal128";
 import type { ParsedSheet } from "@/lib/import/service";
 import type { AuthContext } from "@/lib/auth/context";
 import { monthRange, employeesDuring } from "./calendar";
-import { assertPayrollOpen } from "./attendance";
+import { assertPayrollOpen, type ApprovedRun } from "./attendance";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
+import type { HeldResult } from "@/lib/approvals/catalog";
 import { employeeLabels, escapeRegex, monthQuery, objectId, type AnyDoc } from "./common";
 
 /*
@@ -153,7 +155,11 @@ export const saveSchema = monthQuery.extend({
  * Saves the amounts shown on the grid: a positive amount is stored, a blank
  * or zero clears it. Refused once the month's payroll is approved.
  */
-export async function saveVariables(ctx: AuthContext, input: z.infer<typeof saveSchema>) {
+export async function saveVariables(
+  ctx: AuthContext,
+  input: z.infer<typeof saveSchema>,
+  opts: ApprovedRun = {}
+): Promise<HeldResult | { saved: number; cleared: number; draftRun: unknown; approvalMessage?: string }> {
   const { start, end } = monthRange(input.year, input.month);
   await assertPayrollOpen(ctx.businessId, [start]).catch((err) => {
     if (err instanceof AppError && err.code === "PAYROLL_LOCKED") throw AppError.badRequest("That month's payroll is already approved, so its variable pay is locked.", "PAYROLL_LOCKED");
@@ -161,10 +167,62 @@ export async function saveVariables(ctx: AuthContext, input: z.infer<typeof save
   });
   const [emps, comps] = await Promise.all([
     employeesDuring(ctx.businessId, start, end),
-    PayComponent.find({ businessId: ctx.businessId, deletedAt: null }, { _id: 1 }).lean<AnyDoc[]>(),
+    PayComponent.find({ businessId: ctx.businessId, deletedAt: null }, { _id: 1, kind: 1, code: 1, name: 1 }).lean<AnyDoc[]>(),
   ]);
   const empIds = new Set(emps.map((e) => String(e._id)));
   const compIds = new Set(comps.map((c) => String(c._id)));
+  for (const row of input.rows) {
+    if (!empIds.has(row.employeeId)) throw AppError.badRequest("One of the employees was not on the rolls that month.", "EMPLOYEE_NOT_EMPLOYED");
+    for (const componentId of Object.keys(row.amounts)) if (!compIds.has(componentId)) throw AppError.badRequest("Unknown pay component.", "UNKNOWN_COMPONENT");
+  }
+
+  // Earnings (bonus, incentive…) and deductions each follow their own approval
+  // scheme: a part with an active scheme is held, the rest is saved now.
+  const held: HeldResult[] = [];
+  if (!opts.approved) {
+    const compById = new Map(comps.map((c) => [String(c._id), c]));
+    const kindOf = (id: string) => (compById.get(id)?.kind === "DEDUCTION" ? "DEDUCTION" : "EARNING");
+    const empById = new Map(emps.map((e) => [String(e._id), e]));
+    const monthKey = `${input.year}-${String(input.month).padStart(2, "0")}`;
+    let remaining = input.rows;
+    for (const [kind, document, words] of [["EARNING", "hr-variable-earning", "earnings"], ["DEDUCTION", "hr-variable-deduction", "deductions"]] as const) {
+      const part = remaining
+        .map((r) => ({ employeeId: r.employeeId, amounts: Object.fromEntries(Object.entries(r.amounts).filter(([c]) => kindOf(c) === kind)) }))
+        .filter((r) => Object.keys(r.amounts).length > 0);
+      if (!part.length) continue;
+      let total = new Decimal(0);
+      const perComponent = new Map<string, Decimal>();
+      for (const r of part) {
+        for (const [c, t] of Object.entries(r.amounts)) {
+          const v = t === "" ? new Decimal(0) : new Decimal(t);
+          total = total.plus(v);
+          perComponent.set(c, (perComponent.get(c) ?? new Decimal(0)).plus(v));
+        }
+      }
+      const h = await holdForApproval(ctx, {
+        document,
+        targetKey: `variables:${kind}:${monthKey}:${approvalFingerprint(part.map((r) => r.employeeId).sort())}`,
+        summary: `Variable ${words} for ${monthKey}: ${part.length} employee(s), total ${total.toFixed(2)}`,
+        details: [
+          { label: "Month", value: monthKey },
+          { label: "Employees", value: String(part.length) },
+          ...[...perComponent].map(([c, v]) => ({ label: `${compById.get(c)?.code ?? ""} ${compById.get(c)?.name ?? ""}`.trim(), value: v.toFixed(2) })),
+          { label: "Total", value: total.toFixed(2) },
+          ...(part.length <= 10 ? part.map((r) => ({ label: `${empById.get(r.employeeId)?.employeeCode ?? ""} ${empById.get(r.employeeId)?.name ?? ""}`.trim(), value: Object.entries(r.amounts).map(([c, t]) => `${compById.get(c)?.code}: ${t || "0"}`).join(", ") })) : []),
+        ],
+        amount: total.toFixed(2),
+        employeeId: part.length === 1 ? part[0].employeeId : null,
+        payload: { year: input.year, month: input.month, rows: part },
+      });
+      if (!h) continue;
+      held.push(h);
+      remaining = remaining.map((r) => ({ employeeId: r.employeeId, amounts: Object.fromEntries(Object.entries(r.amounts).filter(([c]) => kindOf(c) !== kind)) })).filter((r) => Object.keys(r.amounts).length > 0);
+    }
+    if (held.length && remaining.length === 0) {
+      return held.length === 1 ? held[0] : { pendingApproval: true, approvalId: held[0].approvalId, requestNo: held.map((h) => h.requestNo).join(", "), approvalMessage: held.map((h) => h.approvalMessage).join(" ") };
+    }
+    input = { ...input, rows: remaining };
+  }
 
   const ops: AnyDoc[] = [];
   let saved = 0;
@@ -187,7 +245,8 @@ export async function saveVariables(ctx: AuthContext, input: z.infer<typeof save
   if (ops.length > 0) await PayrollVariable.bulkWrite(ops);
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "UPDATE", module: "hr.payroll", documentType: "PayrollVariable", newValue: { month: input.month, year: input.year, employees: input.rows.length, amounts: saved, cleared } });
   const state = await monthState(ctx.businessId, input.year, input.month);
-  return { saved, cleared, draftRun: state.draftRun };
+  const approvalMessage = held.length ? `Saved ${saved} amount(s). ${held.map((h) => h.approvalMessage).join(" ")}` : undefined;
+  return { saved, cleared, draftRun: state.draftRun, ...(approvalMessage ? { approvalMessage } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -233,6 +292,8 @@ export interface VariableImportResult {
   components: string[];
   errors: { row: number; message: string }[];
   committed: boolean;
+  /** Set when an approval scheme held some or all of the amounts. */
+  approvalMessage?: string;
 }
 
 /**
@@ -297,8 +358,9 @@ export async function importVariables(ctx: AuthContext, sheet: ParsedSheet, year
 
   const result: VariableImportResult = { rows: sheet.rows.length, employees: rows.length, amounts, components: columns.map((c) => c.component.code), errors, committed: false };
   if (commit && errors.length === 0 && rows.length > 0) {
-    await saveVariables(ctx, { year, month, rows });
-    result.committed = true;
+    const saved = await saveVariables(ctx, { year, month, rows });
+    result.committed = !("pendingApproval" in saved);
+    if (saved.approvalMessage) result.approvalMessage = saved.approvalMessage;
   }
   return result;
 }

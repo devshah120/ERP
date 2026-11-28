@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -110,8 +111,10 @@ function LeaveRequests() {
     setActionError(null);
     try {
       const res = await apiFetch<{ approvalMessage?: string }>(`/api/hr/leaves/${pending.row.id}`, { method: "POST", body: JSON.stringify({ action: pending.action, note: reason ?? "" }) });
-      if (res?.approvalMessage) toast.success(`${pending.row.leaveNumber}: ${res.approvalMessage}`);
-      else toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : pending.action === "reject" ? `${pending.row.leaveNumber} rejected` : `${pending.row.leaveNumber} cancelled`);
+      // Cancelling an approved leave may be held for approval (Leave Cancellation scheme).
+      const held = notifyHeld(toast, res);
+      if (!held && res?.approvalMessage) toast.success(`${pending.row.leaveNumber}: ${res.approvalMessage}`);
+      else if (!held) toast.success(pending.action === "approve" ? `${pending.row.leaveNumber} approved` : pending.action === "reject" ? `${pending.row.leaveNumber} rejected` : `${pending.row.leaveNumber} cancelled`);
       setPending(null);
       load();
     } catch (err) {

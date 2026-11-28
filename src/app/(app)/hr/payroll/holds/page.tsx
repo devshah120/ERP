@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import Modal from "@/components/ui/Modal";
@@ -61,7 +62,7 @@ export default function PayrollHoldsPage() {
     setActionError(null);
     try {
       const r = await apiFetch<{ draftRunId: string | null }>("/api/hr/payroll/holds", { method: "POST", body: JSON.stringify({ ...form, ...period }) });
-      toast.success("Salary put on hold", r.draftRunId ? "Recalculate the draft payroll to leave them out." : undefined);
+      if (!notifyHeld(toast, r)) toast.success("Salary put on hold", r.draftRunId ? "Recalculate the draft payroll to leave them out." : undefined);
       setBlocking(false);
       setForm({ employeeId: "", reason: "" });
       load();
@@ -78,7 +79,7 @@ export default function PayrollHoldsPage() {
     setActionError(null);
     try {
       const r = await apiFetch<{ draftRunId: string | null }>(`/api/hr/payroll/holds/${releasing.id}`, { method: "DELETE" });
-      toast.success(`${releasing.employeeName}'s salary released`, r.draftRunId ? "Recalculate the draft payroll to include them." : undefined);
+      if (!notifyHeld(toast, r)) toast.success(`${releasing.employeeName}'s salary released`, r.draftRunId ? "Recalculate the draft payroll to include them." : undefined);
       setReleasing(null);
       load();
     } catch (err) {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchBox from "@/components/ui/SearchBox";
@@ -97,6 +98,11 @@ export default function AssignHolidayCalendarPage() {
         method: "PUT",
         body: JSON.stringify({ employeeIds: [...selected], calendarId: target === "default" ? null : target }),
       });
+      if (notifyHeld(toast, res)) {
+        setSelected(new Set());
+        setTarget("");
+        return void (await load());
+      }
       toast.success(`${selected.size} employee${selected.size === 1 ? "" : "s"} now follow ${res.calendar ?? "the default calendar"}`, "Their attendance, leave days and payroll use these holidays from now on.");
       setSelected(new Set());
       setTarget("");

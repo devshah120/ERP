@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { balancesTable, setAllocation, allocationSchema } from "@/lib/hr/leave";
@@ -17,5 +18,5 @@ export const GET = withApiHandler(async (req: NextRequest) => {
 export const PUT = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-leaves.allocate");
-  return ok(await setAllocation(ctx, allocationSchema.parse(await req.json())), "Leave allocation saved");
+  return okOrHeld(await setAllocation(ctx, allocationSchema.parse(await req.json())), "Leave allocation saved");
 });

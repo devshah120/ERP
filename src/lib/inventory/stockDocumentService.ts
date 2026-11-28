@@ -20,6 +20,7 @@ import {
   stockAdjustmentEntries,
 } from "@/lib/accounting/posting";
 import type { AuthContext } from "@/lib/auth/context";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyDoc = any;
@@ -156,10 +157,26 @@ export async function currentBalance(
  * arithmetic mistakes, and the count is what the person on the warehouse
  * floor actually knows.
  */
-export async function createAdjustment(input: AdjustmentCreateInput, ctx: AuthContext) {
+export async function createAdjustment(input: AdjustmentCreateInput, ctx: AuthContext, opts: { approved?: boolean } = {}) {
   const { business, financialYear } = await resolveContext(ctx);
   const warehouse = await requireWarehouse(ctx.businessId, input.warehouseId, "Warehouse");
   const itemMap = await loadItems(ctx.businessId, input.lines);
+  // The count is checked against the live balance when it is posted, so an approved adjustment uses the stock as it is then.
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "erp-stock-adjustment",
+      targetKey: `stock-adjustment:${input.warehouseId}:${approvalFingerprint(input.lines)}`,
+      summary: `Stock count of ${input.lines.length} item(s) at ${(warehouse as AnyDoc).name ?? "the warehouse"}`,
+      details: [
+        { label: "Warehouse", value: String((warehouse as AnyDoc).name ?? "") },
+        { label: "Reason", value: String(input.reason) },
+        ...input.lines.slice(0, 15).map((l) => ({ label: `${(itemMap.get(l.itemId) as AnyDoc)?.name ?? "Item"}${l.variantSku ? ` (${l.variantSku})` : ""}`, value: `Counted ${l.countedQuantity}` })),
+        { label: "Notes", value: input.notes ?? "" },
+      ],
+      payload: input,
+    });
+    if (held) return held;
+  }
 
   const session = await mongoose.startSession();
   let created: AnyDoc;

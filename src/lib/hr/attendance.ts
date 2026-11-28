@@ -21,6 +21,19 @@ import {
   type ShiftRule,
 } from "./calendar";
 import { employeeLabels, selfEmployee, businessTimeZone, objectId, type AnyDoc } from "./common";
+import { holdForApproval } from "@/lib/approvals/service";
+
+/** Set by the approval engine when it runs a change its scheme has approved, so it is not held again. */
+export interface ApprovedRun {
+  approved?: boolean;
+}
+
+/** "Present: 40, Absent: 2" lines for an approver. */
+function statusLines(rows: { status: string }[]): { label: string; value: string }[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
+  return [...counts].map(([s, n]) => ({ label: s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " "), value: String(n) }));
+}
 
 /* ------------------------------------------------------------------ */
 /* Pure rules                                                          */
@@ -295,7 +308,7 @@ export const saveSheetSchema = z.object({
  * Days created by an approved leave are left alone — cancel the leave to
  * change them — and a month with approved payroll is locked.
  */
-export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof saveSheetSchema>) {
+export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof saveSheetSchema>, opts: ApprovedRun = {}) {
   const date = toDay(input.date);
   await assertPayrollOpen(ctx.businessId, [date]);
 
@@ -320,6 +333,16 @@ export async function saveDailySheet(ctx: AuthContext, input: z.infer<typeof sav
     }
     ops.push(markDayOp(ctx, emp, shiftFor(cal, emp.shiftId, emp.holidayCalendarId), date, row));
     saved += 1;
+  }
+  if (!opts.approved && ops.length > 0) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-attendance-daily",
+      targetKey: `attendance-daily:${dayKey(date)}`,
+      summary: `Attendance of ${saved} employee(s) for ${dayKey(date)}`,
+      details: [{ label: "Date", value: dayKey(date) }, { label: "Employees", value: String(saved) }, ...statusLines(input.rows.filter((r) => !leaveDays.has(r.employeeId)))],
+      payload: input,
+    });
+    if (held) return held;
   }
   if (ops.length > 0) await Attendance.bulkWrite(ops);
 
@@ -436,7 +459,7 @@ export async function employeeMonthSheet(ctx: AuthContext, query: z.infer<typeof
  * alone (counted as skipped); days before joining or after the last working
  * day, or outside the month, are refused, as is a payroll-locked month.
  */
-export async function saveEmployeeMonth(ctx: AuthContext, input: z.infer<typeof saveMonthSchema>) {
+export async function saveEmployeeMonth(ctx: AuthContext, input: z.infer<typeof saveMonthSchema>, opts: ApprovedRun = {}) {
   const { start, end } = monthRange(input.year, input.month);
   const emp = await Employee.findOne({ _id: input.employeeId, businessId: ctx.businessId, deletedAt: null }).lean<AnyDoc>();
   if (!emp) throw AppError.notFound("Employee not found");
@@ -457,6 +480,20 @@ export async function saveEmployeeMonth(ctx: AuthContext, input: z.infer<typeof 
   const leaveDays = new Set(onLeave.map((r) => dayKey(toDay(r.date))));
   const shift = shiftFor(cal, emp.shiftId, emp.holidayCalendarId);
   const rows = input.rows.filter((r) => !leaveDays.has(r.date));
+  const monthKey = `${input.year}-${String(input.month).padStart(2, "0")}`;
+  if (!opts.approved && rows.length > 0) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-attendance-monthly",
+      targetKey: `attendance-month:${emp._id}:${monthKey}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `${emp.employeeCode} ${emp.name}: ${rows.length} day(s) of ${monthKey}`,
+      details: [{ label: "Employee", value: `${emp.employeeCode} ${emp.name}` }, { label: "Month", value: monthKey }, { label: "Days", value: String(rows.length) }, ...statusLines(rows)],
+      employeeId: emp._id,
+      payload: input,
+    });
+    if (held) return held;
+  }
   if (rows.length > 0) await Attendance.bulkWrite(rows.map((r) => markDayOp(ctx, emp, shift, toDay(r.date), r)));
 
   await recordAudit({

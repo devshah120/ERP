@@ -22,7 +22,9 @@ import { recordAudit } from "@/lib/services/auditService";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, todayIn } from "./calendar";
-import { assertPayrollOpen } from "./attendance";
+import { assertPayrollOpen, type ApprovedRun } from "./attendance";
+import { holdUnderFirstActive } from "@/lib/approvals/service";
+import { fieldLabel, showValue } from "@/lib/approvals/resourceApprovals";
 import { findEmployee, businessTimeZone, objectId, type AnyDoc } from "./common";
 import { createIncrementArrears, cancelArrearsOfChange } from "./arrears";
 
@@ -198,7 +200,60 @@ const ARREAR_FIELDS = ["basic", "hra", "conveyance", "specialAllowance", "otherA
  * fields inherit the new values, and the Employee record is brought up to
  * date if the change is already in effect.
  */
-export async function recordChange(ctx: AuthContext, employeeId: string, input: z.infer<typeof changeSchema>) {
+/**
+ * The approval documents a dated change falls under, most specific first; it
+ * is held under the first with an active scheme. Any change is at least an
+ * "information modification".
+ */
+export function changeApprovalDocuments(changeType: string, fields: string[]): string[] {
+  const has = (f: string) => fields.includes(f);
+  const out: string[] = [];
+  if (changeType === "SALARY_REVISION") out.push("hr-salary-revision");
+  if (changeType === "PROMOTION") out.push("hr-promotion");
+  if (changeType === "TRANSFER" || has("branchId") || has("workLocation")) out.push("hr-transfer");
+  if (has("departmentId")) out.push("hr-department-change");
+  if (has("designationId")) out.push("hr-designation-change");
+  if ((HISTORY_MONEY_FIELDS as readonly string[]).some(has)) out.push("hr-salary-revision");
+  out.push("hr-employee-update");
+  return [...new Set(out)];
+}
+
+const GROSS_FIELDS = ["basic", "hra", "conveyance", "specialAllowance", "otherAllowance"] as const;
+const CHANGE_TYPE_WORDS: Record<string, string> = { SALARY_REVISION: "Salary revision", PROMOTION: "Promotion", TRANSFER: "Transfer", STATUS_CHANGE: "Status change", CORRECTION: "Correction", JOINED: "Joining" };
+
+/** Holds a dated change for approval when its document has an active scheme. */
+async function holdChange(ctx: AuthContext, emp: AnyDoc, input: z.infer<typeof changeSchema>) {
+  const set = Object.entries(input.changes).filter(([, v]) => v !== undefined) as [string, unknown][];
+  const fields = set.map(([k]) => k);
+  const details = [
+    { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+    { label: "Change", value: CHANGE_TYPE_WORDS[input.changeType] ?? input.changeType },
+    { label: "Effective from", value: input.effectiveDate },
+  ];
+  for (const [f, v] of set) details.push({ label: fieldLabel(f), value: `${await showValue(ctx.businessId, f, emp[f])} → ${await showValue(ctx.businessId, f, v)}` });
+  if (input.reason) details.push({ label: "Reason", value: input.reason });
+  // Salary: the stage limit compares the change in monthly gross.
+  let amount: string | null = null;
+  if (fields.some((f) => (GROSS_FIELDS as readonly string[]).includes(f))) {
+    const gross = (src: Record<string, unknown>) => GROSS_FIELDS.reduce((s, f) => s.plus(d(src[f])), new Decimal(0));
+    const before = gross(emp);
+    const after = gross({ ...Object.fromEntries(GROSS_FIELDS.map((f) => [f, emp[f]])), ...Object.fromEntries(set) });
+    amount = after.minus(before).abs().toFixed(2);
+    details.push({ label: "Monthly gross", value: `${before.toFixed(2)} → ${after.toFixed(2)} (${after.gte(before) ? "+" : "−"}${amount})` });
+  }
+  return holdUnderFirstActive(ctx, changeApprovalDocuments(input.changeType, fields), {
+    targetKey: `employee-history:${emp._id}`,
+    recordId: emp._id,
+    number: emp.employeeCode,
+    summary: `${CHANGE_TYPE_WORDS[input.changeType] ?? input.changeType} for ${emp.employeeCode} ${emp.name} from ${input.effectiveDate}: ${fields.map(fieldLabel).join(", ")}`,
+    details,
+    amount,
+    employeeId: emp._id,
+    payload: { op: "record", employeeId: String(emp._id), input },
+  });
+}
+
+export async function recordChange(ctx: AuthContext, employeeId: string, input: z.infer<typeof changeSchema>, opts: ApprovedRun = {}) {
   const emp = await findEmployee(ctx.businessId, employeeId);
   const effective = toDay(input.effectiveDate);
   if (effective < toDay(emp.dateOfJoining)) throw AppError.badRequest("A change can't take effect before the employee joined.", "BEFORE_JOINING");
@@ -222,6 +277,10 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
     if (input.changeType !== "SALARY_REVISION" || !earningsOnly) {
       throw AppError.badRequest("Payroll from that date is already approved. Only a salary revision of the earning components can be backdated (paid as arrears); choose a later date for other changes.", "PAYROLL_LOCKED");
     }
+  }
+  if (!opts.approved) {
+    const held = await holdChange(ctx, emp, input);
+    if (held) return held;
   }
   const today = todayIn(await businessTimeZone(ctx.businessId));
 
@@ -291,7 +350,7 @@ export async function recordChange(ctx: AuthContext, employeeId: string, input: 
  * and a change in a payroll-locked month can't be removed. Later changes
  * that had inherited its values get the earlier values back.
  */
-export async function deleteChange(ctx: AuthContext, employeeId: string, changeId: string) {
+export async function deleteChange(ctx: AuthContext, employeeId: string, changeId: string, opts: ApprovedRun = {}) {
   const emp = await findEmployee(ctx.businessId, employeeId);
   if (!Types.ObjectId.isValid(changeId)) throw AppError.notFound("Change not found");
   const target = await EmploymentChange.findOne({ _id: changeId, businessId: ctx.businessId, employeeId: emp._id }).lean<AnyDoc>();
@@ -300,6 +359,24 @@ export async function deleteChange(ctx: AuthContext, employeeId: string, changeI
   // A backdated revision with arrears can go while its arrears are unpaid; anything else in a locked month stays.
   const withArrears = await PayrollArrear.exists({ businessId: ctx.businessId, sourceChangeId: target._id });
   if (!withArrears) await assertPayrollOpen(ctx.businessId, [toDay(target.effectiveDate)]);
+  // Removing a change undoes it (a salary revision, a transfer…), so it needs the same approval as recording it.
+  if (!opts.approved) {
+    const held = await holdUnderFirstActive(ctx, changeApprovalDocuments(target.changeType, target.changedFields ?? []), {
+      targetKey: `employee-history:${emp._id}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `Remove the ${(CHANGE_TYPE_WORDS[target.changeType] ?? target.changeType).toLowerCase()} of ${emp.employeeCode} ${emp.name} from ${dayKey(toDay(target.effectiveDate))}`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Change removed", value: CHANGE_TYPE_WORDS[target.changeType] ?? target.changeType },
+        { label: "Effective from", value: dayKey(toDay(target.effectiveDate)) },
+        { label: "Fields", value: (target.changedFields ?? []).map(fieldLabel).join(", ") },
+      ],
+      employeeId: emp._id,
+      payload: { op: "delete", employeeId: String(emp._id), changeId: String(target._id) },
+    });
+    if (held) return held;
+  }
   const today = todayIn(await businessTimeZone(ctx.businessId));
 
   const session = await mongoose.startSession();

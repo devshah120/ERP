@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Decimal from "decimal.js";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld, partlyHeldMessage } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchBox from "@/components/ui/SearchBox";
@@ -104,11 +105,15 @@ export default function VariablePayPage() {
     setSaving(true);
     try {
       const rows = Object.entries(draft).map(([employeeId, amounts]) => ({ employeeId, amounts }));
-      const r = await apiFetch<{ saved: number; cleared: number; draftRun: { id: string; runNumber: string } | null }>("/api/hr/payroll/variables", {
+      const r = await apiFetch<{ saved: number; cleared: number; draftRun: { id: string; runNumber: string } | null; approvalMessage?: string }>("/api/hr/payroll/variables", {
         method: "PUT",
         body: JSON.stringify({ year: period.year, month: period.month, rows }),
       });
-      toast.success("Variable pay saved", r.draftRun ? `Recalculate draft ${r.draftRun.runNumber} to include it.` : undefined);
+      // Earnings and deductions may each be held by their own approval scheme.
+      const partly = partlyHeldMessage(r);
+      if (notifyHeld(toast, r)) void load();
+      else if (partly) toast.info("Saved; some amounts sent for approval", partly);
+      else toast.success("Variable pay saved", r.draftRun ? `Recalculate draft ${r.draftRun.runNumber} to include it.` : undefined);
       load();
     } catch (err) {
       toast.error("Could not save", err instanceof ApiError ? err.message : undefined);

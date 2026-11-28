@@ -6,8 +6,8 @@ import { migrateLegacyGradeGroups } from "./leaveGroups";
 import { recordAudit } from "@/lib/services/auditService";
 import { hasPermission, type AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, loadCalendar, shiftFor, workingDays } from "./calendar";
-import { assertPayrollOpen } from "./attendance";
-import { approvalGate, openApproval, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
+import { assertPayrollOpen, type ApprovedRun } from "./attendance";
+import { approvalGate, openApproval, cancelApproval, approvalFingerprint, holdForApproval } from "@/lib/approvals/service";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
 
 export const applyLeaveSchema = z
@@ -361,7 +361,7 @@ export async function rejectLeave(ctx: AuthContext, id: string, note: string, op
  * can also cancel an approved one, which clears the leave days it put on the
  * attendance sheet (unless that month's payroll is already locked).
  */
-export async function cancelLeave(ctx: AuthContext, id: string, opts: { self: boolean; note?: string }) {
+export async function cancelLeave(ctx: AuthContext, id: string, opts: { self: boolean; note?: string } & ApprovedRun) {
   const app = await loadApp(ctx, id);
   if (opts.self) {
     const emp = await selfEmployee(ctx);
@@ -375,6 +375,28 @@ export async function cancelLeave(ctx: AuthContext, id: string, opts: { self: bo
   if (app.status === "APPROVED") {
     const rows = await Attendance.find({ businessId: ctx.businessId, leaveApplicationId: app._id }, { date: 1 }).lean<AnyDoc[]>();
     await assertPayrollOpen(ctx.businessId, rows.map((r) => toDay(r.date)));
+    // Cancelling approved leave gives the days back and clears them from attendance: it may need approval.
+    if (!opts.approved) {
+      const emp = await Employee.findOne({ _id: app.employeeId, businessId: ctx.businessId }, { employeeCode: 1, name: 1 }).lean<AnyDoc>();
+      const type = await LeaveType.findOne({ _id: app.leaveTypeId, businessId: ctx.businessId }, { name: 1 }).lean<AnyDoc>();
+      const held = await holdForApproval(ctx, {
+        document: "hr-leave-cancel",
+        targetKey: `leave:${app._id}`,
+        recordId: app._id,
+        number: app.leaveNumber,
+        summary: `Cancel approved leave ${app.leaveNumber}: ${app.days} day(s) of ${type?.name ?? "leave"}`,
+        details: [
+          { label: "Employee", value: `${emp?.employeeCode ?? ""} ${emp?.name ?? ""}`.trim() },
+          { label: "Leave", value: `${app.leaveNumber} · ${type?.name ?? ""}` },
+          { label: "Dates", value: `${dayKey(toDay(app.fromDate))} to ${dayKey(toDay(app.toDate))}${app.halfDay ? " (half day)" : ""}` },
+          { label: "Days given back", value: String(app.days) },
+          { label: "Reason", value: opts.note ?? "" },
+        ],
+        employeeId: app.employeeId,
+        payload: { id: String(app._id), note: opts.note ?? "" },
+      });
+      if (held) return held;
+    }
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
@@ -506,10 +528,32 @@ export async function balancesTable(ctx: AuthContext, year: number, query?: stri
   };
 }
 
-export async function setAllocation(ctx: AuthContext, input: z.infer<typeof allocationSchema>) {
-  await findEmployee(ctx.businessId, input.employeeId);
+export async function setAllocation(ctx: AuthContext, input: z.infer<typeof allocationSchema>, opts: ApprovedRun = {}) {
+  const emp = await findEmployee(ctx.businessId, input.employeeId);
   const type = await LeaveType.findOne({ _id: input.leaveTypeId, businessId: ctx.businessId }).lean<AnyDoc>();
   if (!type) throw AppError.badRequest("Leave type not found", "LEAVE_TYPE_NOT_FOUND");
+  if (!opts.approved) {
+    const current = await LeaveAllocation.findOne({ businessId: ctx.businessId, employeeId: emp._id, leaveTypeId: type._id, year: input.year }).lean<AnyDoc>();
+    const days = (v: unknown) => (v === null || v === undefined ? "quota" : String(v));
+    const held = await holdForApproval(ctx, {
+      document: "hr-leave-balance",
+      targetKey: `leave-balance:${emp._id}:${type._id}:${input.year}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `${emp.employeeCode} ${emp.name}: ${type.name} ${input.year} allocation ${days(current?.allocated)} → ${days(input.allocated)}, carried ${current?.carriedForward ?? 0} → ${input.carriedForward ?? 0}`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Leave type", value: type.name },
+        { label: "Year", value: String(input.year) },
+        { label: "Allocated days", value: `${days(current?.allocated)} → ${days(input.allocated)}` },
+        { label: "Carried forward", value: `${current?.carriedForward ?? 0} → ${input.carriedForward ?? 0}` },
+        { label: "Notes", value: input.notes ?? "" },
+      ],
+      employeeId: emp._id,
+      payload: input,
+    });
+    if (held) return held;
+  }
   const doc = await LeaveAllocation.findOneAndUpdate(
     { businessId: ctx.businessId, employeeId: new Types.ObjectId(input.employeeId), leaveTypeId: type._id, year: input.year },
     { $set: { allocated: input.allocated, carriedForward: input.carriedForward, notes: input.notes, updatedBy: ctx.userId }, $setOnInsert: { createdBy: ctx.userId } },
@@ -570,7 +614,7 @@ export const carryForwardSchema = z.object({
  * Preview first, then commit. Running it again recalculates and overwrites
  * the carried days (a grant set by hand for the new year is kept).
  */
-export async function carryForwardLeave(ctx: AuthContext, input: z.infer<typeof carryForwardSchema>) {
+export async function carryForwardLeave(ctx: AuthContext, input: z.infer<typeof carryForwardSchema>, opts: ApprovedRun = {}) {
   const { fromYear, commit } = input;
   const toYear = fromYear + 1;
   const types = await LeaveType.find({ businessId: ctx.businessId, deletedAt: null, status: "ACTIVE", carryForward: true }).sort({ code: 1 }).lean<AnyDoc[]>();
@@ -606,6 +650,23 @@ export async function carryForwardLeave(ctx: AuthContext, input: z.infer<typeof 
       lapsedTotal += unused - carried;
       rows.push({ employeeId: String(e._id), employeeCode: e.employeeCode, name: e.name, leaveTypeId: String(t._id), code: t.code, unused, carried, lapsed: unused - carried, before });
     }
+  }
+
+  if (commit && rows.length > 0 && !opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-leave-balance",
+      targetKey: `leave-carry-forward:${fromYear}`,
+      summary: `Carry forward unused leave ${fromYear} → ${toYear}: ${carriedTotal} day(s) carried, ${lapsedTotal} lapsing`,
+      details: [
+        { label: "From year", value: String(fromYear) },
+        { label: "Employees", value: String(new Set(rows.map((r) => r.employeeId)).size) },
+        { label: "Days carried", value: String(carriedTotal) },
+        { label: "Days lapsing", value: String(lapsedTotal) },
+      ],
+      payload: input,
+    });
+    // The preview stays on screen; the carry-forward itself waits.
+    if (held) return { ...held, fromYear, toYear, committed: false, leaveTypes: [], rows: [], totals: { carried: carriedTotal, lapsed: lapsedTotal } };
   }
 
   if (commit && rows.length > 0) {

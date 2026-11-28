@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -158,7 +159,7 @@ export default function AssetAllocationsView({ mode }: { mode: Mode }) {
       const r = await apiFetch<{ allocationNumber: string }>("/api/hr/assets/allocations", { method: "POST", body: JSON.stringify(alloc) });
       const a = assets?.find((x) => x.id === alloc.assetId);
       const e = employees?.find((x) => x.id === alloc.employeeId);
-      toast.success(`${a?.assetTag ?? "Asset"} given to ${e?.label.split(" · ").pop() ?? "the employee"}`, r.allocationNumber);
+      if (!notifyHeld(toast, r)) toast.success(`${a?.assetTag ?? "Asset"} given to ${e?.label.split(" · ").pop() ?? "the employee"}`, r.allocationNumber);
       setAllocating(false);
       load();
     } catch (err) {
@@ -186,8 +187,8 @@ export default function AssetAllocationsView({ mode }: { mode: Mode }) {
         recoveryAmount: ret.outcome === "RETURNED" || !ret.recoveryAmount ? "0" : ret.recoveryAmount,
         notes: ret.notes,
       };
-      await apiFetch(`/api/hr/assets/allocations/${returning.id}/return`, { method: "POST", body: JSON.stringify(body) });
-      toast.success(`${returning.assetTag} ${ret.outcome === "LOST" ? "recorded as lost" : "returned"}`, ret.outcome === "DAMAGED" ? "Marked under repair in the asset register." : undefined);
+      const res = await apiFetch<unknown>(`/api/hr/assets/allocations/${returning.id}/return`, { method: "POST", body: JSON.stringify(body) });
+      if (!notifyHeld(toast, res)) toast.success(`${returning.assetTag} ${ret.outcome === "LOST" ? "recorded as lost" : "returned"}`, ret.outcome === "DAMAGED" ? "Marked under repair in the asset register." : undefined);
       setReturning(null);
       load();
     } catch (err) {

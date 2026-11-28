@@ -5,6 +5,8 @@ import { Employee, Holiday, HolidayCalendar, WORKING_STATUSES } from "@/models/h
 import { recordAudit } from "@/lib/services/auditService";
 import type { AuthContext } from "@/lib/auth/context";
 import { employeeLabels, escapeRegex, objectId, pageQuery, type AnyDoc } from "./common";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
+import type { ApprovedRun } from "./attendance";
 
 /*
  * Holiday calendars: which holidays each employee gets. Holidays on no
@@ -108,7 +110,7 @@ export async function calendarAssignments(ctx: AuthContext, params: z.infer<type
 }
 
 /** Puts the chosen employees on a holiday calendar (or back on the default with null). */
-export async function assignCalendar(ctx: AuthContext, input: z.infer<typeof assignSchema>) {
+export async function assignCalendar(ctx: AuthContext, input: z.infer<typeof assignSchema>, opts: ApprovedRun = {}) {
   const ids = [...new Set(input.employeeIds)].map((id) => new Types.ObjectId(id));
   let calendar: AnyDoc = null;
   if (input.calendarId) {
@@ -118,6 +120,22 @@ export async function assignCalendar(ctx: AuthContext, input: z.infer<typeof ass
   }
   const found = await Employee.countDocuments({ businessId: ctx.businessId, _id: { $in: ids }, deletedAt: null });
   if (found !== ids.length) throw AppError.badRequest("Some of these employees were not found; reload the page", "EMPLOYEE_NOT_FOUND");
+  if (!opts.approved) {
+    const names = await Employee.find({ businessId: ctx.businessId, _id: { $in: ids.slice(0, 10) } }, { name: 1, employeeCode: 1 }).lean<AnyDoc[]>();
+    const held = await holdForApproval(ctx, {
+      document: "hr-holiday-change",
+      targetKey: `holiday-assign:${approvalFingerprint(ids.map(String).sort())}`,
+      summary: `Put ${ids.length} employee(s) on ${calendar ? `the "${calendar.name}" holiday calendar` : "the default holiday calendar"}`,
+      details: [
+        { label: "Holiday calendar", value: calendar ? calendar.name : "Default calendar" },
+        { label: "Employees", value: String(ids.length) },
+        { label: "Who", value: names.map((n) => `${n.employeeCode} ${n.name}`).join(", ") + (ids.length > 10 ? ` and ${ids.length - 10} more` : "") },
+      ],
+      employeeId: ids.length === 1 ? ids[0] : null,
+      payload: { input },
+    });
+    if (held) return held;
+  }
 
   const res = await Employee.updateMany(
     { businessId: ctx.businessId, _id: { $in: ids }, deletedAt: null },

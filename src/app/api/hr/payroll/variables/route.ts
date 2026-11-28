@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { variableSheet, saveVariables, sheetSchema, saveSchema } from "@/lib/hr/variables";
@@ -16,5 +17,5 @@ export const GET = withApiHandler(async (req: NextRequest) => {
 export const PUT = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-payroll.process");
-  return ok(await saveVariables(ctx, saveSchema.parse(await req.json())), "Variable pay saved");
+  return okOrHeld(await saveVariables(ctx, saveSchema.parse(await req.json())), (res) => res.approvalMessage ?? "Variable pay saved");
 });

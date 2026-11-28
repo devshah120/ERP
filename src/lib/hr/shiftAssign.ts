@@ -6,6 +6,8 @@ import { Employee, Shift, WORKING_STATUSES } from "@/models/hr";
 import { Contractor } from "@/models/contractLabour";
 import type { AuthContext } from "@/lib/auth/context";
 import { employeeLabels, escapeRegex, objectId, pageQuery, type AnyDoc } from "./common";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
+import type { ApprovedRun } from "./attendance";
 
 /*
  * Assign Shift: puts employees, or labour contractors, on a shift in bulk.
@@ -91,7 +93,7 @@ export async function shiftAssignments(ctx: AuthContext, target: ShiftTarget, pa
 }
 
 /** Puts the chosen employees or contractors on a shift (or back on the default with null). */
-export async function assignShift(ctx: AuthContext, target: ShiftTarget, input: z.infer<typeof shiftAssignSchema>) {
+export async function assignShift(ctx: AuthContext, target: ShiftTarget, input: z.infer<typeof shiftAssignSchema>, opts: ApprovedRun = {}) {
   const model = target === "employees" ? Employee : Contractor;
   const ids = [...new Set(input.ids)].map((id) => new Types.ObjectId(id));
   let shift: AnyDoc = null;
@@ -102,6 +104,23 @@ export async function assignShift(ctx: AuthContext, target: ShiftTarget, input: 
   }
   const found = await model.countDocuments({ businessId: ctx.businessId, _id: { $in: ids }, deletedAt: null });
   if (found !== ids.length) throw AppError.badRequest(`Some of these ${target} were not found; reload the page`, "NOT_FOUND");
+  if (!opts.approved) {
+    const names = await model.find({ businessId: ctx.businessId, _id: { $in: ids.slice(0, 10) } }, { name: 1, employeeCode: 1, code: 1 }).lean<AnyDoc[]>();
+    const who = names.map((n) => `${n.employeeCode ?? n.code ?? ""} ${n.name}`.trim()).join(", ") + (ids.length > 10 ? ` and ${ids.length - 10} more` : "");
+    const held = await holdForApproval(ctx, {
+      document: "hr-shift-assign",
+      targetKey: `shift-assign:${target}:${approvalFingerprint(ids.map(String).sort())}`,
+      summary: `Put ${ids.length} ${target} on ${shift ? `the "${shift.name}" shift` : "the default shift"}`,
+      details: [
+        { label: "Shift", value: shift ? shift.name : "Default shift" },
+        { label: target === "employees" ? "Employees" : "Contractors", value: String(ids.length) },
+        { label: "Who", value: who },
+      ],
+      employeeId: target === "employees" && ids.length === 1 ? ids[0] : null,
+      payload: { target, input },
+    });
+    if (held) return held;
+  }
 
   const res = await model.updateMany({ businessId: ctx.businessId, _id: { $in: ids }, deletedAt: null }, { shiftId: shift ? shift._id : null, updatedBy: ctx.userId });
   await recordAudit({

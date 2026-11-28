@@ -444,8 +444,8 @@ export const NAV_SECTIONS: NavSection[] = [
         keywords: "approval workflow",
         icon: IconClipboard,
         children: [
-          { href: "/approvals/queue", label: "Approval Queue", enabled: true, keywords: "approval queue pending awaiting approve reject inbox" },
-          { href: "/approvals/schemes", label: "Approval Scheme", enabled: true, keywords: "approval scheme workflow stages hierarchy reporting manager" },
+          { href: "/approvals/queue", label: "Approval Management", enabled: true, keywords: "approval queue pending awaiting approve reject send back inbox my approvals submitted history requests" },
+          { href: "/approvals/schemes", label: "Approval Scheme", enabled: true, keywords: "approval scheme workflow stages hierarchy reporting manager department head role maker checker" },
           { href: "/approvals/groups", label: "Approval User Groups", enabled: true, keywords: "approval user groups approvers team" },
         ],
       },

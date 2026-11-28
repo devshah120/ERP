@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
-import { getSettings, updateSettings, documentDefaults } from "@/lib/settings/service";
+import { getSettings, documentDefaults } from "@/lib/settings/service";
+import { saveSettingsSection } from "@/lib/approvals/settingsApprovals";
+import { okOrHeld } from "@/lib/approvals/http";
 import { SETTINGS_SECTIONS } from "@/lib/settings/definitions";
 import "@/models";
 
@@ -28,6 +30,6 @@ export const PUT = withApiHandler(async (req: NextRequest, { params }) => {
   const { section } = await params;
   const ctx = getAuthContext(req);
   requirePermission(ctx, SETTINGS_SECTIONS[section]?.editPermission ?? "settings.edit");
-  const value = await updateSettings(ctx.businessId, ctx.userId, section, await req.json());
-  return ok(value, "Settings saved");
+  // Payroll and regularization settings may need approval before they change.
+  return okOrHeld(await saveSettingsSection(ctx, section, await req.json()), "Settings saved");
 });

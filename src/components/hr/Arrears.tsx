@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -250,7 +251,7 @@ function DayArrearForm({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const r = await apiFetch<{ amount: string }>("/api/hr/payroll/arrears", { method: "POST", body: JSON.stringify({ kind: "DAY", ...period, ...form }) });
-      toast.success("Day arrear added", `${formatMoney(r.amount)} in the next payroll`);
+      if (!notifyHeld(toast, r)) toast.success("Day arrear added", `${formatMoney(r.amount)} in the next payroll`);
       setForm({ employeeId: "", days: "", reason: "" });
       onDone();
     } catch (err) {
@@ -321,7 +322,10 @@ function DaArrearForm({ onDone }: { onDone: () => void }) {
         method: "POST",
         body: JSON.stringify({ kind: "DA", ...form, fromYear: from.year, fromMonth: from.month, toYear: to.year, toMonth: to.month, commit }),
       });
-      if (commit) {
+      if (commit && notifyHeld(toast, r)) {
+        setPreview(null);
+        onDone();
+      } else if (commit) {
         toast.success("DA arrears added", `${formatMoney(r.total)} in the next payroll`);
         setPreview(null);
         onDone();

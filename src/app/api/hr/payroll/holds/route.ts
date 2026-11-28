@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { listHolds, blockPayroll, holdSchema } from "@/lib/hr/holds";
@@ -19,5 +20,5 @@ export const GET = withApiHandler(async (req: NextRequest) => {
 export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-payroll.approve");
-  return created(await blockPayroll(ctx, holdSchema.parse(await req.json())), "Salary put on hold");
+  return okOrHeld(await blockPayroll(ctx, holdSchema.parse(await req.json())), "Salary put on hold", 201);
 });

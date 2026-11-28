@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { calendarAssignments, assignCalendar, assignmentListSchema, assignSchema } from "@/lib/hr/holidayCalendars";
@@ -19,5 +20,5 @@ export const PUT = withApiHandler(async (req: NextRequest) => {
   requirePermission(ctx, "hr-holidays.edit");
   requirePermission(ctx, "hr-employees.edit");
   const result = await assignCalendar(ctx, assignSchema.parse(await req.json()));
-  return ok(result, "Holiday calendar assigned");
+  return okOrHeld(result, "Holiday calendar assigned");
 });

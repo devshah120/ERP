@@ -5,6 +5,7 @@ import Link from "next/link";
 import Decimal from "decimal.js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
@@ -66,6 +67,7 @@ function NewLoan() {
         method: "POST",
         body: JSON.stringify({ ...form, startMonth: start.month, startYear: start.year }),
       });
+      if (notifyHeld(toast, res)) return router.push("/hr/loans");
       toast.success(`${res.loanNumber} recorded`);
       router.push(`/hr/loans/${res.id}`);
     } catch (err) {

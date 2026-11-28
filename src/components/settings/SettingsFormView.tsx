@@ -6,6 +6,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { isHeld } from "@/lib/approvals/catalog";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import { SETTINGS_SECTIONS } from "@/lib/settings/definitions";
@@ -72,6 +73,13 @@ export default function SettingsFormView({ sectionKey }: { sectionKey: string })
         method: "PUT",
         body: JSON.stringify(values),
       });
+      if (isHeld(saved)) {
+        // Held for approval: show the settings as they still are.
+        setValues(await apiFetch<Record<string, unknown>>(`/api/settings/${section.key}`));
+        setDirty(false);
+        toast.info("Sent for approval", saved.approvalMessage);
+        return;
+      }
       setValues(saved);
       setDirty(false);
       toast.success(`${section.title} saved`);

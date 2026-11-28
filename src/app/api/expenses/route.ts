@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import { listExpenses, createExpense, expenseCreateSchema, expenseOptions } from "@/lib/expenses/service";
 import "@/models";
@@ -17,5 +18,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "expenses.create");
   const input = expenseCreateSchema.parse(await req.json());
-  return created(await createExpense(input, ctx), "Expense recorded");
+  return okOrHeld(await createExpense(input, ctx), "Expense recorded", 201);
 });

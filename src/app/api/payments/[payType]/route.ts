@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { AppError } from "@/lib/errors/AppError";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import { getPaymentType, paymentCreateSchema } from "@/lib/payments/types";
@@ -29,5 +30,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const input = paymentCreateSchema.parse(await req.json());
   const doc = await createPayment(type, input, ctx);
 
-  return created(doc, `${type.label} recorded successfully`);
+  return okOrHeld(doc, `${type.label} recorded successfully`, 201);
 });

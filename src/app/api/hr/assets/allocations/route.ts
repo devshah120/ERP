@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { listAllocations, allocationListSchema, allocateAsset, allocateSchema } from "@/lib/hr/assets";
@@ -17,5 +18,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-assets.edit");
   const result = await allocateAsset(ctx, allocateSchema.parse(await req.json()));
-  return created(result, `Asset allocated (${result.allocationNumber})`);
+  return okOrHeld(result, (r) => `Asset allocated (${r.allocationNumber})`, 201);
 });

@@ -7,7 +7,19 @@ import { moneyStringSchema } from "@/lib/validation/money";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { recordAudit } from "@/lib/services/auditService";
 import { MAX_FILE_BYTES, detectFileType, safeFileName } from "@/lib/storage/service";
-import { approvalGate, openApproval, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
+import { approvalGate, openApproval, cancelApproval, approvalFingerprint, governingDocument, holdForApproval } from "@/lib/approvals/service";
+import type { ApprovedRun } from "./attendance";
+
+const TRAVEL_CATEGORIES = new Set(["TRAVEL", "ACCOMMODATION", "FUEL"]);
+/** Travel and medical claims have schemes of their own; without one, the general Expense Claim scheme applies. */
+function claimSpecificDocument(category: string): string {
+  return TRAVEL_CATEGORIES.has(category) ? "hr-claim-travel" : category === "MEDICAL" ? "hr-claim-medical" : "hr-claim";
+}
+/** The approval document that governs this claim (the one its open request was raised under, if any). */
+export function claimDocument(businessId: Types.ObjectId, claim: AnyDoc): Promise<string> {
+  return governingDocument(businessId, claimSpecificDocument(String(claim.category ?? "OTHER")), claim._id);
+}
+export const CLAIM_DOCUMENTS = ["hr-claim", "hr-claim-travel", "hr-claim-medical"] as const;
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey } from "./calendar";
 import { nextHrNumber, findEmployee, selfEmployee, employeeLabels, objectId, escapeRegex, pageQuery, type AnyDoc } from "./common";
@@ -78,8 +90,30 @@ function loanRow(l: AnyDoc, label?: { name: string; code: string; department: st
   };
 }
 
-export async function createLoan(ctx: AuthContext, input: z.infer<typeof loanCreateSchema>) {
+export async function createLoan(ctx: AuthContext, input: z.infer<typeof loanCreateSchema>, opts: ApprovedRun = {}) {
   const emp = await findEmployee(ctx.businessId, input.employeeId);
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-advance-issue",
+      targetKey: `loan-issue:${emp._id}:${approvalFingerprint(input)}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `Issue ${String(input.loanType).toLowerCase()} of ${new Decimal(input.amount).toFixed(2)} to ${emp.employeeCode} ${emp.name}`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Type", value: String(input.loanType) },
+        { label: "Amount", value: new Decimal(input.amount).toFixed(2) },
+        { label: "Instalment", value: new Decimal(input.emiAmount).toFixed(2) },
+        { label: "Recovery from", value: `${input.startMonth}/${input.startYear}` },
+        { label: "Issued on", value: input.issueDate },
+        { label: "Reason", value: input.reason ?? "" },
+      ],
+      amount: new Decimal(input.amount).toFixed(2),
+      employeeId: emp._id,
+      payload: input,
+    });
+    if (held) return held;
+  }
   const loanNumber = await nextHrNumber(ctx.businessId, "HR_LOAN", "LN");
   const loan = await EmployeeLoan.create({
     businessId: ctx.businessId,
@@ -146,7 +180,7 @@ export async function getLoan(ctx: AuthContext, id: string) {
 }
 
 /** A repayment made outside payroll (cash, bank transfer). */
-export async function recordRepayment(ctx: AuthContext, id: string, input: z.infer<typeof repaymentSchema>) {
+export async function recordRepayment(ctx: AuthContext, id: string, input: z.infer<typeof repaymentSchema>, opts: ApprovedRun = {}) {
   if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Loan not found");
   const loan = await EmployeeLoan.findOne({ _id: id, businessId: ctx.businessId });
   if (!loan) throw AppError.notFound("Loan not found");
@@ -155,6 +189,27 @@ export async function recordRepayment(ctx: AuthContext, id: string, input: z.inf
   const outstanding = d(loan.amount).minus(d(loan.repaidAmount));
   const amount = new Decimal(input.amount);
   if (amount.gt(outstanding)) throw AppError.badRequest(`Only ${outstanding.toFixed(2)} is outstanding`, "OVERPAYMENT");
+  if (!opts.approved) {
+    const emp = await findEmployee(ctx.businessId, String(loan.employeeId));
+    const held = await holdForApproval(ctx, {
+      document: "hr-advance-settlement",
+      targetKey: `loan:${loan._id}`,
+      recordId: loan._id,
+      number: loan.loanNumber,
+      summary: `Repayment of ${amount.toFixed(2)} on ${loan.loanNumber} (${emp.employeeCode} ${emp.name})`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Advance", value: loan.loanNumber },
+        { label: "Outstanding", value: outstanding.toFixed(2) },
+        { label: "Repayment", value: amount.toFixed(2) },
+        { label: "Note", value: input.note ?? "" },
+      ],
+      amount: amount.toFixed(2),
+      employeeId: loan.employeeId,
+      payload: { op: "repayment", id, input },
+    });
+    if (held) return held;
+  }
   const now = new Date();
   loan.repayments.push({ payrollRunId: null, month: now.getUTCMonth() + 1, year: now.getUTCFullYear(), amount: toDecimal128(amount), note: input.note || "Paid directly" });
   const repaid = d(loan.repaidAmount).plus(amount);
@@ -244,7 +299,7 @@ export async function createClaim(ctx: AuthContext, input: z.infer<typeof claimC
     updatedBy: ctx.userId,
   });
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CREATE", module: "hr.claims", documentType: "ExpenseClaim", documentId: claim._id, newValue: { claimNumber, amount: input.amount } });
-  await openApproval(ctx, "hr-claim", claimApprovalRecord(claim));
+  await openApproval(ctx, await claimDocument(ctx.businessId, claim), claimApprovalRecord(claim));
   return { id: String(claim._id), claimNumber };
 }
 
@@ -329,7 +384,7 @@ export async function decideClaim(ctx: AuthContext, id: string, decision: "APPRO
   const claim = await ExpenseClaim.findOne({ _id: id, businessId: ctx.businessId });
   if (!claim) throw AppError.notFound("Claim not found");
   if (claim.status !== "PENDING") throw AppError.badRequest(`This claim is already ${claim.status.toLowerCase()}`, "CLAIM_NOT_PENDING");
-  const gate = await approvalGate(ctx, "hr-claim", claimApprovalRecord(claim), decision === "APPROVED" ? "approve" : "reject", note);
+  const gate = await approvalGate(ctx, await claimDocument(ctx.businessId, claim), claimApprovalRecord(claim), decision === "APPROVED" ? "approve" : "reject", note);
   if (!gate.proceed) return { id, status: "PENDING", approvalMessage: gate.message };
   claim.set({ status: decision, decidedByUserId: ctx.userId, decidedAt: new Date(), decisionNote: note, updatedBy: ctx.userId });
   await claim.save();
@@ -346,7 +401,7 @@ export async function withdrawClaim(ctx: AuthContext, id: string) {
   if (claim.status !== "PENDING") throw AppError.badRequest("Only a pending claim can be withdrawn", "CLAIM_NOT_PENDING");
   claim.set({ status: "CANCELLED", updatedBy: ctx.userId });
   await claim.save();
-  await cancelApproval(ctx.businessId, "hr-claim", claim._id);
+  for (const doc of CLAIM_DOCUMENTS) await cancelApproval(ctx.businessId, doc, claim._id);
   return { id, status: "CANCELLED" };
 }
 
@@ -504,7 +559,7 @@ export const claimSettlementSchema = z.discriminatedUnion("mode", [
 ]);
 
 /** Pays approved claims directly (cash, bank transfer or cheque) instead of with the next payroll. */
-export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claimSettlementSchema>) {
+export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claimSettlementSchema>, opts: ApprovedRun = {}) {
   const ids = [...new Set(input.claimIds)].map((id) => new Types.ObjectId(id));
   const claims = await ExpenseClaim.find({ businessId: ctx.businessId, _id: { $in: ids } }, { status: 1, claimNumber: 1, amount: 1 }).lean<AnyDoc[]>();
   if (claims.length !== ids.length) throw AppError.notFound("One of the claims was not found");
@@ -512,6 +567,23 @@ export async function settleClaims(ctx: AuthContext, input: z.infer<typeof claim
   if (notReady.length > 0) throw AppError.badRequest(`Only approved, unpaid claims can be settled (${notReady.map((c) => c.claimNumber).join(", ")})`, "CLAIM_NOT_APPROVED");
   await assertNotInDraftPayroll(ctx.businessId, { claimIds: ids });
   const total = claims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0));
+  if (!opts.approved) {
+    const how = input.mode === "PAYROLL" ? `with ${MONTH_LABELS[input.payInMonth - 1]} ${input.payInYear} payroll` : `by ${String(input.mode).toLowerCase()}`;
+    const held = await holdForApproval(ctx, {
+      document: "hr-claim-settlement",
+      targetKey: `claim-settle:${approvalFingerprint(ids.map(String).sort())}`,
+      summary: `Pay ${claims.length} claim(s), ${total.toFixed(2)}, ${how}`,
+      details: [
+        { label: "Claims", value: claims.map((c) => c.claimNumber).join(", ") },
+        { label: "Total", value: total.toFixed(2) },
+        { label: "Paid", value: how },
+        ...(input.mode !== "PAYROLL" ? [{ label: "Paid on", value: input.paidOn }, { label: "Reference", value: input.reference ?? "" }] : []),
+      ],
+      amount: total.toFixed(2),
+      payload: input,
+    });
+    if (held) return held;
+  }
 
   if (input.mode === "PAYROLL") {
     const run = await PayrollRun.findOne({ businessId: ctx.businessId, year: input.payInYear, month: input.payInMonth, status: { $ne: "CANCELLED" } }, { status: 1, runNumber: 1 }).lean<AnyDoc>();
@@ -556,11 +628,45 @@ export const adjustClaimsSchema = z.object({ claimIds: z.array(objectId).min(1, 
  * as a repayment, all in one transaction. The claims may not exceed what is
  * still owed.
  */
-export async function adjustClaimsAgainstAdvance(ctx: AuthContext, loanId: string, input: z.infer<typeof adjustClaimsSchema>) {
+export async function adjustClaimsAgainstAdvance(ctx: AuthContext, loanId: string, input: z.infer<typeof adjustClaimsSchema>, opts: ApprovedRun = {}) {
   if (!Types.ObjectId.isValid(loanId)) throw AppError.notFound("Advance not found");
   const ids = [...new Set(input.claimIds)].map((id) => new Types.ObjectId(id));
   await assertNotInDraftPayroll(ctx.businessId, { loanId: new Types.ObjectId(loanId) });
   await assertNotInDraftPayroll(ctx.businessId, { claimIds: ids });
+  if (!opts.approved) {
+    // The same checks the transaction makes, so only a valid set-off is sent for approval.
+    const loan = await EmployeeLoan.findOne({ _id: loanId, businessId: ctx.businessId }).lean<AnyDoc>();
+    if (!loan) throw AppError.notFound("Advance not found");
+    if (loan.status !== "ACTIVE") throw AppError.badRequest("This advance is not active", "LOAN_NOT_ACTIVE");
+    const claims = await ExpenseClaim.find({ businessId: ctx.businessId, _id: { $in: ids } }).lean<AnyDoc[]>();
+    if (claims.length !== ids.length) throw AppError.notFound("One of the claims was not found");
+    for (const c of claims) {
+      if (String(c.employeeId) !== String(loan.employeeId)) throw AppError.badRequest(`${c.claimNumber} belongs to another employee`, "CLAIM_OTHER_EMPLOYEE");
+      if (c.status !== "APPROVED" || c.payrollRunId) throw AppError.badRequest(`${c.claimNumber} is not an approved, unpaid claim`, "CLAIM_NOT_APPROVED");
+    }
+    const total = claims.reduce((t, c) => t.plus(d(c.amount)), new Decimal(0));
+    const outstanding = d(loan.amount).minus(d(loan.repaidAmount));
+    if (total.gt(outstanding)) throw AppError.badRequest(`The claims come to ${total.toFixed(2)} but only ${outstanding.toFixed(2)} is outstanding. Choose fewer claims.`, "OVERPAYMENT");
+    const emp = await findEmployee(ctx.businessId, String(loan.employeeId));
+    const held = await holdForApproval(ctx, {
+      document: "hr-advance-settlement",
+      targetKey: `loan:${loan._id}`,
+      recordId: loan._id,
+      number: loan.loanNumber,
+      summary: `Set off ${claims.length} claim(s), ${total.toFixed(2)}, against ${loan.loanNumber} (${emp.employeeCode} ${emp.name})`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Advance", value: loan.loanNumber },
+        { label: "Outstanding", value: outstanding.toFixed(2) },
+        { label: "Claims", value: claims.map((c) => c.claimNumber).join(", ") },
+        { label: "Set off", value: total.toFixed(2) },
+      ],
+      amount: total.toFixed(2),
+      employeeId: loan.employeeId,
+      payload: { op: "adjust", id: loanId, input },
+    });
+    if (held) return held;
+  }
 
   const session = await mongoose.startSession();
   let result: { id: string; status: string; adjusted: string } | null = null;

@@ -7,6 +7,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { getPath, setPath } from "@/lib/resources/ui/paths";
 import type { ResourceUi, FieldConfig } from "@/lib/resources/ui/types";
 import VariantsEditor, { type VariantRow } from "./VariantsEditor";
@@ -385,19 +386,23 @@ export default function ResourceFormView({
       const payload = buildPayload(view, state);
 
       if (isEdit) {
-        await apiFetch(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
-        await sendImages(recordId!);
+        const res = await apiFetch<unknown>(`${config.apiPath}/${recordId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        // A held change is not written yet; its pictures wait with the record as it is.
+        const held = notifyHeld(toast, res);
+        if (!held) await sendImages(recordId!);
         setDirty(false);
-        toast.success(`${config.singular} saved`);
+        if (!held) toast.success(`${config.singular} saved`);
         router.push(config.basePath);
       } else {
         const record = await apiFetch<{ id: string }>(config.apiPath, {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        await sendImages(record.id);
+        // Held for approval: there is no record yet to attach pictures to.
+        const held = notifyHeld(toast, record);
+        if (!held) await sendImages(record.id);
         setDirty(false);
-        toast.success(`${config.singular} created`);
+        if (!held) toast.success(`${config.singular} created`);
         router.push(config.basePath);
       }
     } catch (err) {
@@ -424,9 +429,9 @@ export default function ResourceFormView({
     setDeleting(true);
     setError(null);
     try {
-      await apiFetch(`${config.apiPath}/${recordId}`, { method: "DELETE" });
+      const res = await apiFetch<unknown>(`${config.apiPath}/${recordId}`, { method: "DELETE" });
       setDirty(false);
-      toast.success(`${config.singular} deleted`);
+      if (!notifyHeld(toast, res)) toast.success(`${config.singular} deleted`);
       router.push(config.basePath);
     } catch (err) {
       setConfirmDelete(false);

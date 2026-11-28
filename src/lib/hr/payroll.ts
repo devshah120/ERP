@@ -12,10 +12,10 @@ import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar } from "./calendar";
 import { payrollEmployees } from "./holds";
 import { monthVariables, variableKey } from "./variables";
-import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
+import { summarizeMonth, type AttendanceRow, type MonthSummary, type ApprovedRun } from "./attendance";
 import { computePayslip } from "./payrollMath";
 import { statutoryRules, getPayrollSettings } from "./payrollSettings";
-import { approvalGate, cancelApproval, approvalFingerprint } from "@/lib/approvals/service";
+import { approvalGate, cancelApproval, approvalFingerprint, holdForApproval } from "@/lib/approvals/service";
 import { applyDueChanges, salaryForMonth } from "./history";
 import { postPayrollAccrual, postPayrollPayment, reversePayrollAccrual } from "./payrollPosting";
 import { pendingArrearLines, settleArrears, reopenArrears } from "./arrears";
@@ -431,9 +431,34 @@ async function assertAttendanceSettled(ctx: AuthContext, run: AnyDoc, slips: Any
   return { unmarkedDays, unmarkedEmployees: unmarked.length };
 }
 
-export async function markRunPaid(ctx: AuthContext, id: string, input: z.infer<typeof payRunSchema>) {
+/** What an approver of a payroll disbursement or rollback sees. */
+function runDetails(run: AnyDoc) {
+  return [
+    { label: "Payroll", value: `${run.runNumber} · ${monthLabel(run.month, run.year)}` },
+    { label: "Employees", value: String(run.employeeCount) },
+    { label: "Gross", value: d(run.totalGross).toFixed(2) },
+    { label: "Deductions", value: d(run.totalDeductions).toFixed(2) },
+    { label: "Net pay", value: d(run.totalNet).toFixed(2) },
+  ];
+}
+
+export async function markRunPaid(ctx: AuthContext, id: string, input: z.infer<typeof payRunSchema>, opts: ApprovedRun = {}) {
   const run = await loadRun(ctx, id);
   if (run.status !== "APPROVED") throw AppError.badRequest("Approve the payroll before marking it paid", "PAYROLL_NOT_APPROVED");
+  // Marking paid releases the payslips and posts the payment voucher: it may need approval first.
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-payroll-disburse",
+      targetKey: `payroll-run:${run._id}`,
+      recordId: run._id,
+      number: run.runNumber,
+      summary: `Pay ${monthLabel(run.month, run.year)} payroll ${run.runNumber}: ${run.employeeCount} employee(s), net ${d(run.totalNet).toFixed(2)}`,
+      details: [...runDetails(run), { label: "Paid on", value: input.paidOn || "Today" }, { label: "Reference", value: input.reference ?? "" }],
+      amount: d(run.totalNet).toFixed(2),
+      payload: { id: String(run._id), input },
+    });
+    if (held) return held;
+  }
   const paidAt = input.paidOn ? toDay(input.paidOn) : new Date();
   const session = await mongoose.startSession();
   try {
@@ -456,10 +481,24 @@ export async function markRunPaid(ctx: AuthContext, id: string, input: z.infer<t
  * instalments and claim reimbursements reversed, freeing the month for a
  * fresh run. A paid run is final.
  */
-export async function cancelRun(ctx: AuthContext, id: string, reason: string) {
+export async function cancelRun(ctx: AuthContext, id: string, reason: string, opts: ApprovedRun = {}) {
   const run = await loadRun(ctx, id);
   if (run.status === "PAID") throw AppError.badRequest("A paid payroll cannot be cancelled", "PAYROLL_PAID");
   if (run.status === "CANCELLED") throw AppError.badRequest("This payroll is already cancelled", "PAYROLL_CANCELLED");
+  // Rolling back an approved run unlocks the month and reverses its postings; deleting a draft needs no approval.
+  if (run.status === "APPROVED" && !opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-payroll-rollback",
+      targetKey: `payroll-run:${run._id}`,
+      recordId: run._id,
+      number: run.runNumber,
+      summary: `Roll back approved payroll ${run.runNumber} for ${monthLabel(run.month, run.year)}`,
+      details: [...runDetails(run), { label: "Reason", value: reason }],
+      amount: d(run.totalNet).toFixed(2),
+      payload: { id: String(run._id), reason },
+    });
+    if (held) return held;
+  }
 
   const session = await mongoose.startSession();
   const wasDraft = run.status === "DRAFT";

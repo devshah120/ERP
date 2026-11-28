@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { z } from "zod";
@@ -22,14 +23,14 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { action } = actionSchema.parse(body);
   if (action === "repay") {
     requirePermission(ctx, "hr-loans.create");
-    return ok(await recordRepayment(ctx, id, repaymentSchema.parse(body)), "Repayment recorded");
+    return okOrHeld(await recordRepayment(ctx, id, repaymentSchema.parse(body)), "Repayment recorded");
   }
   if (action === "adjust-claims") {
     // Settles both sides: the advance (loan rights) and the claims (claim approval rights).
     requirePermission(ctx, "hr-loans.create");
     requirePermission(ctx, "hr-claims.approve");
     const result = await adjustClaimsAgainstAdvance(ctx, id, adjustClaimsSchema.parse(body));
-    return ok(result, "Claims set off against the advance");
+    return okOrHeld(result, "Claims set off against the advance");
   }
   requirePermission(ctx, "hr-loans.cancel");
   return ok(await cancelLoan(ctx, id), "Loan cancelled");

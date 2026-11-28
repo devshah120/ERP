@@ -9,6 +9,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import type { PaymentUi } from "@/lib/payments/ui";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import { useAuth } from "@/app/(app)/AuthProvider";
@@ -226,6 +227,7 @@ export default function PaymentFormView({
         method: "POST",
         body: JSON.stringify(payload),
       });
+      if (notifyHeld(toast, created)) return router.push(config.basePath);
       toast.success(`${config.singular} saved`, created.documentNumber);
       router.push(`${config.basePath}/${created.id}`);
     } catch (err) {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
-import { okDecision } from "@/lib/approvals/http";
+import { okDecision, okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { z } from "zod";
@@ -16,5 +16,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const { action, note } = actionSchema.parse(await req.json());
   if (action === "approve") return okDecision(await approveLeave(ctx, id, note), "Leave approved");
   if (action === "reject") return ok(await rejectLeave(ctx, id, note), "Leave rejected");
-  return ok(await cancelLeave(ctx, id, { self: false, note }), "Leave cancelled");
+  return okOrHeld(await cancelLeave(ctx, id, { self: false, note }), "Leave cancelled");
 });

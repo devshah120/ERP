@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -146,6 +147,7 @@ export default function LabourAttendancePage() {
     try {
       const rows = sheet.rows.filter((r) => dirty.has(r.workerId)).map((r) => ({ workerId: r.workerId, ...drafts[r.workerId] }));
       const res = await apiFetch<{ saved: number }>("/api/hr/contract-labour/attendance", { method: "PUT", body: JSON.stringify({ date: sheet.date, rows }) });
+      if (notifyHeld(toast, res)) return void (await load());
       toast.success(`Saved attendance for ${res.saved} worker${res.saved === 1 ? "" : "s"}`);
       await load();
     } catch (err) {

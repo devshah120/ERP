@@ -5,7 +5,8 @@ import { PayrollHold, PayrollRun, FnfSettlement } from "@/models/hr";
 import { recordAudit } from "@/lib/services/auditService";
 import type { AuthContext } from "@/lib/auth/context";
 import { monthRange, employeesDuring } from "./calendar";
-import { assertPayrollOpen } from "./attendance";
+import { assertPayrollOpen, type ApprovedRun } from "./attendance";
+import { holdForApproval } from "@/lib/approvals/service";
 import { findEmployee, employeeLabels, monthQuery, objectId, type AnyDoc } from "./common";
 
 /*
@@ -83,7 +84,7 @@ export async function listHolds(ctx: AuthContext, year: number, month: number) {
 }
 
 /** Puts an employee's salary for a month on hold. */
-export async function blockPayroll(ctx: AuthContext, input: z.infer<typeof holdSchema>) {
+export async function blockPayroll(ctx: AuthContext, input: z.infer<typeof holdSchema>, opts: ApprovedRun = {}) {
   const emp = await findEmployee(ctx.businessId, input.employeeId);
   const { start, end } = monthRange(input.year, input.month);
   const onRolls = (await employeesDuring(ctx.businessId, start, end)).some((e) => String(e._id) === String(emp._id));
@@ -92,17 +93,44 @@ export async function blockPayroll(ctx: AuthContext, input: z.infer<typeof holdS
   if (await PayrollHold.exists({ businessId: ctx.businessId, employeeId: emp._id, year: input.year, month: input.month })) {
     throw AppError.conflict(`${emp.name}'s salary is already on hold for that month.`, "ALREADY_HELD");
   }
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-payroll-hold",
+      targetKey: `payroll-hold:${emp._id}:${input.year}-${input.month}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `Block ${emp.employeeCode} ${emp.name}'s salary for ${input.month}/${input.year}`,
+      details: [{ label: "Employee", value: `${emp.employeeCode} ${emp.name}` }, { label: "Month", value: `${input.month}/${input.year}` }, { label: "Action", value: "Block salary" }, { label: "Reason", value: input.reason ?? "" }],
+      employeeId: emp._id,
+      payload: { op: "block", input },
+    });
+    if (held) return held;
+  }
   const doc = await PayrollHold.create({ businessId: ctx.businessId, employeeId: emp._id, year: input.year, month: input.month, reason: input.reason, createdBy: ctx.userId });
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "CREATE", module: "hr.payroll", documentType: "PayrollHold", documentId: doc._id, newValue: { employee: emp.employeeCode, month: input.month, year: input.year }, reason: input.reason });
   return { id: String(doc._id), draftRunId: await draftRunId(ctx.businessId, input.year, input.month) };
 }
 
 /** Lifts a hold so the employee is paid with the month's payroll again. */
-export async function unblockPayroll(ctx: AuthContext, id: string) {
+export async function unblockPayroll(ctx: AuthContext, id: string, opts: ApprovedRun = {}) {
   if (!Types.ObjectId.isValid(id)) throw AppError.notFound("Hold not found");
   const hold = await PayrollHold.findOne({ _id: id, businessId: ctx.businessId }).lean<AnyDoc>();
   if (!hold) throw AppError.notFound("Hold not found");
   await assertMonthOpen(ctx.businessId, hold.year, hold.month);
+  if (!opts.approved) {
+    const emp = await findEmployee(ctx.businessId, String(hold.employeeId));
+    const held = await holdForApproval(ctx, {
+      document: "hr-payroll-hold",
+      targetKey: `payroll-hold:${hold.employeeId}:${hold.year}-${hold.month}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `Unblock ${emp.employeeCode} ${emp.name}'s salary for ${hold.month}/${hold.year}`,
+      details: [{ label: "Employee", value: `${emp.employeeCode} ${emp.name}` }, { label: "Month", value: `${hold.month}/${hold.year}` }, { label: "Action", value: "Unblock salary" }, { label: "Blocked because", value: hold.reason ?? "" }],
+      employeeId: emp._id,
+      payload: { op: "unblock", id },
+    });
+    if (held) return held;
+  }
   await PayrollHold.deleteOne({ _id: hold._id, businessId: ctx.businessId });
   await recordAudit({ businessId: ctx.businessId, userId: ctx.userId, action: "DELETE", module: "hr.payroll", documentType: "PayrollHold", documentId: hold._id, oldValue: { employeeId: String(hold.employeeId), month: hold.month, year: hold.year, reason: hold.reason } });
   return { id, draftRunId: await draftRunId(ctx.businessId, hold.year, hold.month) };

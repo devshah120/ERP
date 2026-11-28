@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { attendanceIncentive, postIncentive, incentiveQuery } from "@/lib/hr/incentive";
@@ -62,5 +63,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   const ctx = getAuthContext(req);
   requirePermission(ctx, "hr-payroll.process");
   const result = await postIncentive(ctx, incentiveQuery.parse(await req.json()));
-  return ok(result, `Incentive added to ${result.payout} payroll for ${result.added} employee(s)`);
+  return okOrHeld(result, (r) => `Incentive added to ${r.payout} payroll for ${r.added} employee(s)`);
 });

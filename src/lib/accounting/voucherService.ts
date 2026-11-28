@@ -25,6 +25,7 @@ import {
   paymentEntries,
 } from "./posting";
 import type { AuthContext } from "@/lib/auth/context";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyDoc = any;
@@ -67,7 +68,7 @@ export const voucherListSchema = z.object({
  * it applies the same balance rule, and refuses to post to a group account
  * (a heading is not somewhere money can sit).
  */
-export async function createVoucher(input: VoucherCreateInput, ctx: AuthContext) {
+export async function createVoucher(input: VoucherCreateInput, ctx: AuthContext, opts: { approved?: boolean } = {}) {
   const [business, financialYear] = await Promise.all([
     Business.findById(ctx.businessId).lean(),
     FinancialYear.findOne({ businessId: ctx.businessId, isCurrent: true }).lean(),
@@ -130,6 +131,23 @@ export async function createVoucher(input: VoucherCreateInput, ctx: AuthContext)
       `Debits (${totalDebit.toFixed(2)}) and credits (${totalCredit.toFixed(2)}) must be equal. Difference: ${totalDebit.minus(totalCredit).abs().toFixed(2)}.`,
       "UNBALANCED_VOUCHER"
     );
+  }
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "erp-journal",
+      targetKey: `voucher:${approvalFingerprint(input)}`,
+      summary: `${String(input.voucherType).toLowerCase()} voucher of ${totalDebit.toFixed(2)}${input.narration ? `: ${input.narration}` : ""}`,
+      details: [
+        { label: "Type", value: String(input.voucherType) },
+        { label: "Date", value: input.voucherDate ?? "Today" },
+        ...lines.slice(0, 12).map((l) => ({ label: `${l.accountCode} · ${l.accountName}`, value: new Decimal(String(l.debit)).gt(0) ? `Dr ${new Decimal(String(l.debit)).toFixed(2)}` : `Cr ${new Decimal(String(l.credit)).toFixed(2)}` })),
+        { label: "Total", value: totalDebit.toFixed(2) },
+        { label: "Narration", value: input.narration ?? "" },
+      ],
+      amount: totalDebit.toFixed(2),
+      payload: input,
+    });
+    if (held) return held;
   }
 
   const session = await mongoose.startSession();

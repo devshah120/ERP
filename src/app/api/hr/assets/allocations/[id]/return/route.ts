@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { returnAsset, returnSchema } from "@/lib/hr/assets";
@@ -11,5 +11,5 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   requirePermission(ctx, "hr-assets.edit");
   const { id } = await params;
   const result = await returnAsset(ctx, id, returnSchema.parse(await req.json()));
-  return ok(result, `${result.allocationNumber} returned`);
+  return okOrHeld(result, (r) => `${r.allocationNumber} returned`);
 });

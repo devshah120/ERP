@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchBox from "@/components/ui/SearchBox";
@@ -78,7 +79,7 @@ export default function LeaveBalancesPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      await apiFetch("/api/hr/leaves/balances", {
+      const res = await apiFetch<unknown>("/api/hr/leaves/balances", {
         method: "PUT",
         body: JSON.stringify({
           employeeId: editing.employeeId,
@@ -89,7 +90,7 @@ export default function LeaveBalancesPage() {
           notes: editing.notes,
         }),
       });
-      toast.success(`${editing.balance.name} updated for ${editing.name}`);
+      if (!notifyHeld(toast, res)) toast.success(`${editing.balance.name} updated for ${editing.name}`);
       setEditing(null);
       load();
     } catch (err) {
@@ -104,7 +105,10 @@ export default function LeaveBalancesPage() {
     setCarryError(null);
     try {
       const r = await apiFetch<CarryPreview>("/api/hr/leaves/carry-forward", { method: "POST", body: JSON.stringify({ fromYear: year - 1, commit }) });
-      if (commit) {
+      if (commit && notifyHeld(toast, r)) {
+        setCarry(null);
+        load();
+      } else if (commit) {
         toast.success(`Carried ${r.totals.carried} day(s) into ${r.toYear}`, r.totals.lapsed ? `${r.totals.lapsed} day(s) lapsed over the limits` : undefined);
         setCarry(null);
         load();

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import { createVoucher, listVouchers, voucherCreateSchema } from "@/lib/accounting/voucherService";
 import "@/models";
@@ -16,5 +17,5 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   requirePermission(ctx, "vouchers.create");
 
   const input = voucherCreateSchema.parse(await req.json());
-  return created(await createVoucher(input, ctx), "Voucher posted successfully");
+  return okOrHeld(await createVoucher(input, ctx), "Voucher posted successfully", 201);
 });

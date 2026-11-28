@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import { useShortcutScope } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -135,7 +136,9 @@ export default function ClaimSettlementPage() {
         method: "POST",
         body: JSON.stringify(body),
       });
-      if (res.payroll) {
+      if (notifyHeld(toast, res)) {
+        // Held for approval: nothing is paid yet.
+      } else if (res.payroll) {
         toast.success(
           `${res.scheduled} claim${res.scheduled === 1 ? "" : "s"} will be paid in ${res.payroll} payroll`,
           res.draftPayroll ? `Regenerate draft ${res.draftPayroll} so it includes them.` : `${formatMoney(res.amount)} is added when that payroll is generated.`

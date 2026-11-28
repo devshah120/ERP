@@ -9,6 +9,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { formatMoney } from "@/lib/format/number";
@@ -186,6 +187,7 @@ export default function VoucherFormView({ recordId }: { recordId?: string }) {
           })),
         }),
       });
+      if (notifyHeld(toast, doc)) return router.push("/account-vouchers");
       toast.success("Voucher posted", doc.voucherNumber);
       router.push(`/account-vouchers/${doc.id}`);
     } catch (err) {

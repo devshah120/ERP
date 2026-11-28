@@ -9,6 +9,8 @@ import type { AuthContext } from "@/lib/auth/context";
 import { monthRange } from "./calendar";
 import { salaryForMonth } from "./history";
 import { findEmployee, employeeLabels, monthQuery, objectId, type AnyDoc } from "./common";
+import { holdForApproval } from "@/lib/approvals/service";
+import type { ApprovedRun } from "./attendance";
 
 /*
  * Arrears: pay owed for months whose payroll is already approved, paid with
@@ -144,7 +146,7 @@ export const dayArrearSchema = monthQuery.extend({
 });
 
 /** Pays back loss-of-pay days of an approved month at that month's daily rate. */
-export async function createDayArrear(ctx: AuthContext, input: z.infer<typeof dayArrearSchema>) {
+export async function createDayArrear(ctx: AuthContext, input: z.infer<typeof dayArrearSchema>, opts: ApprovedRun = {}) {
   const emp = await findEmployee(ctx.businessId, input.employeeId);
   const slip = await Payslip.findOne({ businessId: ctx.businessId, employeeId: emp._id, year: input.year, month: input.month, status: { $in: ["APPROVED", "PAID"] } }).lean<AnyDoc>();
   if (!slip) throw AppError.badRequest(`${emp.name} has no approved payslip for ${input.month}/${input.year}. Correct attendance and recalculate that payroll instead.`, "NO_LOCKED_PAYSLIP");
@@ -159,6 +161,28 @@ export async function createDayArrear(ctx: AuthContext, input: z.infer<typeof da
   const breakdown = FIXED.map(([code, field]) => ({ code, label: LABEL[code], amount: money(fullOf(code, field).times(input.days).dividedBy(slip.daysInMonth)) })).filter((b) => b.amount.gt(0));
   const total = breakdown.reduce((t, b) => t.plus(b.amount), new Decimal(0));
   if (total.lte(0)) throw AppError.badRequest("That month's salary was zero, so there is nothing to pay back.", "NOTHING_TO_PAY");
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "hr-arrear",
+      targetKey: `arrear-day:${emp._id}:${input.year}-${input.month}`,
+      recordId: emp._id,
+      number: emp.employeeCode,
+      summary: `Day arrear for ${emp.employeeCode} ${emp.name}: ${input.days} day(s) of ${input.month}/${input.year}, ${total.toFixed(2)}`,
+      details: [
+        { label: "Employee", value: `${emp.employeeCode} ${emp.name}` },
+        { label: "Kind", value: "Day arrear (loss of pay paid back)" },
+        { label: "Month", value: `${input.month}/${input.year}` },
+        { label: "Days", value: String(input.days) },
+        ...breakdown.map((b) => ({ label: b.label, value: b.amount.toFixed(2) })),
+        { label: "Total", value: total.toFixed(2) },
+        { label: "Reason", value: input.reason },
+      ],
+      amount: total.toFixed(2),
+      employeeId: emp._id,
+      payload: { kind: "DAY", input },
+    });
+    if (held) return held;
+  }
   const doc = await PayrollArrear.create({
     businessId: ctx.businessId,
     employeeId: emp._id,
@@ -200,7 +224,7 @@ export const daArrearSchema = z
  * then commit; an employee who already has DA arrears for an overlapping
  * range is skipped.
  */
-export async function createDaArrears(ctx: AuthContext, input: z.infer<typeof daArrearSchema>) {
+export async function createDaArrears(ctx: AuthContext, input: z.infer<typeof daArrearSchema>, opts: ApprovedRun = {}) {
   const filter: Record<string, unknown> = { businessId: ctx.businessId, status: { $in: ["APPROVED", "PAID"] } };
   const slips = (await Payslip.find(filter).lean<AnyDoc[]>()).filter((s) => ym(s.year, s.month) >= ym(input.fromYear, input.fromMonth) && ym(s.year, s.month) <= ym(input.toYear, input.toMonth));
   let empIds = [...new Set(slips.map((s) => String(s.employeeId)))];
@@ -223,6 +247,25 @@ export async function createDaArrears(ctx: AuthContext, input: z.infer<typeof da
   }).filter((r) => new Decimal(r.amount).gt(0)).sort((a, b) => a.code.localeCompare(b.code));
 
   const toCreate = rows.filter((r) => !r.skipped);
+  if (input.commit && toCreate.length > 0 && !opts.approved) {
+    const total = toCreate.reduce((t, r) => t.plus(r.amount), new Decimal(0)).toFixed(2);
+    const held = await holdForApproval(ctx, {
+      document: "hr-arrear",
+      targetKey: `arrear-da:${input.fromYear}-${input.fromMonth}:${input.toYear}-${input.toMonth}:${input.departmentId ?? "all"}`,
+      summary: `DA arrears of ${input.percent}% for ${toCreate.length} employee(s), ${input.fromMonth}/${input.fromYear} to ${input.toMonth}/${input.toYear}: ${total}`,
+      details: [
+        { label: "Kind", value: "DA arrears" },
+        { label: "DA increase", value: `${input.percent}% of basic` },
+        { label: "Months", value: `${input.fromMonth}/${input.fromYear} to ${input.toMonth}/${input.toYear}` },
+        { label: "Employees", value: String(toCreate.length) },
+        { label: "Total", value: total },
+        { label: "Reason", value: input.reason },
+      ],
+      amount: total,
+      payload: { kind: "DA", input },
+    });
+    if (held) return { ...held, committed: false, rows, total };
+  }
   if (input.commit && toCreate.length > 0) {
     await PayrollArrear.insertMany(
       toCreate.map((r) => ({

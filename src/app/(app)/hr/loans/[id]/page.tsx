@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -80,8 +81,8 @@ export default function LoanPage() {
     setBusy(true);
     setDialogError(null);
     try {
-      await apiFetch(`/api/hr/loans/${id}`, { method: "POST", body: JSON.stringify(action === "repay" ? { action, ...repay } : { action }) });
-      toast.success(action === "repay" ? "Repayment recorded" : "Loan cancelled");
+      const res = await apiFetch<unknown>(`/api/hr/loans/${id}`, { method: "POST", body: JSON.stringify(action === "repay" ? { action, ...repay } : { action }) });
+      if (!notifyHeld(toast, res)) toast.success(action === "repay" ? "Repayment recorded" : "Loan cancelled");
       setRepayOpen(false);
       setCancelOpen(false);
       setRepay({ amount: "", note: "" });
@@ -113,7 +114,7 @@ export default function LoanPage() {
     setDialogError(null);
     try {
       const r = await apiFetch<{ adjusted: string; status: string }>(`/api/hr/loans/${id}`, { method: "POST", body: JSON.stringify({ action: "adjust-claims", claimIds: [...picked] }) });
-      toast.success(`${formatMoney(r.adjusted)} set off against claims`, r.status === "CLOSED" ? "The advance is now fully settled." : undefined);
+      if (!notifyHeld(toast, r)) toast.success(`${formatMoney(r.adjusted)} set off against claims`, r.status === "CLOSED" ? "The advance is now fully settled." : undefined);
       setSetOffOpen(false);
       load();
     } catch (err) {

@@ -21,6 +21,12 @@ afterAll(async () => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ctx = any;
 
+/** These flows run without approval schemes, so nothing is held for approval; narrows the module's result type. */
+function applied<T>(r: T): Exclude<T, { pendingApproval: true }> {
+  if (r && typeof r === "object" && (r as { pendingApproval?: unknown }).pendingApproval === true) throw new Error("Unexpectedly held for approval");
+  return r as Exclude<T, { pendingApproval: true }>;
+}
+
 describe("HRMS sold from the admin portal (real replica set, real transactions)", () => {
   const owner = { email: "owner@peoplefirst.test", password: "Str0ng!Passw0rd" };
   let businessId: string;
@@ -404,10 +410,10 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     // A promotion scheduled for January waits; a December HRA change made afterwards carries into it.
     const mgr = await Designation.findOne({ businessId, code: "MGR" }).lean<{ _id: Types.ObjectId }>();
-    const promo = await recordChange(ctx, String(emp.asha), { changeType: "PROMOTION", effectiveDate: "2027-01-01", reason: "", changes: { designationId: String(mgr!._id), basic: "22000" } });
+    const promo = applied(await recordChange(ctx, String(emp.asha), { changeType: "PROMOTION", effectiveDate: "2027-01-01", reason: "", changes: { designationId: String(mgr!._id), basic: "22000" } }));
     expect(promo.scheduled).toBe(true);
     expect(String((await Employee.findById(emp.asha).lean<{ designationId: unknown }>())!.designationId)).not.toBe(String(mgr!._id));
-    const hraChange = await recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-12-01", reason: "", changes: { hra: "6000" } });
+    const hraChange = applied(await recordChange(ctx, String(emp.asha), { changeType: "SALARY_REVISION", effectiveDate: "2026-12-01", reason: "", changes: { hra: "6000" } }));
     const promoValues = async () => (await EmploymentChange.findById(promo.id).lean<{ values: { hra: unknown; basic: unknown } }>())!.values;
     expect(String((await promoValues()).hra)).toBe("6000.00");
     expect(String((await promoValues()).basic)).toBe("22000.00"); // its own change is kept
@@ -457,7 +463,7 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect((await variableSheet(ctx, { ...period })).rows.find((r) => r.name === "Asha Rao")!.amounts[comp("BONUS")]).toBe("2000.00");
 
     // Ravi's December salary is held: he is left out of the run.
-    const hold = await blockPayroll(ctx, { ...period, employeeId: String(emp.ravi), reason: "Documents awaited" });
+    const hold = applied(await blockPayroll(ctx, { ...period, employeeId: String(emp.ravi), reason: "Documents awaited" }));
     await expect(blockPayroll(ctx, { ...period, employeeId: String(emp.ravi), reason: "Again" })).rejects.toMatchObject({ code: "ALREADY_HELD" });
     expect((await payrollReadiness(ctx, 2026, 12)).blocked.map((b) => b.name)).toEqual(["Ravi Kumar"]);
 
@@ -558,13 +564,13 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
 
     // Increment: Ravi's raise backdated to 1 October (October is approved at 12,000).
     // His later correction (13,000 from 22 November) still applies afterwards, so only October is owed.
-    const raise = await recordChange(ctx, String(emp.ravi), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-01", reason: "Appraisal", changes: { basic: "14000" } });
+    const raise = applied(await recordChange(ctx, String(emp.ravi), { changeType: "SALARY_REVISION", effectiveDate: "2026-10-01", reason: "Appraisal", changes: { basic: "14000" } }));
     expect(raise.arrears).toBe(1);
     let inc = await listArrears(ctx, { kind: "INCREMENT" });
     expect(inc.items.map((a) => [a.employeeName, `${a.from.month}/${a.from.year}`, a.amount])).toEqual([["Ravi Kumar", "10/2026", "2000.00"]]);
 
     // Day: Asha lost 2 days in October; pay one back at October's daily rate (20,000 / 31).
-    expect((await createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 10, days: 1, reason: "Leave approved late" })).amount).toBe("645.16");
+    expect(applied(await createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 10, days: 1, reason: "Leave approved late" })).amount).toBe("645.16");
     await expect(createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 10, days: 2, reason: "Again" })).rejects.toMatchObject({ code: "TOO_MANY_DAYS" });
     await expect(createDayArrear(ctx, { employeeId: String(emp.asha), year: 2026, month: 9, days: 1, reason: "No payroll" })).rejects.toMatchObject({ code: "NO_LOCKED_PAYSLIP" });
 
@@ -1300,7 +1306,7 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect(after).toMatchObject({ incentiveDays: 5, amount: "5000.00" });
 
     // Added to January 2026 payroll as variable pay, and picked up by payroll.
-    const posted = await postIncentive(ctx, q);
+    const posted = applied(await postIncentive(ctx, q));
     expect(posted.payout).toBe("January 2026");
     const lines = (await monthVariables(bId, 2026, 1, [emp._id])).get(String(emp._id));
     expect(lines).toEqual([expect.objectContaining({ code: "ATT_INC", kind: "EARNING", amount: "5000.00" })]);
@@ -1382,7 +1388,7 @@ describe("HRMS sold from the admin portal (real replica set, real transactions)"
     expect((await HrAsset.findOne({ businessId: bId, assetTag: "AST-T3" }).lean<{ assetStatus: string }>())!.assetStatus).toBe("ALLOCATED");
 
     const give = (assetId: unknown, extra: Record<string, unknown> = {}) =>
-      allocateAsset(ctx, allocateSchema.parse({ assetId: String(assetId), employeeId: String(emp._id), allocatedOn: "2026-03-01", ...extra }));
+      allocateAsset(ctx, allocateSchema.parse({ assetId: String(assetId), employeeId: String(emp._id), allocatedOn: "2026-03-01", ...extra })).then(applied);
     const a1 = await give(laptop._id, { expectedReturnDate: "2026-04-01", condition: "NEW" });
     expect(await HrAsset.findById(laptop._id).lean()).toMatchObject({ assetStatus: "ALLOCATED", condition: "NEW" });
     expect(String((await HrAsset.findById(laptop._id).lean<{ employeeId: unknown }>())!.employeeId)).toBe(String(emp._id));

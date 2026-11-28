@@ -15,6 +15,7 @@ import { serializeDoc } from "@/lib/resources/serialize";
 import { toDecimal128 } from "@/lib/documents/decimal128";
 import { tryPostDocument, reverseVoucherFor, receiptEntries, paymentEntries } from "@/lib/accounting/posting";
 import type { AuthContext } from "@/lib/auth/context";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
 import { paymentListSchema, type PaymentCreateInput, type PaymentTypeConfig } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,7 +109,8 @@ export async function listOutstandingInvoices(
 export async function createPayment(
   type: PaymentTypeConfig,
   input: PaymentCreateInput,
-  ctx: AuthContext
+  ctx: AuthContext,
+  opts: { approved?: boolean } = {}
 ) {
   const { business, financialYear } = await resolveContext(ctx);
 
@@ -137,6 +139,26 @@ export async function createPayment(
       `Allocated ${allocationTotal.toFixed(2)} exceeds the ${type.label.toLowerCase()} amount of ${amount.toFixed(2)}`,
       "OVER_ALLOCATED"
     );
+  }
+  // With an approval scheme, the receipt / payment waits; nothing is posted until it is approved.
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: type.key === "receipts" ? "erp-receipt" : "erp-payment",
+      targetKey: `${type.key}:${approvalFingerprint(input)}`,
+      summary: `${type.label} of ${amount.toFixed(2)} ${type.partyType === "customer" ? "from" : "to"} ${party.name ?? party.displayName ?? ""}`.trim(),
+      details: [
+        { label: type.partyLabel, value: String(party.name ?? party.displayName ?? "") },
+        { label: "Amount", value: amount.toFixed(2) },
+        { label: "Mode", value: String(input.mode) },
+        { label: "Date", value: input.documentDate ?? "Today" },
+        { label: "Reference", value: input.referenceNumber ?? "" },
+        { label: "Against invoices", value: input.allocations.length ? `${input.allocations.length} invoice(s), ${allocationTotal.toFixed(2)}` : "On account" },
+        { label: "Notes", value: input.notes ?? "" },
+      ],
+      amount: amount.toFixed(2),
+      payload: { type: type.key, input },
+    });
+    if (held) return held;
   }
 
   const model = invoiceModel(type);

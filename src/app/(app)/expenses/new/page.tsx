@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { formatMoney } from "@/lib/format/number";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import PageHeader from "@/components/ui/PageHeader";
@@ -87,6 +88,7 @@ export default function NewExpensePage() {
         body: JSON.stringify({ ...form, taxRatePercent: Number(form.taxRatePercent) || 0 }),
       });
       setDirty(false);
+      if (notifyHeld(toast, created)) return router.push("/expenses");
       toast.success(`Expense ${created.expenseNumber} recorded`);
       router.push(`/expenses/${created.id}`);
     } catch (err) {

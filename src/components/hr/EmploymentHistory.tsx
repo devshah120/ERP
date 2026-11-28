@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -109,8 +110,8 @@ export default function EmploymentHistory({ employeeId, canEdit, onChanged }: { 
     setBusy(true);
     setRemoveError(null);
     try {
-      await apiFetch(`/api/hr/employees/${employeeId}/history/${removing.id}`, { method: "DELETE" });
-      toast.success("Change removed");
+      const res = await apiFetch<unknown>(`/api/hr/employees/${employeeId}/history/${removing.id}`, { method: "DELETE" });
+      if (!notifyHeld(toast, res)) toast.success("Change removed");
       setRemoving(null);
       load();
       onChanged();
@@ -225,10 +226,11 @@ function ChangeForm({ employeeId, data, onClose, onDone }: { employeeId: string;
       changes[f.key] = f.kind === "ref" ? (v ? v : null) : v;
     }
     try {
-      const r = await apiFetch<{ scheduled: boolean; effectiveDate: string; arrears: number }>(`/api/hr/employees/${employeeId}/history`, {
+      const r = await apiFetch<{ scheduled: boolean; effectiveDate: string; arrears: number; pendingApproval?: boolean; approvalMessage?: string }>(`/api/hr/employees/${employeeId}/history`, {
         method: "POST",
         body: JSON.stringify({ changeType, effectiveDate, reason, changes }),
       });
+      if (r.pendingApproval && r.approvalMessage) return onDone(r.approvalMessage);
       onDone(r.scheduled ? `Scheduled from ${fmtDate(r.effectiveDate)}` : r.arrears > 0 ? `Change recorded; arrears for ${r.arrears} paid month(s) go into the next payroll` : "Change recorded");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");

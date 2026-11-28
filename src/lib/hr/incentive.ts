@@ -7,7 +7,8 @@ import { toDecimal128 } from "@/lib/documents/decimal128";
 import { Attendance, IncentiveMatrix, PayComponent, PayrollRun, PayrollVariable } from "@/models/hr";
 import type { AuthContext } from "@/lib/auth/context";
 import { toDay, dayKey, eachDay, monthRange, loadCalendar, employeesDuring, dayKind, shiftFor } from "./calendar";
-import { summarizeMonth, type AttendanceRow, type MonthSummary } from "./attendance";
+import { summarizeMonth, type AttendanceRow, type MonthSummary, type ApprovedRun } from "./attendance";
+import { holdForApproval } from "@/lib/approvals/service";
 import { salaryForMonth } from "./history";
 import { employeeLabels, type AnyDoc } from "./common";
 import { monthLabel } from "./payroll";
@@ -249,11 +250,29 @@ export async function attendanceIncentive(ctx: AuthContext, q: z.infer<typeof in
  * (an employee no longer due one has theirs removed). Refused once that
  * month's payroll is approved; a draft must be regenerated to include it.
  */
-export async function postIncentive(ctx: AuthContext, q: z.infer<typeof incentiveQuery>) {
+export async function postIncentive(ctx: AuthContext, q: z.infer<typeof incentiveQuery>, opts: ApprovedRun = {}) {
   const result = await attendanceIncentive(ctx, q);
   const { payout } = result;
   if (payout.payroll && payout.payroll.status !== "DRAFT") {
     throw AppError.badRequest(`${payout.label} payroll (${payout.payroll.runNumber}) is already ${payout.payroll.status.toLowerCase()}, so its variable pay is locked.`, "PAYROLL_LOCKED");
+  }
+  if (!opts.approved) {
+    const payable = result.rows.filter((r) => r.status === "PAYABLE" && new Decimal(r.amount).gt(0));
+    const held = await holdForApproval(ctx, {
+      document: "hr-incentive",
+      targetKey: `incentive:${String(result.matrix.name)}:${result.period.label}:${payout.label}`,
+      summary: `${result.matrix.name} for ${result.period.label}: ${payable.length} employee(s), ${String(result.totals.amount)} in ${payout.label} payroll`,
+      details: [
+        { label: "Incentive matrix", value: String(result.matrix.name) },
+        { label: "Attendance period", value: result.period.label },
+        { label: "Paid with", value: `${payout.label} payroll` },
+        { label: "Employees", value: String(payable.length) },
+        { label: "Total", value: String(result.totals.amount) },
+      ],
+      amount: String(result.totals.amount),
+      payload: q,
+    });
+    if (held) return held;
   }
   const component = await incentiveComponent(ctx.businessId, true);
   const ops: AnyDoc[] = [];

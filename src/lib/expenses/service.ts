@@ -15,6 +15,7 @@ import { moneyAccounts } from "@/lib/reports/financeReports";
 import { resolveBusinessContext, escapeRegex, dayRange } from "@/lib/services/businessContext";
 import { SEQUENCES } from "@/lib/numbering/catalogue";
 import type { AuthContext } from "@/lib/auth/context";
+import { holdForApproval, approvalFingerprint } from "@/lib/approvals/service";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyDoc = any;
@@ -56,7 +57,7 @@ export async function expenseOptions(businessId: Types.ObjectId) {
   };
 }
 
-export async function createExpense(input: z.infer<typeof expenseCreateSchema>, ctx: AuthContext) {
+export async function createExpense(input: z.infer<typeof expenseCreateSchema>, ctx: AuthContext, opts: { approved?: boolean } = {}) {
   const { branchId, financialYear } = await resolveBusinessContext(ctx.businessId);
 
   const [head, from] = await Promise.all([
@@ -81,6 +82,23 @@ export async function createExpense(input: z.infer<typeof expenseCreateSchema>, 
     const need = input.interState ? ["INPUT_IGST"] : ["INPUT_CGST", "INPUT_SGST"];
     const missing = need.filter((r) => !gstAccounts!.has(r));
     if (missing.length) throw AppError.badRequest(`Chart of accounts is missing ${missing.join(", ")}`, "COA_INCOMPLETE");
+  }
+  if (!opts.approved) {
+    const held = await holdForApproval(ctx, {
+      document: "erp-expense",
+      targetKey: `expense:${approvalFingerprint(input)}`,
+      summary: `${head.name}: ${total.toFixed(2)} paid from ${from.name}`,
+      details: [
+        { label: "Expense head", value: `${head.code} · ${head.name}` },
+        { label: "Paid from", value: `${from.code} · ${from.name}` },
+        { label: "Amount", value: amount.toFixed(2) },
+        { label: "GST", value: tax.toFixed(2) },
+        { label: "Total", value: total.toFixed(2) },
+      ],
+      amount: total.toFixed(2),
+      payload: input,
+    });
+    if (held) return held;
   }
 
   const session = await mongoose.startSession();

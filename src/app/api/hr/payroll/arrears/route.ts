@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { withApiHandler } from "@/lib/http/withApiHandler";
-import { ok, created } from "@/lib/http/response";
+import { ok } from "@/lib/http/response";
+import { okOrHeld } from "@/lib/approvals/http";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import "@/models";
 import { listArrears, arrearListSchema, createDayArrear, dayArrearSchema, createDaArrears, daArrearSchema } from "@/lib/hr/arrears";
@@ -19,7 +20,8 @@ export const POST = withApiHandler(async (req: NextRequest) => {
   requirePermission(ctx, "hr-payroll.process");
   const body = await req.json();
   const { kind } = z.object({ kind: z.enum(["DAY", "DA"]) }).parse(body);
-  if (kind === "DAY") return created(await createDayArrear(ctx, dayArrearSchema.parse(body)), "Day arrear added to the next payroll");
+  if (kind === "DAY") return okOrHeld(await createDayArrear(ctx, dayArrearSchema.parse(body)), "Day arrear added to the next payroll", 201);
   const result = await createDaArrears(ctx, daArrearSchema.parse(body));
+  if ("pendingApproval" in result) return ok(result, result.approvalMessage, 202);
   return ok(result, result.committed ? "DA arrears added to the next payroll" : undefined);
 });

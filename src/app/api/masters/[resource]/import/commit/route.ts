@@ -5,7 +5,8 @@ import { AppError } from "@/lib/errors/AppError";
 import { getAuthContext, requirePermission } from "@/lib/auth/context";
 import { getResource } from "@/lib/resources/registry";
 import { getImportDefinition } from "@/lib/import/registry";
-import { parseImportFile, commitImport } from "@/lib/import/service";
+import { parseImportFile, commitImport, previewImport } from "@/lib/import/service";
+import { resourceApprovalDocument, holdResourceWrite } from "@/lib/approvals/resourceApprovals";
 import "@/models";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -34,6 +35,21 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const skipDuplicates = String(form.get("skipDuplicates") ?? "") === "true";
 
   const sheet = await parseImportFile(file);
+
+  // With an approval scheme for adding these records, the whole file waits for
+  // approval as one request. It is checked first, so only a clean file is sent.
+  if (await resourceApprovalDocument(ctx, resourceDef, "import")) {
+    const preview = await previewImport(resource, sheet, ctx);
+    if (preview.errorRows > 0 || preview.errors.length > 0 || preview.missingHeaders.length > 0) {
+      throw AppError.badRequest("Fix the rows with errors (see the preview) before sending the file for approval.", "IMPORT_HAS_ERRORS");
+    }
+    if (preview.duplicateRows > 0 && !skipDuplicates) {
+      throw AppError.badRequest(`${preview.duplicateRows} row(s) already exist. Choose to skip duplicates, or remove them from the file.`, "IMPORT_DUPLICATES");
+    }
+    const held = await holdResourceWrite(ctx, resourceDef, { op: "import", sheet, skipDuplicates, rows: preview.validRows - (skipDuplicates ? preview.duplicateRows : 0) });
+    if (held) return ok(held, held.approvalMessage, 202);
+  }
+
   const result = await commitImport(resource, sheet, ctx, { skipDuplicates });
 
   return ok(

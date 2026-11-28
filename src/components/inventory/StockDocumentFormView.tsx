@@ -9,6 +9,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { notifyHeld } from "@/lib/approvals/clientHelpers";
 import { useShortcutScope, useUnsavedChangesWarning } from "@/lib/shortcuts/ShortcutProvider";
 import ConfirmDialog from "@/components/table/ConfirmDialog";
 import { formatMoney, formatQuantity } from "@/lib/format/number";
@@ -270,6 +271,7 @@ export default function StockDocumentFormView({
         method: "POST",
         body: JSON.stringify(body),
       });
+      if (notifyHeld(toast, doc)) return router.push(basePath);
       toast.success(`${label} saved`, doc.documentNumber);
       router.push(`${basePath}/${doc.id}`);
     } catch (err) {

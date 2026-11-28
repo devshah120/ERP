@@ -12,11 +12,11 @@ const OUTDATED = { permissionsVersion: { $not: { $gte: PERMISSIONS_VERSION } } }
  * is edited like any other. Idempotent and cheap when nothing is outdated.
  */
 export async function upgradeBusinessRoles(businessId: Types.ObjectId): Promise<void> {
-  const outdated = await Role.find({ businessId, ...OUTDATED }, { permissions: 1 }).lean<{ _id: Types.ObjectId; permissions: string[] }[]>();
+  const outdated = await Role.find({ businessId, ...OUTDATED }, { permissions: 1, permissionsVersion: 1 }).lean<{ _id: Types.ObjectId; permissions: string[]; permissionsVersion?: number }[]>();
   for (const role of outdated) {
     await Role.updateOne(
       { _id: role._id, businessId, ...OUTDATED },
-      { $set: { permissions: upgradePermissionList(role.permissions ?? []), permissionsVersion: PERMISSIONS_VERSION } }
+      { $set: { permissions: upgradePermissionList(role.permissions ?? [], role.permissionsVersion ?? 0), permissionsVersion: PERMISSIONS_VERSION } }
     );
   }
 }
@@ -31,7 +31,7 @@ export async function currentRolePermissions(
   if (!role) return [];
   const permissions = role.permissions ?? [];
   if ((role.permissionsVersion ?? 0) >= PERMISSIONS_VERSION) return permissions;
-  const upgraded = upgradePermissionList(permissions);
+  const upgraded = upgradePermissionList(permissions, role.permissionsVersion ?? 0);
   await Role.updateOne(
     { _id: role._id, businessId: role.businessId, ...OUTDATED },
     { $set: { permissions: upgraded, permissionsVersion: PERMISSIONS_VERSION } }

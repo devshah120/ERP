@@ -214,7 +214,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: "HR · People",
     modules: [
       m("hr-dashboard", "HR dashboard", VIEW),
-      m("hr-employees", "Employees", CRUD, ["hr-grades.view", "hr-holiday-calendars.view", "hr-salary-structures.view"]),
+      // One module per Employees sub-menu: the directory & profiles, the org tree, and the employee records themselves.
+      m("hr-employee-directory", "Employee directory", ["view", "edit"]),
+      m("hr-org-tree", "Organization tree", VIEW),
+      m("hr-employees", "Employee records", CRUD, ["hr-grades.view", "hr-holiday-calendars.view", "hr-salary-structures.view"]),
       m("hr-departments", "HR departments"),
       m("hr-designations", "Designations"),
       m("hr-grades", "Grades"),
@@ -336,7 +339,7 @@ export const HR_SELF_SERVICE_PERMISSIONS: string[] = ["hr-self.view"];
  * `permissionsVersion` are upgraded once (roleUpgrade.ts), so nobody loses a
  * screen they could open before; after that the new key is revoked on its own.
  */
-export const PERMISSIONS_VERSION = 1;
+export const PERMISSIONS_VERSION = 2;
 
 /** Keys no longer checked anywhere; upgrading drops them. */
 export const RETIRED_PERMISSION_KEYS: ReadonlySet<string> = new Set(["hr-reports.view"]);
@@ -413,18 +416,43 @@ function legacyGrantsV1(): Record<string, string[]> {
   return g;
 }
 
-export const LEGACY_GRANTS: Readonly<Record<string, string[]>> = legacyGrantsV1();
+/** Version 2: Employee Directory and Organization Tree got their own rights (both opened with hr-employees.view before). */
+function legacyGrantsV2(): Record<string, string[]> {
+  return {
+    "hr-employee-directory.view": ["hr-employees.view"],
+    "hr-employee-directory.edit": ["hr-employees.edit"],
+    "hr-org-tree.view": ["hr-employees.view"],
+  };
+}
+
+/**
+ * Grants per catalog version. A role is given only the grants of versions
+ * newer than its own, so a right revoked after an earlier upgrade is never
+ * handed back by a later one.
+ */
+export const LEGACY_GRANTS_BY_VERSION: Readonly<Record<number, Readonly<Record<string, string[]>>>> = {
+  1: legacyGrantsV1(),
+  2: legacyGrantsV2(),
+};
+
+/** Every legacy grant of every version (new key → old keys). */
+export const LEGACY_GRANTS: Readonly<Record<string, string[]>> = Object.assign({}, ...Object.values(LEGACY_GRANTS_BY_VERSION));
 
 /**
  * A role's permissions brought up to PERMISSIONS_VERSION: adds each new key
  * whose old keys the role held, drops retired keys. "*" is left alone.
  */
-export function upgradePermissionList(permissions: readonly string[]): string[] {
+export function upgradePermissionList(permissions: readonly string[], fromVersion = 0): string[] {
   if (permissions.includes("*")) return [...permissions];
-  const held = new Set(permissions);
-  const next = new Set(permissions.filter((p) => !RETIRED_PERMISSION_KEYS.has(p)));
-  for (const [key, from] of Object.entries(LEGACY_GRANTS)) {
-    if (from.every((f) => held.has(f))) next.add(key);
+  const next = new Set(permissions);
+  for (const [version, grants] of Object.entries(LEGACY_GRANTS_BY_VERSION)) {
+    if (Number(version) <= fromVersion) continue;
+    // Each version reads the list as the previous versions left it.
+    const held = new Set(next);
+    for (const [key, from] of Object.entries(grants)) {
+      if (from.every((f) => held.has(f))) next.add(key);
+    }
   }
-  return [...next];
+  // Retired keys go last: grants above may still be based on them.
+  return [...next].filter((p) => !RETIRED_PERMISSION_KEYS.has(p));
 }

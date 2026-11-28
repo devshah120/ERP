@@ -82,6 +82,22 @@ describe("permission catalog", () => {
     expect(upgraded).not.toContain("analysis-inventory.view");
     expect(upgradePermissionList(["*"])).toEqual(["*"]);
   });
+
+  it("splits Employees into Directory, Organization Tree and Records, keeping what each role could open", () => {
+    // A version-1 role that could view and edit employees keeps every screen it had.
+    const viewer = upgradePermissionList(["hr-employees.view"], 1);
+    expect(viewer).toEqual(expect.arrayContaining(["hr-employees.view", "hr-employee-directory.view", "hr-org-tree.view"]));
+    expect(viewer).not.toContain("hr-employee-directory.edit");
+    expect(upgradePermissionList(["hr-employees.view", "hr-employees.edit"], 1)).toContain("hr-employee-directory.edit");
+    // A version-1 role whose admin revoked Grades must not get it back from the version-1 grants.
+    expect(upgradePermissionList(["hr-designations.view", "hr-employees.view"], 1)).not.toContain("hr-grades.view");
+    // The three sub-menus are separate rows in the role editor.
+    const people = buildRoleEditorLayout(["HRMS"]).flatMap((s) => s.menus).find((m) => m.rows.some((r) => r.module.key === "hr-employees"))!;
+    const rowOf = (key: string) => people.rows.find((r) => r.module.key === key)?.screens;
+    expect(rowOf("hr-employee-directory")).toEqual(["Employee Directory"]);
+    expect(rowOf("hr-org-tree")).toEqual(["Organization Tree"]);
+    expect(rowOf("hr-employees")).toEqual(["Employee Records"]);
+  });
 });
 
 describe("role editor layout", () => {
@@ -143,6 +159,19 @@ describe("upgrading stored roles", () => {
     expect(await currentRolePermissions(role as never)).not.toContain("inventory.view");
     await upgradeBusinessRoles(businessId);
     role = await Role.findById(insertedId).lean();
+    expect(role!.permissions).not.toContain("inventory.view");
+  });
+
+  it("gives a version-1 role only the version-2 grants", async () => {
+    const { Role } = await import("@/models/Role");
+    const { upgradeBusinessRoles } = await import("@/lib/auth/roleUpgrade");
+    const businessId = new Types.ObjectId();
+    // Upgraded to version 1 earlier, then Stock on Hand was revoked by the admin.
+    const { insertedId } = await Role.collection.insertOne({ businessId, name: "HR Clerk", permissions: ["items.view", "hr-employees.view"], permissionsVersion: 1, isSystemRole: false, isActive: true });
+    await upgradeBusinessRoles(businessId);
+    const role = await Role.findById(insertedId).lean<{ permissions: string[]; permissionsVersion: number }>();
+    expect(role!.permissionsVersion).toBe(PERMISSIONS_VERSION);
+    expect(role!.permissions).toEqual(expect.arrayContaining(["hr-employee-directory.view", "hr-org-tree.view"]));
     expect(role!.permissions).not.toContain("inventory.view");
   });
 });

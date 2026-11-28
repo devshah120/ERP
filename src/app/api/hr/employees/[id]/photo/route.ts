@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { withApiHandler } from "@/lib/http/withApiHandler";
 import { ok } from "@/lib/http/response";
-import { getAuthContext, requirePermission } from "@/lib/auth/context";
+import { getAuthContext, requireAnyPermission } from "@/lib/auth/context";
 import "@/models";
 import { readPhoto, savePhoto, removePhoto } from "@/lib/hr/photos";
 
@@ -30,7 +30,7 @@ export const GET = withApiHandler(async (req: NextRequest, { params }) => {
  */
 export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const ctx = getAuthContext(req);
-  requirePermission(ctx, "hr-employees.view");
+  requireAnyPermission(ctx, ["hr-employee-directory.view", "hr-employees.view", "hr-org-tree.view"]);
   const { id } = await params;
   const form = await req.formData();
   return ok(await savePhoto(ctx, id, form.get("file")), "Photo saved");
@@ -38,7 +38,7 @@ export const POST = withApiHandler(async (req: NextRequest, { params }) => {
 
 export const DELETE = withApiHandler(async (req: NextRequest, { params }) => {
   const ctx = getAuthContext(req);
-  requirePermission(ctx, "hr-employees.edit");
+  requireAnyPermission(ctx, ["hr-employee-directory.edit", "hr-employees.edit"]);
   const { id } = await params;
   return ok(await removePhoto(ctx, id), "Photo removed");
 });

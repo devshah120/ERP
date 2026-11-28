@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { useAuth } from "@/app/(app)/AuthProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState, SkeletonBlock } from "@/components/ui/States";
 import AccessDenied, { isForbidden } from "@/components/ui/AccessDenied";
@@ -36,6 +37,9 @@ function tone(id: string) {
 
 /** Organization Tree: everyone on the rolls under their reporting manager. */
 export default function OrgTreePage() {
+  // Names open the profile only for those who may see the Employee Directory.
+  const { hasPermission } = useAuth();
+  const canOpenProfile = hasPermission("hr-employee-directory.view");
   const [data, setData] = useState<{ items: OrgNode[]; meId: string | null } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -137,9 +141,13 @@ export default function OrgTreePage() {
             {n.photoUrl ? <img src={n.photoUrl} alt="" loading="lazy" /> : initials(n.name)}
           </span>
           <div className="orgCardBody">
-            <Link href={`/hr/employees/${n.id}`} className="orgName">
-              {n.name}
-            </Link>
+            {canOpenProfile ? (
+              <Link href={`/hr/employees/${n.id}`} className="orgName">
+                {n.name}
+              </Link>
+            ) : (
+              <span className="orgName">{n.name}</span>
+            )}
             <div className="orgLine" title={n.designation}>
               {n.designation || <span className="cellMuted">No designation</span>}
             </div>

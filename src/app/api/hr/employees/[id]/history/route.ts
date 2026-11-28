@@ -9,7 +9,7 @@ import { employmentHistory, recordChange, changeSchema } from "@/lib/hr/history"
 /** The employee's dated job and salary changes, newest first. */
 export const GET = withApiHandler(async (req: NextRequest, { params }) => {
   const ctx = getAuthContext(req);
-  requirePermission(ctx, "hr-employees.view");
+  requirePermission(ctx, "hr-employee-directory.view");
   const { id } = await params;
   return ok(await employmentHistory(ctx, id));
 });
@@ -17,7 +17,7 @@ export const GET = withApiHandler(async (req: NextRequest, { params }) => {
 /** Records a salary revision, promotion, transfer or status change from a date. */
 export const POST = withApiHandler(async (req: NextRequest, { params }) => {
   const ctx = getAuthContext(req);
-  requirePermission(ctx, "hr-employees.edit");
+  requirePermission(ctx, "hr-employee-directory.edit");
   const { id } = await params;
   const result = await recordChange(ctx, id, changeSchema.parse(await req.json()));
   return okOrHeld(result, (r) => (r.scheduled ? `Change scheduled from ${r.effectiveDate}` : "Change recorded"), 201);

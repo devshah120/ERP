@@ -139,7 +139,9 @@ export default function EmployeeProfilePage() {
   if (error) return <ErrorState message={error instanceof ApiError ? error.message : "Could not load this employee."} onRetry={load} />;
   if (!p) return <SkeletonBlock lines={8} />;
 
+  // "Edit details" opens the employee record (Employee Records); history and portal access are profile actions (Employee Directory).
   const canEdit = hasPermission("hr-employees.edit");
+  const canManage = hasPermission("hr-employee-directory.edit");
   const yes = (b: boolean) => (b ? "Yes" : "No");
 
   return (
@@ -208,7 +210,7 @@ export default function EmployeeProfilePage() {
           {p.portal && (
             <span className="hrKpiSub">
               {p.portal.lastLoginAt ? `Last sign-in ${fmtDate(p.portal.lastLoginAt)}` : "Never signed in"}
-              {canEdit && hasPermission("users.disable") && (
+              {canManage && hasPermission("users.disable") && (
                 <>
                   {" · "}
                   <button type="button" className="textLink" style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit" }} onClick={() => setRevokeOpen(true)}>
@@ -406,7 +408,7 @@ export default function EmployeeProfilePage() {
         </div>
       )}
 
-      {tab === "history" && <EmploymentHistory employeeId={id} canEdit={hasPermission("hr-employees.edit")} onChanged={load} />}
+      {tab === "history" && <EmploymentHistory employeeId={id} canEdit={canManage} onChanged={load} />}
 
       {tab === "payslips" && (
         <Card title="Payslips">

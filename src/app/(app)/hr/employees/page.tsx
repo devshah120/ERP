@@ -101,6 +101,7 @@ export default function EmployeeDirectoryPage() {
 
   const canCreate = hasPermission("hr-employees.create");
   const canEdit = hasPermission("hr-employees.edit");
+  const canSeeRecords = hasPermission("hr-employees.view");
   useShortcutScope({
     onNew: canCreate ? () => router.push("/hr-employees/new") : undefined,
     onSearch: () => searchRef.current?.focus(),
@@ -123,9 +124,11 @@ export default function EmployeeDirectoryPage() {
         description="Everyone on your rolls. Open a person for their profile, leave, payslips and portal login."
         actions={
           <>
-            <Link href="/hr-employees" className="button buttonSecondary" title="Bulk edit, import from Excel, export">
-              <IconUpload /> Import / export
-            </Link>
+            {canSeeRecords && (
+              <Link href="/hr-employees" className="button buttonSecondary" title="Bulk edit, import from Excel, export">
+                <IconUpload /> Import / export
+              </Link>
+            )}
             {canCreate && (
               <Link href="/hr-employees/new" className="button buttonPrimary" title="Add employee (Ctrl + N)">
                 <IconPlus /> Add employee
